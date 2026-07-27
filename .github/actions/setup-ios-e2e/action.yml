@@ -1,0 +1,298 @@
+name: Setup iOS E2E (Xcode + Maestro + simulator)
+description: >
+  Everything a macOS runner needs before it can build an Expo app and drive it
+  with Maestro: an Xcode selection, a pinned and cached Maestro, CocoaPods,
+  the two native caches worth having, and a booted simulator.
+  Consume it as GSTJ/magic/.github/actions/setup-ios-e2e@v1.
+
+# Three repos do this today and every sub-step is implemented three different
+# ways — unpinned `curl | bash` Maestro in two of them, three different Xcode
+# selections, three different simulator pickers, two JDKs. The defaults here are
+# the pinned-and-cached ones, because those are the ones that were debugged.
+#
+# Node/pnpm is a separate concern: run GSTJ/magic/.github/actions/setup@v1 as
+# well. Checkout stays with the caller, as always.
+#
+# Out of scope on purpose: @expo/fingerprint bundle-swap caching. That is ~260
+# lines of repo-specific logic with a liveness-probe fallback, and generalising
+# it is its own project.
+
+inputs:
+  xcode-version:
+    description: >
+      latest for the newest installed Xcode, a prefix like "26" for the newest
+      matching one, an exact "16.4", or empty to leave the runner default alone.
+    required: false
+    default: latest
+  maestro-version:
+    description: Maestro version to install. Pinned, and cached at ~/.maestro.
+    required: false
+    default: 2.6.0
+  simulator-device:
+    description: Simulator device name to boot.
+    required: false
+    default: iPhone 17 Pro Max
+  simulator-runtime:
+    description: Runtime prefix the device must be on, e.g. "iOS 26".
+    required: false
+    default: iOS 26
+  simulator-fallback:
+    description: >
+      When the pinned device/runtime pair is not on the runner, boot the newest
+      iPhone on the newest iOS runtime instead of failing.
+    required: false
+    default: "true"
+  boot:
+    description: Boot the simulator and wait for it. Off means only resolve the udid.
+    required: false
+    default: "true"
+  install-cocoapods:
+    description: auto uses the runner's pod if there is one, true always installs, false never.
+    required: false
+    default: auto
+  ruby-version:
+    description: Ruby to install CocoaPods against. Empty uses the runner's Ruby.
+    required: false
+    default: ""
+  cache-pods:
+    description: Cache ~/.cocoapods and ~/Library/Caches/CocoaPods.
+    required: false
+    default: "true"
+  cache-derived-data:
+    description: Cache ~/Library/Developer/Xcode/DerivedData.
+    required: false
+    default: "true"
+  cache-key-file:
+    description: >
+      File whose hash keys the native caches. Empty resolves to the first of
+      ios/Podfile.lock, Podfile.lock, pnpm-lock.yaml that exists.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory holding the app (where ios/Podfile.lock is looked for).
+    required: false
+    default: "."
+  java-version:
+    description: Java version for setup-java. Empty skips it — iOS does not need one.
+    required: false
+    default: ""
+
+outputs:
+  udid:
+    description: UDID of the simulator that was selected (and booted, unless boot was false).
+    value: ${{ steps.simulator.outputs.udid }}
+  simulator-name:
+    description: Name and runtime of the simulator that was selected.
+    value: ${{ steps.simulator.outputs.name }}
+  xcode-path:
+    description: Developer directory that xcode-select now points at.
+    value: ${{ steps.xcode.outputs.path }}
+  maestro-version:
+    description: Maestro version on PATH.
+    value: ${{ steps.maestro.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🍎 Select Xcode
+      id: xcode
+      if: inputs.xcode-version != ''
+      shell: bash
+      env:
+        WANT: ${{ inputs.xcode-version }}
+      run: |
+        set -euo pipefail
+        installed=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sed 's|.*/Xcode_||;s|\.app$||' | sort -V || true)
+        if [ -z "$installed" ]; then
+          echo "::warning::No /Applications/Xcode_*.app on this runner; keeping the default toolchain."
+          echo "path=$(xcode-select -p)" >> "$GITHUB_OUTPUT"
+          xcodebuild -version
+          exit 0
+        fi
+        if [ "$WANT" = "latest" ]; then
+          pick=$(echo "$installed" | tail -1)
+        else
+          # Exact first, then newest with that prefix, so "26" matches 26.0.1.
+          pick=$(echo "$installed" | grep -Fx "$WANT" || true)
+          [ -n "$pick" ] || pick=$(echo "$installed" | grep "^${WANT}" | tail -1 || true)
+        fi
+        if [ -z "$pick" ]; then
+          echo "::error::No Xcode matching '$WANT'. Installed: $(echo "$installed" | tr '\n' ' ')"
+          exit 1
+        fi
+        developer="/Applications/Xcode_${pick}.app/Contents/Developer"
+        echo "Selecting Xcode $pick"
+        sudo xcode-select -s "$developer"
+        echo "path=$developer" >> "$GITHUB_OUTPUT"
+        xcodebuild -version
+
+    - name: ☕️ Setup Java
+      if: inputs.java-version != ''
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    - name: 🔑 Resolve native cache key
+      id: keys
+      shell: bash
+      env:
+        IN_CACHE_KEY_FILE: ${{ inputs.cache-key-file }}
+        IN_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        wd="${IN_WORKING_DIRECTORY:-.}"
+        wd="${wd%/}"
+        [ -n "$wd" ] || wd="."
+        under() { if [ "$wd" = "." ]; then printf '%s' "$1"; else printf '%s/%s' "$wd" "$1"; fi; }
+
+        file="$IN_CACHE_KEY_FILE"
+        if [ -z "$file" ]; then
+          for candidate in "$(under ios/Podfile.lock)" "$(under Podfile.lock)" "$(under pnpm-lock.yaml)" pnpm-lock.yaml; do
+            if [ -f "$candidate" ]; then file="$candidate"; break; fi
+          done
+        fi
+        if [ -n "$file" ] && [ -f "$file" ]; then
+          hash=$(shasum -a 256 "$file" | cut -c1-16)
+          echo "Keying native caches on $file ($hash)"
+        else
+          # No stable input to key on. A date bucket still beats a cold runner
+          # every time and cannot serve a stale Pods tree for long.
+          hash="nokey-$(date -u +%Y%m)"
+          echo "::warning::No Podfile.lock or pnpm-lock.yaml to key the native caches on; falling back to $hash."
+        fi
+        echo "working-directory=$wd" >> "$GITHUB_OUTPUT"
+        echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+    - name: 🗄 Cache Maestro
+      uses: actions/cache@v6
+      with:
+        path: ~/.maestro
+        key: maestro-${{ runner.os }}-${{ inputs.maestro-version }}
+
+    - name: 🤖 Install Maestro
+      id: maestro
+      shell: bash
+      env:
+        MAESTRO_VERSION: ${{ inputs.maestro-version }}
+      run: |
+        set -euo pipefail
+        if [ ! -x "$HOME/.maestro/bin/maestro" ]; then
+          curl -fsSL "https://get.maestro.mobile.dev" | MAESTRO_VERSION="$MAESTRO_VERSION" bash
+        fi
+        echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        version=$("$HOME/.maestro/bin/maestro" --version | tail -1)
+        echo "maestro $version"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: 🗄 Cache CocoaPods specs and sources
+      if: inputs.cache-pods == 'true'
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cocoapods
+          ~/Library/Caches/CocoaPods
+        key: ${{ runner.os }}-pods-${{ steps.keys.outputs.hash }}
+        restore-keys: ${{ runner.os }}-pods-
+
+    - name: 🗄 Cache DerivedData
+      if: inputs.cache-derived-data == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ~/Library/Developer/Xcode/DerivedData
+        key: ${{ runner.os }}-deriveddata-${{ steps.keys.outputs.hash }}
+        restore-keys: ${{ runner.os }}-deriveddata-
+
+    - name: 💎 Setup Ruby
+      if: inputs.ruby-version != '' && inputs.install-cocoapods != 'false'
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ inputs.ruby-version }}
+        bundler-cache: false
+
+    - name: 📦 Install CocoaPods
+      if: inputs.install-cocoapods != 'false'
+      shell: bash
+      env:
+        MODE: ${{ inputs.install-cocoapods }}
+      run: |
+        set -euo pipefail
+        if [ "$MODE" = "auto" ] && command -v pod >/dev/null 2>&1; then
+          echo "Using the runner's CocoaPods: $(pod --version)"
+          exit 0
+        fi
+        gem install cocoapods --no-document
+        pod --version
+
+    - name: 📱 Select simulator
+      id: simulator
+      shell: bash
+      env:
+        SIM_DEVICE: ${{ inputs.simulator-device }}
+        SIM_RUNTIME: ${{ inputs.simulator-runtime }}
+        SIM_FALLBACK: ${{ inputs.simulator-fallback }}
+        SIM_BOOT: ${{ inputs.boot }}
+      run: |
+        set -euo pipefail
+        selection=$(xcrun simctl list devices available --json | python3 -c '
+        import json, os, re, sys
+
+        want_name = os.environ.get("SIM_DEVICE", "").strip()
+        want_runtime = os.environ.get("SIM_RUNTIME", "").strip()
+        fallback = os.environ.get("SIM_FALLBACK") == "true"
+        devices = json.load(sys.stdin)["devices"]
+
+        def ios_runtimes():
+            for runtime, entries in devices.items():
+                match = re.search(r"iOS-(\d+)(?:-(\d+))?", runtime)
+                if not match:
+                    continue
+                major = int(match.group(1))
+                minor = int(match.group(2) or 0)
+                yield (major, minor), f"iOS {major}", entries
+
+        exact = []
+        any_iphone = []
+        for order, label, entries in ios_runtimes():
+            for device in entries:
+                name = device.get("name", "")
+                udid = device.get("udid")
+                if not udid:
+                    continue
+                if "iPhone" in name:
+                    any_iphone.append((order, name, label, udid))
+                if want_name and name != want_name:
+                    continue
+                if want_runtime and not label.startswith(want_runtime):
+                    continue
+                exact.append((order, name, label, udid))
+
+        pool = exact or (any_iphone if fallback else [])
+        if not pool:
+            sys.exit(1)
+        pool.sort()
+        _, name, label, udid = pool[-1]
+        print(udid, f"{name} ({label})", "exact" if exact else "fallback", sep="|")
+        ') || true
+
+        if [ -z "$selection" ]; then
+          echo "::error::No simulator matching device='$SIM_DEVICE' runtime='$SIM_RUNTIME'."
+          xcrun simctl list devices available
+          exit 1
+        fi
+
+        udid=${selection%%|*}
+        rest=${selection#*|}
+        name=${rest%%|*}
+        how=${rest#*|}
+        if [ "$how" = "fallback" ]; then
+          echo "::warning::No simulator matched device='$SIM_DEVICE' runtime='$SIM_RUNTIME'; using $name."
+        fi
+        echo "Simulator: $name ($udid)"
+        echo "udid=$udid" >> "$GITHUB_OUTPUT"
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+
+        if [ "$SIM_BOOT" = "true" ]; then
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+        fi

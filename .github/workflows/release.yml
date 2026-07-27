@@ -6,12 +6,15 @@ name: 🚀 Release
 #
 #   jobs:
 #     release:
-#       uses: GSTJ/magic/.github/workflows/release.yml@main
+#       uses: GSTJ/magic/.github/workflows/release.yml@v1
 #       secrets:
 #         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 #       permissions:
 #         contents: write
 #         id-token: write
+#
+# This repo does not publish itself through this workflow — its packages ship
+# from self-release.yml, which also moves the tags consumers reference.
 
 on:
   workflow_call:
@@ -20,6 +23,10 @@ on:
         type: string
         required: false
         default: ""
+      node-version-file:
+        type: string
+        required: false
+        default: ".nvmrc"
       pnpm-version:
         type: string
         required: false
@@ -88,31 +95,18 @@ jobs:
           token: ${{ secrets.GH_PAT || github.token }}
           persist-credentials: true
 
-      - name: 🏗 Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ inputs.pnpm-version }}
-
-      - name: 🏗 Setup Node (explicit version)
-        if: inputs.node-version != ''
-        uses: actions/setup-node@v7
+      # owner/repo rather than `./` — see the note in ci.yml.
+      - name: 🏗 Setup Node + pnpm
+        uses: GSTJ/magic/.github/actions/setup@v1
         with:
           node-version: ${{ inputs.node-version }}
-          cache: pnpm
-          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+          node-version-file: ${{ inputs.node-version-file }}
+          pnpm-version: ${{ inputs.pnpm-version }}
+          working-directory: ${{ inputs.working-directory }}
+          install-command: ${{ inputs.install-command }}
+          # This job publishes, so the .npmrc is wanted here.
           registry-url: "https://registry.npmjs.org"
-
-      - name: 🏗 Setup Node (from .nvmrc)
-        if: inputs.node-version == ''
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: ${{ inputs.working-directory }}/.nvmrc
-          cache: pnpm
-          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
-          registry-url: "https://registry.npmjs.org"
-
-      - name: 📦 Install
-        run: ${{ inputs.install-command }}
+          node-auth-token: ${{ secrets.NPM_TOKEN }}
 
       - name: 🏗 Build
         if: inputs.build-command != ''

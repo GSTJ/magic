@@ -1,0 +1,199 @@
+name: Setup Node + pnpm
+description: >
+  Node + pnpm bootstrap with the pnpm store cache on by default and a frozen
+  install. Consume it as GSTJ/magic/.github/actions/setup@v1.
+
+# Deliberately does NOT check out the repo: a composite action cannot run before
+# its own repository is on disk, so the caller keeps its own `actions/checkout`
+# step. That one line is the only part of the quadruple that stays duplicated.
+#
+# Two defaults differ from what this repo's ci.yml used to hard-code:
+#
+#   cache        defaults to true. Every hand-rolled `pnpm store path` +
+#                `actions/cache` block in the fleet is replaced by setup-node's
+#                built-in pnpm cache, which also keys on the lockfile but knows
+#                where the store is.
+#   registry-url defaults to empty. Setting it unconditionally writes an .npmrc
+#                containing a literal `${NODE_AUTH_TOKEN}`; with no token in the
+#                environment, package-manager probes behind `cache:` choke on it.
+#                Pass it only on jobs that actually publish, together with
+#                node-auth-token.
+
+inputs:
+  node-version:
+    description: Explicit Node version. Empty reads node-version-file instead.
+    required: false
+    default: ""
+  node-version-file:
+    description: File to read the Node version from, relative to working-directory.
+    required: false
+    default: .nvmrc
+  pnpm-version:
+    description: pnpm version. Empty takes it from the packageManager field.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory the install (and the lockfile/.nvmrc lookups) run in.
+    required: false
+    default: "."
+  cache:
+    description: Cache the pnpm store, keyed on the lockfile. On by default.
+    required: false
+    default: "true"
+  cache-dependency-path:
+    description: Lockfile to key the cache on. Empty resolves it automatically.
+    required: false
+    default: ""
+  install:
+    description: Run the install command.
+    required: false
+    default: "true"
+  install-command:
+    description: Install command. Keep --frozen-lockfile unless you have a reason.
+    required: false
+    default: pnpm install --frozen-lockfile
+  registry-url:
+    description: >
+      npm registry to authenticate against. Only set this when the job
+      publishes; see the note above about the .npmrc it writes.
+    required: false
+    default: ""
+  node-auth-token:
+    description: >
+      Token exported as NODE_AUTH_TOKEN for the install step. It is set
+      unconditionally, so an empty value shadows a job-level NODE_AUTH_TOKEN —
+      pass the secret here rather than in the job env.
+    required: false
+    default: ""
+  turbo-cache:
+    description: >
+      GitHub Actions cache backend for turbo. auto enables it when the working
+      directory has a turbo.json.
+    required: false
+    default: auto
+
+outputs:
+  node-version:
+    description: The Node version that ended up installed.
+    value: ${{ steps.setup-node.outputs.node-version }}
+  cache-hit:
+    description: Whether the pnpm store cache was restored exactly.
+    value: ${{ steps.setup-node.outputs.cache-hit }}
+  pnpm-store-path:
+    description: Absolute path of the pnpm store.
+    value: ${{ steps.pnpm-store.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🏗 Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: 🔎 Resolve setup inputs
+      id: resolve
+      shell: bash
+      env:
+        IN_NODE_VERSION: ${{ inputs.node-version }}
+        IN_NODE_VERSION_FILE: ${{ inputs.node-version-file }}
+        IN_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        IN_CACHE: ${{ inputs.cache }}
+        IN_CACHE_DEPENDENCY_PATH: ${{ inputs.cache-dependency-path }}
+        IN_REGISTRY_URL: ${{ inputs.registry-url }}
+        IN_NODE_AUTH_TOKEN: ${{ inputs.node-auth-token }}
+        IN_TURBO_CACHE: ${{ inputs.turbo-cache }}
+      run: |
+        set -euo pipefail
+
+        wd="${IN_WORKING_DIRECTORY:-.}"
+        wd="${wd%/}"
+        [ -n "$wd" ] || wd="."
+
+        under() {
+          if [ "$wd" = "." ]; then printf '%s' "$1"; else printf '%s/%s' "$wd" "$1"; fi
+        }
+
+        # setup-node warns when node-version and node-version-file are both set,
+        # so exactly one of them leaves this step non-empty.
+        node_version=""
+        node_version_file=""
+        if [ -n "$IN_NODE_VERSION" ]; then
+          node_version="$IN_NODE_VERSION"
+        else
+          node_version_file="$(under "${IN_NODE_VERSION_FILE:-.nvmrc}")"
+          if [ ! -f "$node_version_file" ]; then
+            echo "::error::No node-version input and no $node_version_file to read one from. Pass node-version, or add the file."
+            exit 1
+          fi
+        fi
+
+        # A missing lockfile is fatal to setup-node's cache ("Dependencies lock
+        # file is not found"), which is a hostile way for a subdirectory build to
+        # fail. Fall back to the repo root, then to no cache at all.
+        cache=""
+        cache_dependency_path=""
+        if [ "$IN_CACHE" = "true" ]; then
+          if [ -n "$IN_CACHE_DEPENDENCY_PATH" ]; then
+            cache_dependency_path="$IN_CACHE_DEPENDENCY_PATH"
+          elif [ -f "$(under pnpm-lock.yaml)" ]; then
+            cache_dependency_path="$(under pnpm-lock.yaml)"
+          elif [ -f pnpm-lock.yaml ]; then
+            cache_dependency_path="pnpm-lock.yaml"
+          fi
+          if [ -n "$cache_dependency_path" ]; then
+            cache="pnpm"
+          else
+            echo "::warning::No pnpm-lock.yaml under '$wd' or the repo root, so the pnpm store cache is off."
+          fi
+        fi
+
+        # The footgun this action exists to stop, made loud instead of silent.
+        if [ -n "$IN_REGISTRY_URL" ] && [ -z "$IN_NODE_AUTH_TOKEN" ]; then
+          echo "::warning::registry-url is set but node-auth-token is empty, so the .npmrc will hold a literal \${NODE_AUTH_TOKEN}. Pass the token, or drop registry-url."
+        fi
+
+        turbo_cache=false
+        case "$IN_TURBO_CACHE" in
+          true) turbo_cache=true ;;
+          false) turbo_cache=false ;;
+          auto) [ -f "$(under turbo.json)" ] && turbo_cache=true || turbo_cache=false ;;
+          *) echo "::error::turbo-cache must be auto, true or false (got '$IN_TURBO_CACHE')"; exit 1 ;;
+        esac
+
+        {
+          echo "working-directory=$wd"
+          echo "node-version=$node_version"
+          echo "node-version-file=$node_version_file"
+          echo "cache=$cache"
+          echo "cache-dependency-path=$cache_dependency_path"
+          echo "turbo-cache=$turbo_cache"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: 🏗 Setup Node
+      id: setup-node
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ steps.resolve.outputs.node-version }}
+        node-version-file: ${{ steps.resolve.outputs.node-version-file }}
+        cache: ${{ steps.resolve.outputs.cache }}
+        cache-dependency-path: ${{ steps.resolve.outputs.cache-dependency-path }}
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: 🏗 Turborepo cache
+      if: steps.resolve.outputs.turbo-cache == 'true'
+      uses: dtinth/setup-github-actions-caching-for-turbo@v1
+
+    - name: 🔎 Report pnpm store
+      id: pnpm-store
+      shell: bash
+      working-directory: ${{ steps.resolve.outputs.working-directory }}
+      run: echo "path=$(pnpm store path 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+    - name: 📦 Install
+      if: inputs.install == 'true'
+      shell: bash
+      working-directory: ${{ steps.resolve.outputs.working-directory }}
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.node-auth-token }}
+      run: ${{ inputs.install-command }}

@@ -13,6 +13,9 @@ slightly-wrong version.
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck  |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm          |
+| `.github/actions/setup`                         | Composite: Node + pnpm, store cache on, frozen install          |
+| `.github/actions/setup-ios-e2e`                 | Composite: Xcode, Maestro, CocoaPods, a booted simulator        |
+| `.github/actions/approve-parked-ci`             | Composite: release the `action_required` runs on a bot PR       |
 | `default.json`                                  | Renovate preset, consumable as `github>GSTJ/magic`              |
 
 ESLint and Prettier no longer _run_ anywhere: oxlint replaces ESLint, oxfmt
@@ -511,7 +514,7 @@ on:
 
 jobs:
   ci:
-    uses: GSTJ/magic/.github/workflows/ci.yml@main
+    uses: GSTJ/magic/.github/workflows/ci.yml@v1
 ```
 
 Everything is optional and overridable:
@@ -519,13 +522,14 @@ Everything is optional and overridable:
 ```yaml
 jobs:
   ci:
-    uses: GSTJ/magic/.github/workflows/ci.yml@main
+    uses: GSTJ/magic/.github/workflows/ci.yml@v1
     with:
       node-version: "22" # default: read .nvmrc from the caller
       test-command: pnpm run test # default: skipped
       build-command: pnpm run build # default: skipped
       extra-command: pnpm run doctor # escape hatch for repo-specific gates
       lint-command: "" # empty string skips the step
+      job-name: verify # second half of the reported check context
 ```
 
 This repo is public, so private repos can call the workflow. It also calls
@@ -537,7 +541,7 @@ For releases:
 ```yaml
 jobs:
   release:
-    uses: GSTJ/magic/.github/workflows/release.yml@main
+    uses: GSTJ/magic/.github/workflows/release.yml@v1
     # Required. A called workflow can't exceed the caller's grant, and the
     # default GITHUB_TOKEN is read-only in new repos — without these the
     # version-bump push and the provenance publish both fail.
@@ -546,6 +550,96 @@ jobs:
       id-token: write
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+```
+
+### Versions, and why never `@main`
+
+Every workflow and action here is consumed by tag:
+
+| Ref       | What it does                                                      |
+| --------- | ----------------------------------------------------------------- |
+| `@v1`     | Moving major. A release repoints it, so fixes arrive on next run. |
+| `@v1.3.0` | Exact. Nothing changes under you; Renovate opens the bump PR.     |
+| `@main`   | Don't. An unreviewed merge here reruns eleven repos' CI.          |
+
+`@v1` is the default recommendation — the whole point of one tooling repo is
+that a fix lands once. Pin exactly when a repo is somewhere you cannot afford a
+surprise (a release path, a repo you rarely look at); the Renovate preset groups
+those bumps with the `magic-*` npm packages into one PR and automerges it, so
+pinning costs a merge button, not a migration.
+
+Releases happen in [`self-release.yml`](.github/workflows/self-release.yml) on
+every push to `main`: it runs the full check chain, publishes any package whose
+version is not on npm yet, cuts `vX.Y.Z` from the conventional commits since the
+last tag, and moves `v1`.
+
+### Required checks
+
+A called workflow always reports as `<caller job> / <called job>`, so it can
+never produce a bare context name — a ruleset that requires `verify` will never
+be satisfied by a reusable workflow alone. Two ways out:
+
+- name both halves: a caller job `verify` plus `job-name: verify` reports
+  `verify / verify`, and that is the string to put in the ruleset;
+- or keep a one-line shim job that `needs` the call and checks its `result`,
+  which is what two repos already do. Note that a _skipped_ required check
+  counts as satisfied, so the shim needs `if: always()` and an explicit
+  comparison against `success`.
+
+### Composite actions
+
+The reusable workflow only fits jobs whose shape is "install, then run some
+commands". Anything else — a macOS E2E build, a docs deploy, a matrix — should
+call the composite actions directly instead of hand-rolling the same four steps
+again.
+
+```yaml
+steps:
+  - uses: actions/checkout@v7 # yours: an action cannot run before the checkout
+
+  - uses: GSTJ/magic/.github/actions/setup@v1
+    with:
+      working-directory: apps/mobile # default: .
+      node-version: "22" # default: read .nvmrc
+      cache: "true" # default: pnpm store cache, keyed on the lockfile
+      install-command: pnpm install --frozen-lockfile
+      turbo-cache: auto # auto = on when there is a turbo.json
+```
+
+`registry-url` is empty by default and should stay that way outside publish
+jobs. Setting it writes an `.npmrc` containing a literal `${NODE_AUTH_TOKEN}`,
+and the package-manager probes behind `cache:` choke on that when no token is
+exported — pass `registry-url` and `node-auth-token` together, or neither.
+
+For iOS E2E on a macOS runner:
+
+```yaml
+steps:
+  - uses: actions/checkout@v7
+  - uses: GSTJ/magic/.github/actions/setup@v1
+  - uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+    id: ios
+    with:
+      xcode-version: "26" # newest installed Xcode 26.x
+      maestro-version: 2.6.0 # pinned and cached at ~/.maestro
+      simulator-device: iPhone 17 Pro Max
+      simulator-runtime: iOS 26
+  - run: pnpm expo run:ios --device "${{ steps.ios.outputs.udid }}"
+```
+
+It pins and caches Maestro, picks the Xcode you asked for, caches the CocoaPods
+specs and DerivedData, and boots the simulator — falling back to the newest
+iPhone on the runner with a warning when the pinned pair is not installed, so a
+runner image change degrades instead of failing. Fingerprint-keyed `.app`
+caching stays in the repo that needs it; it is too repo-specific to generalise.
+
+And on a bot-opened PR whose runs GitHub parks at `action_required`:
+
+```yaml
+- uses: GSTJ/magic/.github/actions/approve-parked-ci@v1
+  with:
+    pull-request: ${{ steps.pr.outputs.number }}
+    token: ${{ secrets.GH_PAT }} # needs actions:write + pull-requests:write
 ```
 
 ## Renovate

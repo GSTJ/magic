@@ -5,9 +5,17 @@ name: 🛠️ CI
 #
 #   jobs:
 #     ci:
-#       uses: GSTJ/magic/.github/workflows/ci.yml@main
+#       uses: GSTJ/magic/.github/workflows/ci.yml@v1
+#
+# Call it by tag, never by branch. `@v1` is a moving major tag, so a fix lands
+# everywhere on the next run; `@v1.3.0` pins exactly and lets Renovate open the
+# bump PR. `@main` gets you whatever was merged five minutes ago.
 #
 # This repo is public, so private repos can call it too.
+#
+# The required-check name a called workflow reports is always
+# `<caller job> / <called job>`, so it can never be a bare context. Set
+# `job-name` when a ruleset needs a particular second half.
 
 on:
   workflow_call:
@@ -17,6 +25,11 @@ on:
         type: string
         required: false
         default: ""
+      node-version-file:
+        description: "Where the Node version comes from when node-version is empty."
+        type: string
+        required: false
+        default: ".nvmrc"
       pnpm-version:
         description: "pnpm version. Empty means take it from the caller's packageManager field."
         type: string
@@ -66,18 +79,23 @@ on:
         type: boolean
         required: false
         default: true
+      job-name:
+        description: "Second half of the required-check context this workflow reports as."
+        type: string
+        required: false
+        default: "👮 Lint, Format, Typecheck"
       runs-on:
         type: string
         required: false
         default: "ubuntu-latest"
     secrets:
       NPM_TOKEN:
-        description: "Optional. Exported as NODE_AUTH_TOKEN for the install step; both setup-node steps set registry-url so an .npmrc referencing it exists."
+        description: "Optional. Pass it only when the install needs a private registry — it is what switches registry-url on."
         required: false
 
 jobs:
   checkup:
-    name: 👮 Lint, Format, Typecheck
+    name: ${{ inputs.job-name }}
     # Job-level on purpose: GitHub ignores workflow-level `concurrency` in a
     # workflow that only ever runs via `workflow_call` — it applies to workflow
     # *runs*, and this file never runs standalone. At the job level it takes
@@ -93,39 +111,24 @@ jobs:
       - name: 🏗 Checkout
         uses: actions/checkout@v7
 
-      - name: 🏗 Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ inputs.pnpm-version }}
-
-      - name: 🏗 Setup Node (explicit version)
-        if: inputs.node-version != ''
-        uses: actions/setup-node@v7
+      # Referenced by owner/repo, not `./`: inside a called workflow a `./` path
+      # resolves against the *caller's* checkout, so `./.github/actions/setup`
+      # would look for the action in the consumer's repo and fail there.
+      - name: 🏗 Setup Node + pnpm
+        uses: GSTJ/magic/.github/actions/setup@v1
         with:
           node-version: ${{ inputs.node-version }}
-          cache: pnpm
-          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
-          # Writes the .npmrc that makes NODE_AUTH_TOKEN mean anything on the
-          # install step. Without it the NPM_TOKEN secret is a silent no-op.
-          registry-url: "https://registry.npmjs.org"
-
-      - name: 🏗 Setup Node (from .nvmrc)
-        if: inputs.node-version == ''
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: ${{ inputs.working-directory }}/.nvmrc
-          cache: pnpm
-          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
-          registry-url: "https://registry.npmjs.org"
-
-      - name: 🏗 Turborepo cache
-        if: inputs.turbo-cache
-        uses: dtinth/setup-github-actions-caching-for-turbo@v1
-
-      - name: 📦 Install
-        run: ${{ inputs.install-command }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          node-version-file: ${{ inputs.node-version-file }}
+          pnpm-version: ${{ inputs.pnpm-version }}
+          working-directory: ${{ inputs.working-directory }}
+          install-command: ${{ inputs.install-command }}
+          turbo-cache: ${{ inputs.turbo-cache }}
+          # Only written when there is a token to put in it. Setting it
+          # unconditionally leaves an .npmrc holding a literal
+          # ${NODE_AUTH_TOKEN}, which the package-manager probes behind `cache:`
+          # choke on — one consumer already had to work around exactly that.
+          registry-url: ${{ secrets.NPM_TOKEN != '' && 'https://registry.npmjs.org' || '' }}
+          node-auth-token: ${{ secrets.NPM_TOKEN }}
 
       - name: 🏗 Build
         if: inputs.build-command != ''
