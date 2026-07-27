@@ -1,0 +1,14 @@
+{
+  "name": "@magic/fixture-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Deliberately broken files proving the shared config catches what it claims to.",
+  "type": "module",
+  "scripts": {
+    "test": "node ../../scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "magic-oxlint-config": "workspace:*",
+    "magic-oxlint-plugin": "workspace:*"
+  }
+}
