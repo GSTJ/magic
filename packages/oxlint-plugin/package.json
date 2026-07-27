@@ -1,0 +1,63 @@
+{
+  "name": "magic-oxlint-plugin",
+  "version": "1.0.0",
+  "description": "Opt-in oxlint JS-plugin rules for GSTJ projects: prefer-early-return, no-barrel-file, no-module-mocks, prefer-suspense-query.",
+  "keywords": [
+    "eslint-plugin",
+    "lint",
+    "oxc",
+    "oxlint",
+    "plugin"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/oxlint-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/oxlint-plugin"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist .turbo",
+    "lint": "oxlint",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "devDependencies": {
+    "magic-tsconfig": "workspace:*",
+    "oxlint": "1.75.0",
+    "typescript": "^7.0.2"
+  },
+  "peerDependencies": {
+    "oxlint": ">=1.75.0"
+  },
+  "peerDependenciesMeta": {
+    "oxlint": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
