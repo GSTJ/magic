@@ -65,6 +65,12 @@ jobs:
     name: 🎉 Publish
     # release-it writes "[skip ci]" with a space. Matching "[skip-ci]" never fires.
     if: "!contains(toJSON(github.event.commits.*.message), '[skip ci]')"
+    # Two quick pushes to main must not run two releases in parallel — they
+    # race the version-bump push and the npm publish. Queue, never cancel: a
+    # cancelled half-release can leave a tag with no published package.
+    concurrency:
+      group: magic-release-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ${{ inputs.runs-on }}
     permissions:
       contents: write

@@ -72,15 +72,19 @@ on:
         default: "ubuntu-latest"
     secrets:
       NPM_TOKEN:
+        description: "Optional. Exported as NODE_AUTH_TOKEN for the install step; both setup-node steps set registry-url so an .npmrc referencing it exists."
         required: false
-
-concurrency:
-  group: magic-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   checkup:
     name: 👮 Lint, Format, Typecheck
+    # Job-level on purpose: GitHub ignores workflow-level `concurrency` in a
+    # workflow that only ever runs via `workflow_call` — it applies to workflow
+    # *runs*, and this file never runs standalone. At the job level it takes
+    # effect inside the caller's run.
+    concurrency:
+      group: magic-ci-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ${{ inputs.runs-on }}
     defaults:
       run:
@@ -101,6 +105,9 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+          # Writes the .npmrc that makes NODE_AUTH_TOKEN mean anything on the
+          # install step. Without it the NPM_TOKEN secret is a silent no-op.
+          registry-url: "https://registry.npmjs.org"
 
       - name: 🏗 Setup Node (from .nvmrc)
         if: inputs.node-version == ''
@@ -109,6 +116,7 @@ jobs:
           node-version-file: ${{ inputs.working-directory }}/.nvmrc
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+          registry-url: "https://registry.npmjs.org"
 
       - name: 🏗 Turborepo cache
         if: inputs.turbo-cache

@@ -1,0 +1,30 @@
+name: ✅ Self CI
+
+# This repo's own CI. `ci.yml` and `release.yml` are `workflow_call`-only, so
+# without this file nothing here runs on a push or a pull request — and the
+# Renovate preset automerges devDependency and `magic-*` bumps "once CI is
+# green", which with zero checks means immediately.
+#
+# It calls the reusable workflow rather than duplicating steps, so a change that
+# breaks `ci.yml` for consumers breaks this repo's own build first.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      build-command: pnpm run build
+      test-command: pnpm run test
+      # `validate-rules` reads the emitted variant JSON, so it has to come after
+      # the build. `smoke` lints fixtures/smoke and asserts on what fires;
+      # `adversarial` runs fixtures/adversarial — end-to-end expected-outcome
+      # checks for every variant, the opt-in plugin rules and oxfmt.
+      extra-command: pnpm run validate-rules && pnpm run smoke && pnpm run adversarial
