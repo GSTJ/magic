@@ -1,0 +1,32 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "tasks": {
+    "topo": {
+      "dependsOn": ["^topo"]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "lint": {
+      "dependsOn": ["^topo"]
+    },
+    "lint:fix": {
+      "dependsOn": ["^topo"],
+      "cache": false
+    },
+    "format": {},
+    "format:fix": {
+      "cache": false
+    },
+    "test": {
+      "dependsOn": ["^topo", "^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^topo", "^build"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

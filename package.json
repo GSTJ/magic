@@ -1,0 +1,42 @@
+{
+  "name": "@magic/root",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GSTJ's shared tooling monorepo: oxlint config, oxfmt config, tsconfig bases, reusable GitHub workflows, renovate preset.",
+  "homepage": "https://github.com/GSTJ/magic#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "oxlint --disable-nested-config",
+    "lint:fix": "oxlint --disable-nested-config --fix",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "pnpm run build && pnpm run validate-rules && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run smoke",
+    "smoke": "node scripts/smoke.mjs",
+    "validate-rules": "node scripts/validate-rules.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "magic-oxfmt-config": "workspace:*",
+    "magic-oxlint-config": "workspace:*",
+    "magic-oxlint-plugin": "workspace:*",
+    "oxfmt": "0.60.0",
+    "oxlint": "1.75.0",
+    "turbo": "^2.10.7",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.17.0"
+}
