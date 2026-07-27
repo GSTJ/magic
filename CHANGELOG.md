@@ -3,6 +3,121 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-27 — the 1.1.0 upgrade reports
+
+The same eleven repos upgraded onto 1.1.0. All eleven ended green, so nothing
+below was release-blocking; it is the set of things they proved with repros
+afterwards. Two are real defects, one of which had been reported by three repos
+independently.
+
+| package               | 1.1.0 → | why                                       |
+| --------------------- | ------- | ----------------------------------------- |
+| `magic-oxlint-config` | 1.2.0   | `env`/`globals` survive `extends` now     |
+| `magic-oxfmt-config`  | 1.2.0   | an opt-out for the `CHANGELOG.md` ignore  |
+| `magic-tsconfig`      | 1.2.0   | `incremental` back in `nextjs.json`       |
+
+### Read this before upgrading
+
+**`extends` is no longer a documented way to consume `magic-oxlint-config`.**
+Only two shapes are supported: the one-line re-export
+(`export { default } from "magic-oxlint-config/base"`) and `extendConfig()`. If
+your config is `defineConfig({ extends: [preset] })`, switch it — including if
+you added the `ignorePatterns: base.ignorePatterns` line 1.1.0 told you to. The
+line works; the recipe does not, because it has to be remembered in every repo
+on every variant forever, and forgetting it is invisible until someone edits
+`.gitignore`. Seven of eleven repos shipped 1.0.0 configs with zero ignore
+patterns. `.oxlintrc.json` consumers have no alternative and keep the literal
+copy — see the package README.
+
+**`magic-tsconfig/nextjs.json` sets `incremental: true` again**, and Next repos
+should keep `*.tsbuildinfo` in `.gitignore`. 1.1.0's advice to delete it was
+wrong for Next apps, and for any turbo repo that declares the build info as a
+task output.
+
+### magic-oxlint-config 1.2.0
+
+- **`env` and `globals` now survive oxlint's `extends`.** Every variant mirrors
+  them into a `files: ["**"]` override, because `overrides` travel through
+  `extends` and top-level fields do not. Before this, a config built on `extends`
+  ran with `env: { builtin: true }` and no globals: `document = 1` did not fire
+  `no-global-assign` (an `error` rule in every variant) and `__DEV__` was
+  undefined in the React Native presets. It also fixes JSON consumers, who have
+  no `extendConfig` to reach for. `ignorePatterns` still cannot be defended —
+  oxlint has no per-override ignore — which is why `extends` stays undocumented.
+- No rule changed. The carrier override sets nothing but `env`/`globals`, and a
+  before/after diff over three fixture trees reported identical diagnostics.
+
+### magic-oxfmt-config 1.2.0
+
+- `withoutIgnorePatterns(config, patterns)` is exported: the supported way for a
+  repo that writes `CHANGELOG.md` by hand to format it again. It throws on a
+  pattern the config does not actually ignore, rather than silently doing
+  nothing. The `**/CHANGELOG.md` default stays — generated changelogs are the
+  common case and formatting one turns every future release PR red.
+- Worth knowing either way: **`oxfmt <ignored-path>` exits 2**, not 0
+  (`Expected at least one target file`). A release script shaped like
+  `node tools/changelog.mjs && oxfmt CHANGELOG.md`, run from `npm version`, now
+  dies after rewriting the changelog and before `git add`-ing it. Drop the
+  explicit call or opt out.
+
+### magic-tsconfig 1.2.0
+
+- `incremental: true` is back in `nextjs.json`. `next build` runs
+  `writeConfigurationDefaults`, which writes any of its suggested compiler
+  options that are absent from the **resolved** config straight into the
+  consumer's `tsconfig.json` — reformatting the whole file in its own JSON style
+  while it is there. `incremental` was the only suggested option this package
+  left unset after 1.1.0, so every `next build` dirtied the working tree and the
+  next `oxfmt --check` failed on a file nobody edited, with nothing connecting it
+  back to a tsconfig bump. Three repos hit it.
+- Safe there for the reason 1.1.0's removal was right everywhere else:
+  `nextjs.json` is `noEmit`, so no stale build info can suppress an emit, and
+  Next keeps its own build info in `.next/cache`. `base.json`,
+  `internal-package.json` and `expo.json` are unchanged.
+- `tsBuildInfoFile` cannot be shipped alongside it: relative paths in an extended
+  config resolve against the file that declares them, so the entry would write
+  inside `node_modules/magic-tsconfig`.
+- If you kept a `tsBuildInfoFile` through the 1.1.0 bump, note it is
+  `error TS5069` on TypeScript 5.x without `incremental` — a hard typecheck
+  failure. (tsgo 7.0.2 accepts it.)
+
+### Docs
+
+- **`oxlint --print-config` is not a way to audit an `extends`-shaped config**,
+  and both this file and the README used to send people there. It renders that
+  shape post-expansion and pre-merge: `categories: {}`, `env: { builtin: true }`,
+  `globals: {}`, no `jsPlugins`, and every rule stripped of its options — none of
+  which is what runs. Seven repos ran the check; three started re-declaring rule
+  options by hand. `fixtures/adversarial/extends` now executes the whole matrix
+  on every `pnpm run check`.
+- README Gotchas gained `typescript/consistent-type-definitions`' three autofix
+  failures on `interface … extends` (the `{} &` intersection that never
+  converges, `declare module` augmentations that stop merging, and exported types
+  a published package's consumers can no longer merge into), plus the missing
+  semicolon that makes `--fix` output fail `oxfmt --check` on its own.
+- The pnpm 11 section gained the upgrade case: swapping
+  `minimumReleaseAgeExclude` to the new versions in one edit fails, because pnpm
+  verifies the committed lockfile before it resolves anything. Both versions have
+  to be listed for the one install that rewrites the lockfile. Also there: pnpm
+  10.34.5's warning that it ignores the `pnpm` field in `package.json` (it does
+  not, yet), that a quarantined install silently downgrades rather than failing,
+  and that `pnpm dedupe --check` is not read-only.
+
+### Not changed, and why
+
+- **`typescript/consistent-type-definitions` stays at `["error", "type"]`.** The
+  fixer's failures above are upstream and real, but the rule's direction is the
+  safe one — `type` → `interface` breaks index-signature assignability at every
+  use site, which is what 1.1.0 fixed. There is no config lever that exempts
+  `declare module` bodies, so those get a per-site disable.
+- **`**/_generated/**` was not added to the shared ignore lists.** Convex's
+  `convex/_generated/` is not matched by `**/generated/**` or `**/*.generated.*`,
+  but adding an ignore to a shared preset silently stops linting a directory in
+  twelve repos, and the one repo that hit it judged the pattern project-specific.
+  Keep it local.
+
+---
+
 ## 2026-07-27 — the 1.0.0 migration reports
 
 Eleven repos migrated onto the 1.0.0 packages and filed 26 findings. This round
@@ -28,7 +143,9 @@ mechanical and `--fix` handles it; this repo converted itself as the dogfood.
 `.tsbuildinfo` cache and get slower. That is the point: with `incremental` on, a
 `rm -rf dist && tsc` emitted nothing at all, because the build info still
 claimed the output was current. Drop `.tsbuildinfo` from `.gitignore` and from
-CI cache keys.
+CI cache keys. (**Corrected in 1.2.0 above:** `nextjs.json` keeps `incremental`,
+and Next repos keep `*.tsbuildinfo` in `.gitignore`. The "drop it" advice was
+also wrong for turbo repos that declare the build info as a task output.)
 
 **`magic-oxfmt-config` stops formatting `CHANGELOG.md` and `*.generated.*`.**
 Every changelog generator re-appends entries in its own style, so the first
@@ -53,6 +170,9 @@ module strings mean `--strict` can exit 1 on a repo that passed before.
   re-export loads the preset as _the_ config, so every field applies. The
   `extends` form stays documented with the required
   `ignorePatterns: base.ignorePatterns` line for repos already on 1.0.0.
+  (**Superseded by 1.2.0 above:** that recipe is gone, and `extends` also drops
+  `env` and `globals`, which 1.2.0 fixes. `extends` is not a documented
+  consumption path any more.)
 - `testFilePlugins` is exported. A rule from a plugin that is not enabled for an
   override entry's own plugin set is ignored there, silently — which is why a
   consumer override could not switch off `jest/valid-title`. Spread

@@ -1,6 +1,6 @@
 {
   "name": "magic-oxfmt-config",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Shared oxfmt configuration for GSTJ projects, including the @ianvs-equivalent import sort order.",
   "keywords": [
     "config",
