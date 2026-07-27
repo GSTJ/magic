@@ -1301,7 +1301,7 @@ Nowhere in the presets, except the two that were already there
 (`import/no-namespace` in `base` and `react`) and the one explicit opt-out
 (`react/jsx-no-literals` in `react`, now carrying its provenance in a comment).
 The plugin's "nothing is on by default" invariant holds with seven rules exactly
-as it did with four.
+as it did with four, and §10 keeps it holding at eight.
 
 What is new is that all of it is executed. `fixtures/adversarial/shopify` runs
 every disposition — the four ported rules and the four native snippets — with
@@ -1693,3 +1693,140 @@ Two things it does not do, on purpose:
   nothing to do with a workflow ref). A `repository_dispatch` fan-out would need
   a PAT with write access to eleven repos and a receiving workflow in each, to
   do what Renovate already does.
+
+---
+
+## 10. `magic/no-manual-classname`
+
+Added 2026-07-27, from a directive naming the anti-pattern directly: manual
+`className` composition is banned in the Tailwind/React repos. String
+concatenation, template literals with expressions, ternaries inside the
+attribute, and the side-class `Record` map whose values carry leading spaces.
+Composition goes through `cn()` (clsx + tailwind-merge); a real variant axis
+goes through `cva` or `tv`.
+
+### Disposition, under governing directive #2
+
+Tailwind and NativeWind are a stack choice: six of the thirteen repos surveyed
+have no Tailwind dependency at all. So this is a stack-specific-but-good rule,
+which under governing directive #2 means it ships enabled by nothing and
+individually toggleable, like the other seven. No preset names it.
+`fixtures/adversarial/optin` now asserts that twice over — once by running the
+same tree through a config that loads the plugin and names no rule, and once by
+reading all five emitted preset JSONs and failing if any of them contains a
+`magic/` key at all.
+
+### Semantics
+
+The value of a `className` (or `class`) attribute must be a plain string, or a
+call. Everything else is reported, under one of five message ids:
+
+| Shape                                                       | messageId       |
+| ----------------------------------------------------------- | --------------- |
+| Template literal with expressions                           | `template`      |
+| `+` concatenation                                           | `concatenation` |
+| Ternary, or `&&`                                            | `conditional`   |
+| Any of the above, assembled into a `const` first            | `indirect`      |
+| A template literal reading from a `Record` of class strings | `classMap`      |
+
+`classMap` names `cva`/`tv` ahead of `cn`, because a lookup table of class
+strings is a variant axis, which is the thing `cva`/`tv` declare.
+
+The rule inspects the shape of the attribute's value and nothing inside a call.
+That one decision is what lets `cn("base", cond ? "a" : "b")` through, along
+with any unknown helper, and it is why there is no `allowTernaryInCn` option:
+arguments were never in scope.
+
+### Evidence for the defaults
+
+Counted across the thirteen repos before choosing anything, over
+`*.ts,*.tsx,*.js,*.jsx,*.mjs` with `node_modules` excluded:
+
+| Helper    | Call sites | Where                                                                  |
+| --------- | ---------- | ---------------------------------------------------------------------- |
+| `cn`      | 457        | chatmode 300, invest-radar 150, would-you-rather 5, e-card 1, pegada 1 |
+| `cva`     | 20         | chatmode 12, invest-radar 4, would-you-rather 4                        |
+| `twMerge` | 6          | all six `cn` definitions, and nowhere else                             |
+| `clsx`    | 5          | five of the six `cn` definitions, and nowhere else                     |
+| `cx`      | 1          | would-you-rather's `cn`, from `class-variance-authority`               |
+| `tv`      | 0          | `tailwind-variants` is a dependency of nothing                         |
+
+So the default `composers` list is `["cn", "cva", "twMerge", "clsx", "cx"]`, in
+that order. `tv` is not in it, though it is still in the messages. The directive
+names it as a variant builder and it is the right answer wherever it is
+installed, but pointing the default diagnostics at a package no repo has would
+be unfollowable advice. The list only decides which name the diagnostics use, so
+leaving `tv` out of it costs nothing.
+
+Four repos have a shadcn `components.json`, all four with `"aliases": { "utils":
+"@/lib/utils" }`. Five of the six `cn` definitions in the tree are
+`twMerge(clsx(inputs))` character for character; would-you-rather's is
+`twMerge(cx(inputs))`, `cx` coming from CVA. Those six sit across five repos,
+because invest-radar has one for its app and one for `surfaces/design`. And
+e-card's is dead: it has the dependency, the `components.json` and the helper,
+and zero importers.
+
+Template-literal `className`s: gabriel-taveira-portfolio 21, chatmode 8,
+invest-radar 1, padrinhos 1. The `Record`-with-leading-spaces shape exists
+exactly once, in
+`gabriel-taveira-portfolio/src/components/portfolio/marginalia.tsx`, which is
+the file the rule was designed against. `+` concatenation into a `className`
+never appears anywhere in the tree; that arm is prevention.
+
+The portfolio composes classes constantly and has no `cn` at all: no `clsx`, no
+`tailwind-merge`, no `components.json`. Its `ws-*` classes are a hand-written
+CSS design system, so the conflict-merging half of the rationale does not apply
+there. The falsy-piece and spacing half still does, and 21 of its 22 reports are
+template literals.
+
+`marginalia.tsx` shaped the implementation twice over. Its splice happens in a
+`const className = ...` above the JSX, so a rule matching only `JSXAttribute`
+values would miss the one file it was written for; hence the `const` following.
+And a sibling component takes a `className` prop, which forced the rule to count
+every binding form rather than only variable declarators. With declarators
+alone, that prop resolved to the tainted `const` and produced a false positive
+on the adversarial fixture. The rule now refuses to resolve any name it sees
+bound twice in a file.
+
+### Impact
+
+Run over the repos themselves, rule alone, no preset:
+
+| Repo                             | Reports |
+| -------------------------------- | ------- |
+| gabriel-taveira-portfolio        | 22      |
+| chatmode                         | 11      |
+| invest-radar                     | 6       |
+| padrinhos-ana-julia-gabriel      | 1       |
+| e-card, pegada, would-you-rather | 0       |
+
+The three zeros already route every composition through `cn`.
+
+### No autofix
+
+`--fix` would have to wrap the expression in `cn()`, which produces the
+byte-identical class string. The value of the change is splitting the expression
+into arguments, so `clsx` drops the falsy ones and `tailwind-merge` resolves the
+conflicts. Which piece becomes which argument is a judgement call, and getting
+it wrong changes what renders without changing whether the rule passes. Same
+reasoning as `prefer-suspense-query` and `prefer-early-return`.
+
+### Known gaps
+
+- `element.className = ...` outside JSX, which
+  `invest-radar/sources/browser-ext/entrypoints/popup/main.ts:125` does with the
+  same leading-space ternary. That package has no `cn`, and a DOM property
+  assignment is a different rule.
+- `let`, and any name bound twice in the file.
+- Anything behind a function boundary: `className={buildClasses(side)}` may well
+  be correct inside.
+- `||` and `??`, which in an attribute are a default rather than a composition.
+- A lookup table imported from another module. The generic `template` message
+  fires instead of the `cva`/`tv` one; the advice is still right, just less
+  specific.
+
+### Naming
+
+`no-manual-classname` describes what is banned. `prefer-cn` would have been
+wrong, because `cn` is one of two right answers and a variant axis wants the
+other. `no-classname-concat` covers `+` alone.

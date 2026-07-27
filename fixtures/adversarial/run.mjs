@@ -205,7 +205,7 @@ process.stdout.write("\n[base] default preset, no opt-ins\n");
 
 // --------------------------------------------------------------- optin ----
 process.stdout.write(
-  "\n[optin] base + magic/no-module-mocks + magic/prefer-suspense-query\n",
+  "\n[optin] base + the opt-in magic rules, and the same tree with none of them\n",
 );
 {
   const r = lint(join(here, "optin"), ["src"]);
@@ -227,6 +227,66 @@ process.stdout.write(
     "useQuery fires on api + trpc roots only (2 hits, not 4)",
     suspense.length === 2,
     `got ${suspense.length}`,
+  );
+
+  const classnames = diag(
+    r,
+    "manual-classname.tsx",
+    "magic(no-manual-classname)",
+  );
+  check(
+    "no-manual-classname fires on the 6 hand-composed classNames",
+    classnames.length === 6,
+    `got ${classnames.length}: ${classnames.map(line).join(", ")}`,
+  );
+  check(
+    "the SIDE_CLASS splice gets the cva/tv message, through a const and inline",
+    classnames.filter((d) => d.message.includes("`SIDE_CLASS`")).length === 2,
+    classnames.map((d) => d.message.slice(0, 40)).join(" | "),
+  );
+  const composed = lineOf("optin", "manual-classname.tsx", "--- NOT reported");
+  check(
+    "cn(), a cva result, literals, static templates, `||`/`??` and other attributes are silent",
+    classnames.every((d) => line(d) < composed),
+    classnames.map(line).join(", "),
+  );
+
+  // The opt-in guarantee, executed: same preset, same files, plugin loaded, no
+  // `magic/*` rule named in the config.
+  const off = lint(join(here, "optin"), [
+    "-c",
+    "plugin-only.config.mts",
+    "src",
+  ]);
+  const stillOn = off.diagnostics.filter((d) => d.code.startsWith("magic("));
+  check(
+    "with the plugin loaded but no magic rule named, every magic rule is silent",
+    stillOn.length === 0,
+    stillOn.map((d) => d.code).join(", "),
+  );
+
+  // And the same claim at the config level: no preset a consumer installs may
+  // name a `magic/*` rule, or "opt-in" is a docs promise rather than a fact.
+  const preset = (variant) =>
+    JSON.parse(
+      readFileSync(
+        join(repoRoot, "packages", "oxlint-config", variant),
+        "utf8",
+      ),
+    );
+  const named = ["base", "react", "react-native", "next", "expo"].flatMap(
+    (variant) => {
+      const config = preset(`${variant}.json`);
+      return [
+        ...Object.keys(config.rules ?? {}),
+        ...(config.overrides ?? []).flatMap((o) => Object.keys(o.rules ?? {})),
+      ].filter((rule) => rule.startsWith("magic/"));
+    },
+  );
+  check(
+    "no emitted preset names a magic/* rule at all",
+    named.length === 0,
+    named.join(", "),
   );
 }
 

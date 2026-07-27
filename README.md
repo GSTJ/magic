@@ -8,7 +8,7 @@ slightly-wrong version.
 | ----------------------------------------------- | --------------------------------------------------------------- |
 | [`magic-oxlint-config`](packages/oxlint-config) | oxlint presets: `base`, `react`, `react-native`, `next`, `expo` |
 | [`magic-oxfmt-config`](packages/oxfmt-config)   | oxfmt config, including the import sort order                   |
-| [`magic-oxlint-plugin`](packages/oxlint-plugin) | Seven opt-in lint rules with no oxlint equivalent               |
+| [`magic-oxlint-plugin`](packages/oxlint-plugin) | Eight opt-in lint rules with no oxlint equivalent               |
 | [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases   |
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck  |
@@ -851,7 +851,7 @@ See the [codemods README](packages/codemods) for the full option list.
 
 ## Opt-in rules
 
-`magic-oxlint-plugin` ships seven rules. None is on by default anywhere — pick
+`magic-oxlint-plugin` ships eight rules. None is on by default anywhere — pick
 the ones a given repo wants.
 
 ```sh
@@ -874,6 +874,8 @@ export default extendConfig(base, {
     // React repos only.
     "magic/react-require-autocomplete": "error",
     "magic/react-hooks-strict-return": "error",
+    // Tailwind / NativeWind repos only.
+    "magic/no-manual-classname": "error",
   },
 });
 ```

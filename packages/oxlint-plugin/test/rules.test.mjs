@@ -661,3 +661,262 @@ export const user = () => {
     assert.equal(countFor(lenient, "react-hooks-strict-return"), 0);
   });
 });
+
+describe("magic/no-manual-classname", () => {
+  const rules = { "magic/no-manual-classname": "error" };
+
+  // The screenshot this rule was written for: a Record of class strings whose
+  // leading spaces hold the concatenation together.
+  it("reports the side-class Record map interpolated into a template literal", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `type Side = "left" | "right";
+const SIDE_CLASS: Record<Side, string> = {
+  left: " ws-x-left",
+  right: " ws-x-right",
+};
+export const Handle = ({ side }: { side: Side }) => (
+  <div className={\`ws-base\${SIDE_CLASS[side]}\`} />
+);
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].message, /hand-rolled variant table/);
+    assert.match(diagnostics[0].message, /cva/);
+  });
+
+  it("finds the lookup table even when it is declared after the JSX", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const Handle = ({ side }: { side: "left" | "right" }) => (
+  <div className={\`ws-base\${SIDE_CLASS[side]}\`} />
+);
+const SIDE_CLASS = { left: " ws-x-left", right: " ws-x-right" };
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].message, /hand-rolled variant table/);
+  });
+
+  // marginalia.tsx as it is actually written: the table is spliced together in
+  // a `const`, one line above the JSX, so the variant message has to survive
+  // the hop through the variable.
+  it("keeps the cva/tv message when the splice happens in a const", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `type Side = "left" | "right" | "inline";
+const SIDE_CLASS: Record<Side, string> = {
+  left: " ws-marginalia-left",
+  right: " ws-marginalia-right",
+  inline: "",
+};
+export const Marginalia = ({ side }: { side: Side }) => {
+  const className = \`ws-marginalia\${SIDE_CLASS[side]}\`;
+  return <span className={className} />;
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].message, /`SIDE_CLASS`/);
+    assert.match(diagnostics[0].message, /cva/);
+  });
+
+  it("reports the three inline shapes: template, concat, ternary", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ x }: { x: string }) => <div className={\`p-2 \${x}\`} />;
+export const B = ({ x }: { x: string }) => <div className={"p-2 " + x} />;
+export const C = ({ on }: { on: boolean }) => <div className={on ? "p-2" : "p-4"} />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 3);
+  });
+
+  it("reports `&&` but leaves `||` and `??` alone — those read as a default", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ on }: { on: boolean }) => <div className={on && "p-2"} />;
+export const B = ({ own }: { own?: string }) => <div className={own || "p-2"} />;
+export const C = ({ own }: { own?: string }) => <div className={own ?? "p-2"} />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].message, /`&&`/);
+  });
+
+  it("follows a same-file const into the attribute", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ on }: { on: boolean }) => {
+  const cls = \`base \${on ? "on" : "off"}\`;
+  return <div className={cls} />;
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].message, /`cls` is assembled by hand/);
+  });
+
+  // Everything the rule steers people towards has to survive it.
+  it("leaves cn/clsx/cva/tv calls, plain literals and static templates alone", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `declare const cn: (...parts: unknown[]) => string;
+declare const button: (opts: unknown) => string;
+export const A = ({ on }: { on: boolean }) => <div className={cn("base", on && "on")} />;
+export const B = ({ on }: { on: boolean }) => <div className={cn("base", on ? "on" : "off")} />;
+export const C = ({ size }: { size: "sm" | "lg" }) => <div className={button({ size })} />;
+export const D = () => <div className="p-2 text-sm" />;
+export const E = () => <div className={\`p-2 text-sm\`} />;
+export const F = ({ className }: { className: string }) => <div className={className} />;
+export const G = ({ styles }: { styles: { root: string } }) => <div className={styles.root} />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 0);
+  });
+
+  it("only looks at the configured attributes", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ x }: { x: string }) => <img title={\`t \${x}\`} alt={"a" + x} />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 0);
+  });
+
+  it("honours the attributes option (NativeWind's extra class props)", () => {
+    const files = {
+      "a.tsx": `export const A = ({ x }: { x: string }) => (
+  <ScrollView contentContainerClassName={\`p-2 \${x}\`} />
+);
+`,
+    };
+
+    const byDefault = lint({ files, rules });
+    const configured = lint({
+      files,
+      rules: {
+        "magic/no-manual-classname": [
+          "error",
+          { attributes: ["className", "contentContainerClassName"] },
+        ],
+      },
+    });
+
+    assert.equal(countFor(byDefault, "no-manual-classname"), 0);
+    assert.equal(countFor(configured, "no-manual-classname"), 1);
+  });
+
+  it("names the repo's own composer in the diagnostic", () => {
+    const diagnostics = lint({
+      files: {
+        "a.tsx": `export const A = ({ x }: { x: string }) => <div className={"p-2 " + x} />;\n`,
+      },
+      rules: {
+        "magic/no-manual-classname": ["error", { composers: ["tw", "clsx"] }],
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].message, /`tw\(\.\.\.\)`/);
+  });
+
+  // The two documented limits of the taint check, asserted so they stay limits
+  // rather than quietly becoming false positives.
+  // The collision that matters in practice: `marginalia.tsx` names its const
+  // `className`, and any sibling component with a `className` prop binds the
+  // same name. Name matching cannot tell them apart, so it stops.
+  it("gives up when a prop binds the same name as the hand-built const", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ on }: { on: boolean }) => {
+  const className = \`base \${on}\`;
+  return <div className={className} />;
+};
+export const B = ({ className }: { className: string }) => <div className={className} />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 0);
+  });
+
+  it("does not follow `let`, and gives up on a name declared twice", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ on }: { on: boolean }) => {
+  let cls = "base";
+  cls = \`base \${on}\`;
+  return <div className={cls} />;
+};
+export const B = ({ on }: { on: boolean }) => {
+  const shared = \`base \${on}\`;
+  return <span className={shared} />;
+};
+export const C = () => {
+  const shared = "base";
+  return <span className={shared} />;
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 0);
+  });
+
+  it("also covers the `class` attribute, for NativeWind and non-React JSX", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = ({ x }: { x: string }) => <div class={\`p-2 \${x}\`} />;\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+  });
+
+  // Reporting happens in `after()`, so per-file state has to be reset in
+  // `before()` — under `createOnce` the closure is shared by the whole run.
+  it("does not leak collected state between files in one run", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "first.tsx": `export const A = ({ on }: { on: boolean }) => {
+  const cls = \`base \${on}\`;
+  return <div className={cls} />;
+};
+`,
+        "second.tsx": `export const B = ({ cls }: { cls: string }) => <div className={cls} />;\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-manual-classname"), 1);
+    assert.match(diagnostics[0].file, /first\.tsx/);
+  });
+});

@@ -1,6 +1,6 @@
 # magic-oxlint-plugin
 
-Seven oxlint rules with no usable built-in equivalent. **All opt-in** — nothing
+Eight oxlint rules with no usable built-in equivalent. **All opt-in** — nothing
 here is enabled by any `magic-oxlint-config` preset. They're policies rather
 than bug detectors, or they're stack-specific, and both kinds of rule should be
 a deliberate choice per repo.
@@ -178,6 +178,102 @@ Options: `roots` (default `["api", "trpc"]`), `hooks` (default `["useQuery"]`).
 Not auto-fixable, deliberately. The return shape changes — `data` stops being
 possibly-undefined, and surrounding `isLoading` / `isError` / `refetch` usage
 has to be removed by hand. A rename alone produces code that doesn't compile.
+
+### `magic/no-manual-classname`
+
+Bans composing a `className` by hand. The attribute's value has to be a plain
+string or a call — `cn()` to merge, `cva()` / `tv()` to declare variants.
+
+```tsx
+// reported
+<div className={`ws-base${SIDE_CLASS[side]}`} />;
+<div className={"p-2 " + extra} />;
+<div className={active ? "bg-accent p-2" : "bg-muted p-2"} />;
+<div className={active && "bg-accent"} />;
+
+// reported too: one line up is still by hand
+const classes = `p-2 ${active ? "bg-accent" : "bg-muted"}`;
+<div className={classes} />;
+
+// fine
+<div className="p-2 text-sm" />;
+<div className={cn("p-2", active && "bg-accent")} />;
+<div className={button({ size })} />;
+```
+
+Two Tailwind classes that set the same property both survive a `${}` or a `+`,
+and which one wins comes down to their order in the generated stylesheet. That's
+what `tailwind-merge` resolves, and `cn()` is the two-line wrapper around it
+that shadcn's `components.json` already generates into `@/lib/utils` in four of
+the GSTJ repos. A conditional in the attribute has a separate problem: every
+branch repeats the classes the branches share, so they drift.
+
+The shape it was written for is `gabriel-taveira-portfolio`'s `marginalia.tsx`:
+
+```tsx
+const SIDE_CLASS: Record<Side, string> = {
+  left: " ws-marginalia-left",
+  right: " ws-marginalia-right",
+  inline: "",
+};
+const className = `ws-marginalia${SIDE_CLASS[side]}`;
+```
+
+The leading spaces are what hold the concatenation together, so a template
+literal reading from an object of class strings gets a message naming `cva`/`tv`
+instead of the generic one. And the splice sits in a `const` above the JSX, so
+the rule follows a same-file `const` into the attribute.
+
+Options:
+
+- `attributes` — default `["className", "class"]`. NativeWind's extra class
+  props (`contentContainerClassName`, `indicatorClassName`) go here.
+- `composers` — default `["cn", "cva", "twMerge", "clsx", "cx"]`, in descending
+  order of how often each appears across the GSTJ repos: `cn` 457 call sites,
+  `cva` 20, and `twMerge`/`clsx`/`cx` only inside the six `cn` definitions
+  those repos have between them. It picks the name the diagnostics tell you to
+  reach for, so a repo whose helper is `tw()` gets usable advice. It gates nothing: a call in
+  `className` is never reported, whatever it calls, because only the shape of
+  the value is inspected. That's also why `cn(cond ? a : b)` passes, and why
+  there's no `allowTernaryInCn` option; the argument was never in scope.
+
+  `tv` is missing from the default list because `tailwind-variants` isn't a
+  dependency of any GSTJ repo. It still appears in the messages, and
+  `className={tv(...)()}` passes either way.
+
+What it doesn't catch:
+
+- `element.className = ...` outside JSX. Real, in
+  `invest-radar/sources/browser-ext/entrypoints/popup/main.ts`, but that's a
+  DOM property assignment in a package with no `cn` to route it through.
+- A `let`, or a name bound twice in the file. A `className` prop next to a
+  hand-built `const className` is that collision, and it's a common one; the
+  rule stops rather than guess which binding reaches the JSX.
+- Composition behind a function or module boundary —
+  `className={buildClasses(side)}`. The helper may use `cn` already.
+- `||` and `??`. In an attribute those read as a default
+  (`className={own ?? "p-2"}`), the inverse of what `&&` does.
+
+A lookup table imported from another module is still caught, just less
+specifically: without the object literal in view, the generic `template` message
+fires instead of the `cva`/`tv` one.
+
+Not auto-fixable. Wrapping the expression in `cn()` renders the identical class
+string; the value is in splitting it into arguments, so falsy pieces drop out
+and conflicts merge. A fixer would have to decide which piece belongs where, and
+it'd get that wrong in the rendered output without failing anything.
+`magic/prefer-early-return` and `magic/prefer-suspense-query` are off-limits to
+`--fix` for the same kind of reason.
+
+The name describes what's banned. `prefer-cn` would name one of two right
+answers, since a variant axis wants `cva`/`tv`, and `no-classname-concat` covers
+`+` alone. See [DECISIONS.md](../../DECISIONS.md) section 10 for
+the evidence behind the defaults.
+
+Measured before shipping, over the repos themselves: 22 reports in
+`gabriel-taveira-portfolio`, 11 in `chatmode`, 6 in `invest-radar`, 1 in
+`padrinhos-ana-julia-gabriel`, and 0 in `e-card`, `pegada` and
+`would-you-rather`, which already route every composition through `cn`.
 
 ## Rules covered natively instead
 

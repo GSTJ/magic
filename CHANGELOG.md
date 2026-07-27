@@ -3,6 +3,40 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-27 — `magic/no-manual-classname` in magic-oxlint-plugin 1.1.0
+
+One new opt-in rule. No other package changed, and no preset turns it on.
+
+`magic/no-manual-classname` bans composing a `className` by hand: template
+literals with interpolations, `+` concatenation, a ternary or `&&` inside the
+attribute, and the same shapes assembled into a `const` one line above the JSX.
+Composition goes through `cn()`; a variant axis goes through `cva` or `tv`.
+
+```ts
+// oxlint.config.mts
+import { extendConfig } from "magic-oxlint-config";
+import react from "magic-oxlint-config/react";
+
+export default extendConfig(react, {
+  jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
+  rules: { "magic/no-manual-classname": "error" },
+});
+```
+
+Options are `attributes` (default `["className", "class"]`, for NativeWind's
+extra class props) and `composers` (default `["cn", "cva", "twMerge", "clsx",
+"cx"]`, which picks the helper name the diagnostics recommend). The rule
+inspects the shape of the attribute's value and nothing inside a call, so
+`cn(cond ? a : b)` passes.
+
+Measured against these repos before it shipped: 22 reports in
+gabriel-taveira-portfolio, 11 in chatmode, 6 in invest-radar, 1 in
+padrinhos-ana-julia-gabriel, 0 in e-card, pegada and would-you-rather. Not
+auto-fixable, on purpose: wrapping the expression in `cn()` renders the
+identical string, and splitting it into the right arguments is a judgement call.
+See [DECISIONS.md](DECISIONS.md) section 10 and the [plugin
+README](packages/oxlint-plugin#magicno-manual-classname).
+
 ## 2026-07-27 — CI: composite actions, and consumption by tag
 
 No npm package changed. Everything here is in `.github/` and in how consumers

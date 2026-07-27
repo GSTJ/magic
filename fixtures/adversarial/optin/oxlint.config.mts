@@ -7,6 +7,7 @@ export default defineConfig({
   extends: [base],
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
   rules: {
+    "magic/no-manual-classname": "error",
     "magic/no-module-mocks": "error",
     "magic/prefer-suspense-query": ["error", { roots: ["api", "trpc"] }],
   },
