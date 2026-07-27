@@ -281,6 +281,7 @@
     "import/no-unassigned-import": "off",
     "import/prefer-default-export": "off",
     "import/consistent-type-specifier-style": "off",
+    "oxc/no-map-spread": "off",
     "promise/always-return": "off",
     "promise/avoid-new": "off",
     "promise/prefer-await-to-callbacks": "off",

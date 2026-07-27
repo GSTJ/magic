@@ -199,6 +199,12 @@ export const base: MagicOxlintConfig = {
     // type-import style. Keeping both on produces a fight the fixer can't win.
     "import/consistent-type-specifier-style": "off",
 
+    // Contradicts `unicorn/prefer-spread` on `flatMap((x) => [x, ...f(x)])`:
+    // this rejects the spread, prefer-spread rejects the `.concat()` escape
+    // hatch, and the only lint-clean form is a hand-rolled loop. prefer-spread
+    // is general and autofixable, so the perf micro-rule yields.
+    "oxc/no-map-spread": "off",
+
     "promise/always-return": "off",
     "promise/avoid-new": "off",
     "promise/prefer-await-to-callbacks": "off",
