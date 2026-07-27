@@ -1,0 +1,70 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "GSTJ shared Renovate preset. Consume with \"extends\": [\"github>GSTJ/magic\"].",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "rebaseWhen": "behind-base-branch",
+  "postUpdateOptions": ["pnpmDedupe"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Dev dependencies are not shipped to users; let them merge themselves once CI is green.",
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true
+    },
+    {
+      "description": "Non-major bumps automerge everywhere. Majors always get a human.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "oxlint and oxfmt move fast and rules appear/disappear between minors. Group them and never automerge — a new rule can fail every repo at once.",
+      "matchPackageNames": ["oxlint", "oxfmt", "oxlint-tsgolint"],
+      "groupName": "oxc toolchain",
+      "automerge": false
+    },
+    {
+      "description": "The magic-* packages are the shared tooling. They land together so a config bump can't outrun the plugin it needs.",
+      "matchPackageNames": ["magic-{/,}**"],
+      "groupName": "magic tooling",
+      "automerge": true
+    },
+    {
+      "description": "GitHub Actions pinned by tag; group so a PR isn't opened per action.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": true
+    },
+    {
+      "description": "TypeScript majors change emit and rule behaviour. Human review.",
+      "matchPackageNames": ["typescript"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      "description": "Expo SDK dictates react/react-native/metro versions. Refresh inside declared ranges only; SDK jumps are done by hand.",
+      "matchPackageNames": [
+        "react-native",
+        "@react-native/{/,}**",
+        "metro",
+        "metro-config",
+        "metro-resolver",
+        "expo",
+        "expo-{/,}**"
+      ],
+      "rangeStrategy": "in-range-only"
+    },
+    {
+      "description": "react-test-renderer must match the installed react exactly or @testing-library/react-native refuses to run. React's version comes from the Expo SDK.",
+      "matchPackageNames": ["react-test-renderer"],
+      "enabled": false
+    }
+  ]
+}

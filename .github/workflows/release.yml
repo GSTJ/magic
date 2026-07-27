@@ -1,0 +1,124 @@
+name: 🚀 Release
+
+# Reusable npm publish workflow, driven by changesets-free conventional commits
+# via release-it. Callers own their `.release-it.js`; this workflow only handles
+# checkout, install, auth and running the release command.
+#
+#   jobs:
+#     release:
+#       uses: GSTJ/magic/.github/workflows/release.yml@main
+#       secrets:
+#         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+#       permissions:
+#         contents: write
+#         id-token: write
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        required: false
+        default: ""
+      pnpm-version:
+        type: string
+        required: false
+        default: ""
+      working-directory:
+        type: string
+        required: false
+        default: "."
+      install-command:
+        type: string
+        required: false
+        default: "pnpm install --frozen-lockfile"
+      build-command:
+        type: string
+        required: false
+        default: "pnpm run build"
+      release-command:
+        description: "The command that actually publishes. Defaults to release-it in CI mode."
+        type: string
+        required: false
+        default: "pnpm run release"
+      git-user-name:
+        type: string
+        required: false
+        default: "Gabriel Taveira"
+      git-user-email:
+        type: string
+        required: false
+        default: "gabrielstaveira@gmail.com"
+      runs-on:
+        type: string
+        required: false
+        default: "ubuntu-latest"
+    secrets:
+      NPM_TOKEN:
+        required: true
+      GH_PAT:
+        description: "Optional PAT so the version-bump commit can push past branch protection."
+        required: false
+
+jobs:
+  release:
+    name: 🎉 Publish
+    # release-it writes "[skip ci]" with a space. Matching "[skip-ci]" never fires.
+    if: "!contains(toJSON(github.event.commits.*.message), '[skip ci]')"
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v6
+        with:
+          # release tooling needs history to find the last tag.
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || github.token }}
+          persist-credentials: true
+
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm-version }}
+
+      - name: 🏗 Setup Node (explicit version)
+        if: inputs.node-version != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+          registry-url: "https://registry.npmjs.org"
+
+      - name: 🏗 Setup Node (from .nvmrc)
+        if: inputs.node-version == ''
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ${{ inputs.working-directory }}/.nvmrc
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+          registry-url: "https://registry.npmjs.org"
+
+      - name: 📦 Install
+        run: ${{ inputs.install-command }}
+
+      - name: 🏗 Build
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+
+      - name: 🚀 Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT || github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          git config --global user.email "${{ inputs.git-user-email }}"
+          git config --global user.name "${{ inputs.git-user-name }}"
+          npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          ${{ inputs.release-command }}

@@ -1,0 +1,144 @@
+name: 🛠️ CI
+
+# Reusable checkup workflow. Every GSTJ repo calls this instead of copy-pasting
+# a lint/format/typecheck job.
+#
+#   jobs:
+#     ci:
+#       uses: GSTJ/magic/.github/workflows/ci.yml@main
+#
+# This repo is public, so private repos can call it too.
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node version. Defaults to reading .nvmrc from the caller repo."
+        type: string
+        required: false
+        default: ""
+      pnpm-version:
+        description: "pnpm version. Empty means take it from the caller's packageManager field."
+        type: string
+        required: false
+        default: ""
+      working-directory:
+        description: "Directory to run every step in."
+        type: string
+        required: false
+        default: "."
+      install-command:
+        type: string
+        required: false
+        default: "pnpm install --frozen-lockfile"
+      lint-command:
+        description: "Set to an empty string to skip linting."
+        type: string
+        required: false
+        default: "pnpm run lint"
+      format-command:
+        description: "Set to an empty string to skip the format check."
+        type: string
+        required: false
+        default: "pnpm run format"
+      typecheck-command:
+        description: "Set to an empty string to skip typechecking."
+        type: string
+        required: false
+        default: "pnpm run typecheck"
+      test-command:
+        description: "Empty by default — opt in per repo."
+        type: string
+        required: false
+        default: ""
+      build-command:
+        description: "Empty by default — opt in per repo."
+        type: string
+        required: false
+        default: ""
+      extra-command:
+        description: "Escape hatch for repo-specific gates (expo doctor, invariant scripts, ...)."
+        type: string
+        required: false
+        default: ""
+      turbo-cache:
+        description: "Enable the GitHub Actions cache backend for turbo."
+        type: boolean
+        required: false
+        default: true
+      runs-on:
+        type: string
+        required: false
+        default: "ubuntu-latest"
+    secrets:
+      NPM_TOKEN:
+        required: false
+
+concurrency:
+  group: magic-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checkup:
+    name: 👮 Lint, Format, Typecheck
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v6
+
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm-version }}
+
+      - name: 🏗 Setup Node (explicit version)
+        if: inputs.node-version != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+
+      - name: 🏗 Setup Node (from .nvmrc)
+        if: inputs.node-version == ''
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ${{ inputs.working-directory }}/.nvmrc
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+
+      - name: 🏗 Turborepo cache
+        if: inputs.turbo-cache
+        uses: dtinth/setup-github-actions-caching-for-turbo@v1
+
+      - name: 📦 Install
+        run: ${{ inputs.install-command }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🏗 Build
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+
+      - name: 🧹 Lint
+        if: inputs.lint-command != ''
+        run: ${{ inputs.lint-command }}
+
+      - name: 💅 Format
+        if: inputs.format-command != ''
+        run: ${{ inputs.format-command }}
+
+      - name: 🧪 Typecheck
+        if: inputs.typecheck-command != ''
+        run: ${{ inputs.typecheck-command }}
+
+      - name: 🧪 Test
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
+
+      - name: 🧰 Extra checks
+        if: inputs.extra-command != ''
+        run: ${{ inputs.extra-command }}
