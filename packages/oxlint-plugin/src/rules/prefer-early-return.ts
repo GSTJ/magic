@@ -10,6 +10,12 @@ interface Options {
    * stops complaining. `0` — the value the ESLint config used — means *any*
    * function whose whole body is one `if` should invert the condition and
    * return early.
+   *
+   * Upstream defaults this to `1`; we default to `0`. That is the one
+   * deliberate divergence from `@shopify/prefer-early-return`, and it exists
+   * because `0` is the value the incumbent GSTJ ESLint config passed, so a bare
+   * `"magic/prefer-early-return": "error"` should mean what those repos already
+   * meant by it.
    */
   maximumStatements?: number;
 }
@@ -79,12 +85,21 @@ export const preferEarlyReturn: EslintRuleModule = defineOxlintRule({
         | undefined;
       if (!consequent) return;
 
-      const consequentStatements =
-        consequent.type === "BlockStatement"
-          ? (consequent.body ?? [])
-          : [consequent];
-
-      if (consequentStatements.length <= maximumStatements) return;
+      if (consequent.type === "BlockStatement") {
+        if ((consequent.body ?? []).length <= maximumStatements) return;
+      } else if (
+        // A braceless consequent. The upstream rule only counts this when it is
+        // an `ExpressionStatement` and the budget is zero, and that carve-out is
+        // load-bearing: `() => { if (done) return; }` and
+        // `() => { if (bad) throw new Error(); }` are *already* the early-return
+        // shape this rule is asking for. Counting every braceless statement as
+        // one would report them and tell the author to invert a guard clause
+        // into itself.
+        consequent.type !== "ExpressionStatement" ||
+        maximumStatements !== 0
+      ) {
+        return;
+      }
 
       context.report({ node: only, messageId: MESSAGE_ID });
     };

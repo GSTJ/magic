@@ -1,14 +1,20 @@
 import type { EslintRuleModule } from "./rule-api.ts";
 
+import { noAncestorDirectoryImport } from "./rules/no-ancestor-directory-import.ts";
 import { noBarrelFile } from "./rules/no-barrel-file.ts";
 import { noModuleMocks } from "./rules/no-module-mocks.ts";
 import { preferEarlyReturn } from "./rules/prefer-early-return.ts";
 import { preferSuspenseQuery } from "./rules/prefer-suspense-query.ts";
+import { reactHooksStrictReturn } from "./rules/react-hooks-strict-return.ts";
+import { reactRequireAutocomplete } from "./rules/react-require-autocomplete.ts";
 
+export { noAncestorDirectoryImport } from "./rules/no-ancestor-directory-import.ts";
 export { noBarrelFile } from "./rules/no-barrel-file.ts";
 export { noModuleMocks } from "./rules/no-module-mocks.ts";
 export { preferEarlyReturn } from "./rules/prefer-early-return.ts";
 export { preferSuspenseQuery } from "./rules/prefer-suspense-query.ts";
+export { reactHooksStrictReturn } from "./rules/react-hooks-strict-return.ts";
+export { reactRequireAutocomplete } from "./rules/react-require-autocomplete.ts";
 export type { EslintRuleModule } from "./rule-api.ts";
 
 /**
@@ -40,10 +46,13 @@ const plugin: {
 } = {
   meta: { name: "magic" },
   rules: {
+    "no-ancestor-directory-import": noAncestorDirectoryImport,
     "no-barrel-file": noBarrelFile,
     "no-module-mocks": noModuleMocks,
     "prefer-early-return": preferEarlyReturn,
     "prefer-suspense-query": preferSuspenseQuery,
+    "react-hooks-strict-return": reactHooksStrictReturn,
+    "react-require-autocomplete": reactRequireAutocomplete,
   },
 };
 

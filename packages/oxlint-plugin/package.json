@@ -1,7 +1,7 @@
 {
   "name": "magic-oxlint-plugin",
   "version": "1.0.0",
-  "description": "Opt-in oxlint JS-plugin rules for GSTJ projects: prefer-early-return, no-barrel-file, no-module-mocks, prefer-suspense-query.",
+  "description": "Opt-in oxlint JS-plugin rules for GSTJ projects: prefer-early-return, no-ancestor-directory-import, no-barrel-file, no-module-mocks, prefer-suspense-query, react-hooks-strict-return, react-require-autocomplete.",
   "keywords": [
     "eslint-plugin",
     "lint",

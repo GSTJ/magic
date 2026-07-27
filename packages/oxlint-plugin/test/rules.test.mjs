@@ -114,6 +114,61 @@ describe("magic/prefer-early-return", () => {
     assert.equal(countFor(diagnostics, "prefer-early-return"), 1);
     assert.match(diagnostics[0].file, /strict/);
   });
+
+  // The upstream rule counts a braceless consequent only when it is an
+  // `ExpressionStatement`. That carve-out matters: `if (done) return;` as a
+  // whole function body already *is* the early return the rule asks for, and
+  // reporting it would be advice to invert a guard clause into itself.
+  it("reports a braceless expression consequent at maximumStatements 0", () => {
+    const diagnostics = lint({
+      rules: {
+        "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
+      },
+      files: {
+        "a.ts": `export const handle = (ok: boolean) => {
+  if (ok) doA();
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "prefer-early-return"), 1);
+  });
+
+  it("leaves a braceless return/throw/continue body alone", () => {
+    const diagnostics = lint({
+      rules: {
+        "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
+      },
+      files: {
+        "a.ts": `export const handle = (ok: boolean) => {
+  if (ok) return;
+};
+export const guard = (bad: boolean) => {
+  if (bad) throw new Error("nope");
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "prefer-early-return"), 0);
+  });
+
+  it("does not report a braceless consequent once the budget is non-zero", () => {
+    const diagnostics = lint({
+      rules: {
+        "magic/prefer-early-return": ["error", { maximumStatements: 1 }],
+      },
+      files: {
+        "a.ts": `export const handle = (ok: boolean) => {
+  if (ok) doA();
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "prefer-early-return"), 0);
+  });
 });
 
 describe("magic/no-barrel-file", () => {
@@ -317,5 +372,292 @@ describe("magic/prefer-suspense-query", () => {
     });
 
     assert.equal(countFor(diagnostics, "prefer-suspense-query"), 0);
+  });
+});
+
+describe("magic/no-ancestor-directory-import", () => {
+  const rules = { "magic/no-ancestor-directory-import": "error" };
+
+  it("reports the ancestor spellings that route through an index", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/feature/nested/a.ts": `import { a } from "..";
+import { b } from "../";
+import { c } from "../..";
+import { d } from "../index";
+import { e } from "../../index.ts";
+export const use = [a, b, c, d, e];
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-ancestor-directory-import"), 5);
+  });
+
+  it("reports the own-directory index too", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/a.ts": `import { a } from ".";
+import { b } from "./index";
+export const use = [a, b];
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-ancestor-directory-import"), 2);
+  });
+
+  it("leaves sibling and descendant imports alone", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/feature/a.ts": `import { a } from "./thing";
+import { b } from "../other/thing";
+import { c } from "../other/index";
+import { d } from "./nested/deep/thing";
+export const use = [a, b, c, d];
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-ancestor-directory-import"), 0);
+  });
+
+  it("leaves bare and aliased specifiers alone", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/a.ts": `import { a } from "react";
+import { b } from "@scope/pkg";
+import { c } from "node:path";
+export const use = [a, b, c];
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-ancestor-directory-import"), 0);
+  });
+
+  // `index.module.css` has basename `index.module`, not `index` — the naive
+  // "starts with index" check would swallow every CSS-module import.
+  it("does not treat index.module.css as an index file", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/feature/a.ts": `import styles from "../index.module.css";
+export const use = styles;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-ancestor-directory-import"), 0);
+  });
+
+  it("covers re-export forms, which the original rule missed", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/feature/a.ts": `export * from "..";
+export { thing } from ".";
+export const own = 1;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-ancestor-directory-import"), 2);
+  });
+});
+
+describe("magic/react-require-autocomplete", () => {
+  const rules = { "magic/react-require-autocomplete": "error" };
+
+  it("reports an autofillable input with no autoComplete", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = () => <input type="text" />;
+export const B = () => <input type="password" />;
+export const C = () => <input />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-require-autocomplete"), 3);
+  });
+
+  it("accepts either casing of the attribute", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = () => <input type="text" autoComplete="name" />;
+export const B = () => <input type="text" autocomplete="off" />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-require-autocomplete"), 0);
+  });
+
+  it("ignores input types the browser cannot autofill", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = () => <input type="checkbox" />;
+export const B = () => <input type="submit" />;
+export const C = () => <input type="file" />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-require-autocomplete"), 0);
+  });
+
+  it("matches the type attribute case-insensitively, as HTML does", () => {
+    const diagnostics = lint({
+      rules,
+      files: { "a.tsx": `export const A = () => <input type="TEXT" />;\n` },
+    });
+
+    assert.equal(countFor(diagnostics, "react-require-autocomplete"), 1);
+  });
+
+  // Both divergences from the upstream rule, and both exist to avoid reporting
+  // on code where the answer is unknowable from syntax.
+  it("skips spread attributes and computed types", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.tsx": `export const A = (props) => <input type="text" {...props} />;
+export const B = ({ kind }) => <input type={kind} />;
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-require-autocomplete"), 0);
+  });
+
+  it("honours inputComponents", () => {
+    const diagnostics = lint({
+      files: {
+        "a.tsx": `export const A = () => <TextField type="email" />;
+export const B = () => <Other type="email" />;
+`,
+      },
+      rules: {
+        "magic/react-require-autocomplete": [
+          "error",
+          { inputComponents: ["TextField"] },
+        ],
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-require-autocomplete"), 1);
+  });
+});
+
+describe("magic/react-hooks-strict-return", () => {
+  const rules = { "magic/react-hooks-strict-return": "error" };
+
+  it("reports a hook returning more than two tuple values", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.ts": `export const useThing = () => {
+  return [1, 2, 3];
+};
+export function useOther() {
+  return [1, 2, 3, 4];
+}
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-hooks-strict-return"), 2);
+  });
+
+  it("allows a two-value tuple and an object of any size", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.ts": `export const useThing = () => {
+  return [1, 2];
+};
+export const useOther = () => {
+  return { a: 1, b: 2, c: 3, d: 4 };
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-hooks-strict-return"), 0);
+  });
+
+  it("ignores plain functions that are not hooks", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.ts": `export const buildTriple = () => {
+  return [1, 2, 3];
+};
+export const user = () => {
+  return [1, 2, 3];
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-hooks-strict-return"), 0);
+  });
+
+  // The innermost function owns the return, so a big tuple built inside a
+  // callback is the callback's business, not the hook's.
+  it("attributes a return to the nearest enclosing function", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.ts": `export const useThing = () => {
+  const rows = [1, 2].map(() => {
+    return [1, 2, 3];
+  });
+  return rows;
+};
+`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "react-hooks-strict-return"), 0);
+  });
+
+  it("honours maximumReturnValues", () => {
+    const files = {
+      "a.ts": `export const useThing = () => {
+  return [1, 2, 3];
+};
+`,
+    };
+
+    const strict = lint({
+      files,
+      rules: {
+        "magic/react-hooks-strict-return": [
+          "error",
+          { maximumReturnValues: 2 },
+        ],
+      },
+    });
+    const lenient = lint({
+      files,
+      rules: {
+        "magic/react-hooks-strict-return": [
+          "error",
+          { maximumReturnValues: 3 },
+        ],
+      },
+    });
+
+    assert.equal(countFor(strict, "react-hooks-strict-return"), 1);
+    assert.equal(countFor(lenient, "react-hooks-strict-return"), 0);
   });
 });
