@@ -28,11 +28,11 @@ const VARIANTS = ["base", "react", "react-native", "next", "expo"];
  * before it lints, and an unknown rule or plugin name is a hard error — so a
  * clean run here means the config is structurally valid, not merely parseable.
  */
-const lintWith = (configPath, source) => {
+const lintWith = (configPath, source, fileName = "a.tsx") => {
   const dir = mkdtempSync(join(tmpdir(), "magic-oxlint-config-"));
   try {
     mkdirSync(join(dir, "src"));
-    writeFileSync(join(dir, "src", "a.tsx"), source);
+    writeFileSync(join(dir, "src", fileName), source);
 
     try {
       const stdout = execFileSync(
@@ -128,6 +128,101 @@ describe("variant composition", () => {
       ),
       "expected no-restricted-properties to fire on process.env",
     );
+  });
+
+  it("base bans namespace imports, react allows the ecosystem ones", () => {
+    const source = [
+      'import * as React from "react";',
+      'import * as Dialog from "@radix-ui/react-dialog";',
+      'import * as utils from "./utils";',
+      "",
+      "export const value = [React, Dialog, utils];",
+    ].join("\n");
+
+    const codes = (variant) =>
+      lintWith(join(packageRoot, `${variant}.json`), `${source}\n`)
+        .diagnostics.filter((d) => d.code === "import(no-namespace)")
+        .map((d) => d.labels[0].span.line);
+
+    assert.deepEqual(
+      codes("base"),
+      [1, 2, 3],
+      "base should report every namespace import",
+    );
+    assert.deepEqual(
+      codes("react"),
+      [3],
+      "react should ignore `react` and `@radix-ui/*` only",
+    );
+  });
+
+  it("applies the jest recommended set in test files, identically in every variant", () => {
+    // Each line trips a `flat/recommended` rule that is *not* one of the rules
+    // the preset used to name explicitly. They were all silently off in `base`.
+    const source = [
+      "expect(1).toBe(1);",
+      "",
+      "describe('suite', async () => {",
+      "  it('conditional', () => {",
+      "    try {",
+      "      expect(1).toBe(2);",
+      "    } catch {",
+      "      expect(true).toBe(true);",
+      "    }",
+      "  });",
+      "  it('callback', (done) => {",
+      "    done();",
+      "  });",
+      "  it('alias', () => {",
+      "    expect(jest.fn()).toBeCalled();",
+      "  });",
+      "});",
+      "",
+      "export const helper = 1;",
+    ].join("\n");
+
+    const expected = [
+      "jest(no-alias-methods)",
+      "jest(no-conditional-expect)",
+      "jest(no-done-callback)",
+      "jest(no-export)",
+      "jest(no-standalone-expect)",
+      "jest(valid-describe-callback)",
+    ];
+
+    for (const variant of VARIANTS) {
+      const result = lintWith(
+        join(packageRoot, `${variant}.json`),
+        `${source}\n`,
+        "a.test.tsx",
+      );
+      const jestCodes = [
+        ...new Set(
+          result.diagnostics
+            .map((d) => d.code)
+            .filter((code) => code.startsWith("jest(")),
+        ),
+      ].sort();
+
+      assert.deepEqual(
+        jestCodes,
+        expected,
+        `${variant}.json reported a different jest rule set`,
+      );
+    }
+  });
+
+  it("keeps the JSX-handler escape hatch on typescript/no-misused-promises", async () => {
+    const base = await import(join(packageRoot, "dist", "base.js"));
+
+    // Dormant until `--type-aware`, so nothing here can lint it. The option is
+    // still load-bearing: without it every `onClick={async () => …}` errors the
+    // day a repo passes the flag, which is exactly the config change the
+    // dormant design promises not to need.
+    assert.deepEqual(base.default.rules["typescript/no-misused-promises"], [
+      "error",
+      { checksVoidReturn: { attributes: false } },
+    ]);
   });
 
   it("react catches leaked && JSX via the safe-jsx JS plugin", () => {

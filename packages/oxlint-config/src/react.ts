@@ -19,6 +19,12 @@ export const react: MagicOxlintConfig = extendConfig(base, {
   rules: {
     "safe-jsx/jsx-explicit-boolean": "error",
 
+    // `base` bans namespace imports outright. These two are the exceptions the
+    // incumbent `@shopify/no-namespace-imports` config allowed, and both are
+    // how the libraries document themselves: `import * as React from "react"`
+    // and `import * as Dialog from "@radix-ui/react-dialog"`.
+    "import/no-namespace": ["error", { ignore: ["react", "@radix-ui/*"] }],
+
     // The modern JSX transform means React no longer has to be in scope.
     "react/react-in-jsx-scope": "off",
     "react/display-name": "off",

@@ -33,9 +33,18 @@
     "./expo.json": "./expo.json",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "*.json", "README.md"],
+  "files": [
+    "dist",
+    "base.json",
+    "react.json",
+    "react-native.json",
+    "next.json",
+    "expo.json",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/emit-json.mjs",
+    "prepack": "pnpm run build",
     "clean": "rm -rf dist *.json.tmp base.json react.json react-native.json next.json expo.json .turbo",
     "lint": "oxlint",
     "test": "node --test test/*.test.mjs",
@@ -55,5 +64,5 @@
     "magic-tsconfig": "workspace:*",
     "typescript": "^7.0.2"
   },
-  "engines": { "node": ">=22" }
+  "engines": { "node": ">=22.18.0" }
 }

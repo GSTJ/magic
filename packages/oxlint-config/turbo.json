@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [
+        "dist/**",
+        "base.json",
+        "react.json",
+        "react-native.json",
+        "next.json",
+        "expo.json"
+      ]
+    }
+  }
+}

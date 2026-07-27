@@ -11,7 +11,15 @@ const typeAwareRules: Record<string, unknown> = {
   "typescript/consistent-type-exports": "error",
   "typescript/no-duplicate-type-constituents": "error",
   "typescript/no-floating-promises": "error",
-  "typescript/no-misused-promises": "error",
+  // `checksVoidReturn.attributes: false` is carried over from the incumbent
+  // ESLint config and is not optional: without it every `onClick={async () =>
+  // …}` JSX handler is an error. The rules here are dormant until a repo passes
+  // `--type-aware`, which is exactly why the option has to be right *now* —
+  // flipping the flag is supposed to need no config change.
+  "typescript/no-misused-promises": [
+    "error",
+    { checksVoidReturn: { attributes: false } },
+  ],
   "typescript/no-redundant-type-constituents": "error",
   "typescript/no-unnecessary-boolean-literal-compare": "error",
   "typescript/no-unnecessary-condition": "error",
@@ -31,18 +39,27 @@ const typeAwareRules: Record<string, unknown> = {
   "typescript/switch-exhaustiveness-check": "error",
   "typescript/use-unknown-in-catch-callback-variable": "error",
 
-  // Deliberately off. `no-unsafe-assignment`/`-call`/`-member-access` fire on
+  // Deliberately off. `no-unsafe-assignment` and `-member-access` fire on
   // every untyped boundary (JSON.parse, most SDKs, RN native modules) and
   // produce more noise than signal; `no-unsafe-argument` and `no-unsafe-return`
   // above catch the cases that actually propagate.
   "typescript/no-unsafe-assignment": "off",
+  // NOTE: a downgrade from the incumbent, which only disabled the two above —
+  // `no-unsafe-call` was live at error. Grouped with the family here because
+  // calling into an `any`-typed SDK boundary is the same untyped-boundary case,
+  // but it *is* a loosening. See DECISIONS.md.
   "typescript/no-unsafe-call": "off",
   "typescript/no-unsafe-member-access": "off",
   "typescript/no-unsafe-type-assertion": "off",
-  // Consistently misfires on generic helper signatures.
+  // Consistently misfires on generic helper signatures. Both references (MM,
+  // invest-radar) run it at error; deviation logged in DECISIONS.md.
   "typescript/no-unnecessary-type-parameters": "off",
   // Needs every dependency's deprecation metadata to be accurate. It isn't.
   "typescript/no-deprecated": "off",
+  // Downgrades from strictTypeChecked (incumbent had these at error):
+  // `no-confusing-void-expression` fights the arrow-heavy house style
+  // (`onPress={() => void mutate()}`, `=> setState(x)`), and the other two
+  // fire almost exclusively on that same pattern. See DECISIONS.md.
   "typescript/no-confusing-void-expression": "off",
   "typescript/no-meaningless-void-operator": "off",
   "typescript/no-base-to-string": "off",
@@ -93,6 +110,9 @@ export const base: MagicOxlintConfig = {
     "**/.next/**",
     "**/.expo/**",
     "**/generated/**",
+    // Playwright's HTML report and artifact dirs are generated JS.
+    "**/playwright-report/**",
+    "**/test-results/**",
     "**/*.d.ts",
     "**/*.min.js",
     "pnpm-lock.yaml",
@@ -271,16 +291,20 @@ export const base: MagicOxlintConfig = {
     "unicorn/throw-new-error": "error",
 
     // ---------------------------------------------------------------------
-    // Imports
+    // Imports. Import *order* is not an oxlint rule at all — `oxfmt` owns it
+    // via `sortImports`. See magic-oxfmt-config.
     // ---------------------------------------------------------------------
     "import/no-cycle": "error",
     "import/no-duplicates": "error",
     "import/no-empty-named-blocks": "error",
     "import/no-self-import": "error",
     "import/no-named-as-default": "error",
-    // Import *order* is not an oxlint rule at all — `oxfmt` owns it via
-    // `sortImports`. See magic-oxfmt-config.
-    "import/no-namespace": "off",
+    // The `@shopify/no-namespace-imports` replacement. `import * as x` defeats
+    // tree-shaking and hides what a module actually uses. The `react` preset
+    // re-declares this with the ecosystem allow list the old config carried
+    // (`react`, `@radix-ui/*`); tests turn it off, because namespace imports are
+    // how you spy on a module.
+    "import/no-namespace": "error",
 
     // ---------------------------------------------------------------------
     // Promises
@@ -354,6 +378,8 @@ export const base: MagicOxlintConfig = {
       rules: {
         "no-console": "off",
         "import/no-default-export": "off",
+        // `export default { … }` is the whole point of a config file.
+        "import/no-anonymous-default-export": "off",
         "typescript/no-require-imports": "off",
         "func-style": "off",
         "no-restricted-properties": "off",
@@ -399,16 +425,59 @@ export const base: MagicOxlintConfig = {
         "typescript/no-unsafe-argument": "off",
         "typescript/no-unsafe-return": "off",
         "typescript/require-await": "off",
+        // The *core* rule too — `async` test callbacks with no `await` are
+        // routine, and disabling only the typescript/ variant left the core
+        // one (on via `pedantic`) firing on exactly the same code.
+        "require-await": "off",
         "typescript/strict-boolean-expressions": "off",
         "typescript/unbound-method": "off",
 
+        // Namespace imports are the normal way to spy on a module
+        // (`import * as api from "./api"; jest.spyOn(api, "fetchUser")`).
+        "import/no-namespace": "off",
+
+        // `jest.configs["flat/recommended"]`, enumerated by hand. It has to be
+        // enumerated: `categories` do *not* activate rules for a plugin that is
+        // only declared inside an override, so in the `base` preset — where this
+        // override is the only place `jest` is listed — anything not named here
+        // is simply off. (In `react` and below the same rules happen to come on
+        // via the categories, because the react preset appends a second
+        // test-file override with no `plugins` key. Relying on that would make
+        // the jest rule set depend on which variant a repo picked, so every rule
+        // we care about is spelled out instead.)
+        "jest/no-alias-methods": "error",
+        "jest/no-commented-out-tests": "error",
+        "jest/no-conditional-expect": "error",
+        "jest/no-deprecated-functions": "error",
         "jest/no-disabled-tests": "error",
+        "jest/no-done-callback": "error",
+        "jest/no-export": "error",
         "jest/no-focused-tests": "error",
         "jest/no-identical-title": "error",
-        "jest/no-commented-out-tests": "error",
+        "jest/no-interpolation-in-snapshots": "error",
+        "jest/no-jasmine-globals": "error",
+        "jest/no-mocks-import": "error",
+        "jest/no-standalone-expect": "error",
+        "jest/no-test-prefixes": "error",
         "jest/prefer-to-have-length": "error",
+        "jest/valid-describe-callback": "error",
         "jest/valid-expect": "error",
+        "jest/valid-expect-in-promise": "error",
+
+        // Recommended-set rules we deliberately drop. `expect-expect` fires on
+        // every suite whose assertion lives in a helper, which is most of them.
         "jest/expect-expect": "off",
+        "jest/prefer-ending-with-an-expect": "off",
+        // Pure spacing — oxfmt's territory. Same reasoning that dropped
+        // `eslint-plugin-jest-formatting`.
+        "jest/padding-around-after-all-blocks": "off",
+        "jest/padding-around-test-blocks": "off",
+        // Fine for repos that set `injectGlobals: false`; nothing in the
+        // migration set does, and it rewrites the top of every test file.
+        "jest/prefer-importing-jest-globals": "off",
+        // Demands `toHaveBeenCalledWith` everywhere, including where "was it
+        // called at all" is the whole assertion.
+        "jest/prefer-called-with": "off",
         "jest/no-hooks": "off",
         "jest/no-conditional-in-test": "off",
         "jest/prefer-expect-assertions": "off",
@@ -426,15 +495,31 @@ export const base: MagicOxlintConfig = {
             ],
           },
         ],
-        // Clearing mocks belongs in the jest config (`clearMocks: true`), not
-        // scattered through suites where it is easy to forget one.
+        // Clearing mocks belongs in the runner config (`clearMocks: true`),
+        // not scattered through suites where it is easy to forget one. Both
+        // runners are listed because per-rule config *replaces* rather than
+        // merges — which is also why the base-level `process.env` ban has to
+        // be repeated here or this entry would silently switch it off in
+        // tests.
         "no-restricted-properties": [
           "error",
+          {
+            object: "process",
+            property: "env",
+            message:
+              "Direct process.env usage is not allowed. Import from a dedicated, validated env module instead.",
+          },
           {
             object: "jest",
             property: "clearAllMocks",
             message:
               "Enable `clearMocks` in the jest config instead of calling jest.clearAllMocks() per suite.",
+          },
+          {
+            object: "vi",
+            property: "clearAllMocks",
+            message:
+              "Enable `clearMocks` in the vitest config instead of calling vi.clearAllMocks() per suite.",
           },
         ],
       },

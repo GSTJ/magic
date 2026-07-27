@@ -26,6 +26,8 @@
     "**/.next/**",
     "**/.expo/**",
     "**/generated/**",
+    "**/playwright-report/**",
+    "**/test-results/**",
     "**/*.d.ts",
     "**/*.min.js",
     "pnpm-lock.yaml",
@@ -54,6 +56,7 @@
       "rules": {
         "no-console": "off",
         "import/no-default-export": "off",
+        "import/no-anonymous-default-export": "off",
         "typescript/no-require-imports": "off",
         "func-style": "off",
         "no-restricted-properties": "off"
@@ -109,15 +112,34 @@
         "typescript/no-unsafe-argument": "off",
         "typescript/no-unsafe-return": "off",
         "typescript/require-await": "off",
+        "require-await": "off",
         "typescript/strict-boolean-expressions": "off",
         "typescript/unbound-method": "off",
+        "import/no-namespace": "off",
+        "jest/no-alias-methods": "error",
+        "jest/no-commented-out-tests": "error",
+        "jest/no-conditional-expect": "error",
+        "jest/no-deprecated-functions": "error",
         "jest/no-disabled-tests": "error",
+        "jest/no-done-callback": "error",
+        "jest/no-export": "error",
         "jest/no-focused-tests": "error",
         "jest/no-identical-title": "error",
-        "jest/no-commented-out-tests": "error",
+        "jest/no-interpolation-in-snapshots": "error",
+        "jest/no-jasmine-globals": "error",
+        "jest/no-mocks-import": "error",
+        "jest/no-standalone-expect": "error",
+        "jest/no-test-prefixes": "error",
         "jest/prefer-to-have-length": "error",
+        "jest/valid-describe-callback": "error",
         "jest/valid-expect": "error",
+        "jest/valid-expect-in-promise": "error",
         "jest/expect-expect": "off",
+        "jest/prefer-ending-with-an-expect": "off",
+        "jest/padding-around-after-all-blocks": "off",
+        "jest/padding-around-test-blocks": "off",
+        "jest/prefer-importing-jest-globals": "off",
+        "jest/prefer-called-with": "off",
         "jest/no-hooks": "off",
         "jest/no-conditional-in-test": "off",
         "jest/prefer-expect-assertions": "off",
@@ -138,9 +160,19 @@
         "no-restricted-properties": [
           "error",
           {
+            "object": "process",
+            "property": "env",
+            "message": "Direct process.env usage is not allowed. Import from a dedicated, validated env module instead."
+          },
+          {
             "object": "jest",
             "property": "clearAllMocks",
             "message": "Enable `clearMocks` in the jest config instead of calling jest.clearAllMocks() per suite."
+          },
+          {
+            "object": "vi",
+            "property": "clearAllMocks",
+            "message": "Enable `clearMocks` in the vitest config instead of calling vi.clearAllMocks() per suite."
           }
         ]
       }
@@ -358,7 +390,15 @@
     "import/no-empty-named-blocks": "error",
     "import/no-self-import": "error",
     "import/no-named-as-default": "error",
-    "import/no-namespace": "off",
+    "import/no-namespace": [
+      "error",
+      {
+        "ignore": [
+          "react",
+          "@radix-ui/*"
+        ]
+      }
+    ],
     "promise/catch-or-return": "error",
     "promise/no-nesting": "error",
     "promise/no-return-wrap": "error",
@@ -395,7 +435,14 @@
     "typescript/consistent-type-exports": "error",
     "typescript/no-duplicate-type-constituents": "error",
     "typescript/no-floating-promises": "error",
-    "typescript/no-misused-promises": "error",
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        "checksVoidReturn": {
+          "attributes": false
+        }
+      }
+    ],
     "typescript/no-redundant-type-constituents": "error",
     "typescript/no-unnecessary-boolean-literal-compare": "error",
     "typescript/no-unnecessary-condition": "error",

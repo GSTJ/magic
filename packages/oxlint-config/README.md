@@ -28,28 +28,48 @@ pnpm add -D oxlint@1.75.0 magic-oxlint-config
 import react from "magic-oxlint-config/react";
 import { defineConfig } from "oxlint";
 
-export default defineConfig({ extends: [react] });
+export default defineConfig({
+  extends: [react],
+  // Required. oxlint does not inherit `ignorePatterns` through `extends` —
+  // see "ignorePatterns do not travel through extends" below.
+  ignorePatterns: react.ignorePatterns,
+});
 ```
 
 ### JSON consumers
 
 Every variant also ships as plain JSON, generated from the same source at build
 time so it can't drift. `extends` in `.oxlintrc.json` is a **file path**, not a
-package specifier, so it has to be spelled out:
+package specifier, so it has to be spelled out — and the ignore patterns have to
+be repeated, for the same reason as above:
 
 ```jsonc
 // .oxlintrc.json
-{ "extends": ["./node_modules/magic-oxlint-config/react.json"] }
+{
+  "extends": ["./node_modules/magic-oxlint-config/react.json"],
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/.turbo/**",
+    "**/.next/**",
+    "**/.expo/**",
+    "**/generated/**",
+    "**/*.d.ts",
+    "**/*.min.js",
+  ],
+}
 ```
 
-This works — including the bare `jsPlugins` specifiers, because oxlint resolves
-them relative to the config file, which in this case lives inside this package
-next to its own `node_modules`. Verified against a real pnpm install of the
-packed tarball.
+The rest works — including the bare `jsPlugins` specifiers, because oxlint
+resolves them relative to the config file, which in this case lives inside this
+package next to its own `node_modules`. Verified against a real pnpm install of
+the packed tarball.
 
-Still prefer `oxlint.config.mts`. The JSON path hardcodes a `node_modules`
-layout, and `ignorePatterns` in an extended file are rooted at that file's
-directory rather than the consumer's repo root.
+Still prefer `oxlint.config.mts`: the JSON path hardcodes a `node_modules`
+layout, and there the ignore list is a copy that goes stale instead of
+`react.ignorePatterns`.
 
 ## What's in it
 
@@ -85,6 +105,27 @@ See "Local overrides" in the root README.
   and a ban on `jest.clearAllMocks()` (use `clearMocks` in the jest config).
 - Import _order_ is not enforced here — oxlint has no `import/order`. `oxfmt`
   owns it. See `magic-oxfmt-config`.
+- Namespace imports are banned (`import/no-namespace`, the
+  `@shopify/no-namespace-imports` replacement). `react` and below allow
+  `import * as React from "react"` and `@radix-ui/*`; test files allow all of
+  them, because that is how you spy on a module.
+
+### `ignorePatterns` do not travel through `extends`
+
+oxlint drops an extended config's `ignorePatterns`. Only the patterns written at
+the top level of the config oxlint actually loaded apply. That holds for both
+consumption paths — `defineConfig({ extends: [expo] })` and `.oxlintrc.json`
+with `"extends": ["./node_modules/…/expo.json"]`.
+
+Verified on 1.75.0: with `extends` alone and no `.gitignore`, an Expo app
+reported half a million diagnostics out of `node_modules`, and seeded files
+under `generated/`, `ios/` and `android/` were linted. Adding
+`ignorePatterns: expo.ignorePatterns` took the same run to one diagnostic, in
+`app/`.
+
+`.gitignore` is honoured separately, which is what hides the `node_modules` case
+in a real repo. It does not cover `ios/` and `android/` in bare React Native
+repos, which commit them. Hoist the patterns.
 
 ## Development
 

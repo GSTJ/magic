@@ -8,6 +8,14 @@ import { react } from "./react.ts";
  * Image in favour of `@/components/PressableArea`. That is a per-repo component
  * convention, not a general guideline, so it stays in each repo's own config.
  * See the README section "Restricting imports per repo" for the snippet.
+ *
+ * Also absent: `reanimated/js-function-in-worklet`, which the old react-native
+ * config ran at `error`. `eslint-plugin-reanimated@2.0.1` *loads* fine as a
+ * jsPlugin, but the rule's `create()` bails out immediately unless
+ * `context.parserServices.hasFullTypeInformation` is true — it resolves call
+ * signatures through the TypeScript checker. oxlint's JS plugin API exposes no
+ * parser services, so the rule installs and then reports nothing, which is worse
+ * than leaving it out. See DECISIONS.md ("Dropped").
  */
 export const reactNative: MagicOxlintConfig = extendConfig(react, {
   jsPlugins: [jsPlugin("react-native", "eslint-plugin-react-native")],
@@ -25,6 +33,30 @@ export const reactNative: MagicOxlintConfig = extendConfig(react, {
   ],
 
   rules: {
+    // react-native-gesture-handler's factory API is capitalized calls by
+    // design (`Gesture.Pan()`, `Gesture.Tap()`, …). That is API-shaped, not
+    // repo-shaped — every RN repo using gestures hits it — so the exception
+    // list lives here rather than being rediscovered per repo. Mirrors MM.
+    "new-cap": [
+      "error",
+      {
+        capIsNewExceptions: [
+          "Gesture.Pinch",
+          "Gesture.Pan",
+          "Gesture.Simultaneous",
+          "Gesture.Race",
+          "Gesture.Exclusive",
+          "Gesture.Native",
+          "Gesture.Tap",
+          "Gesture.LongPress",
+          "Gesture.Fling",
+          "Gesture.Rotation",
+          "Gesture.Manual",
+          "Gesture.Hover",
+        ],
+      },
+    ],
+
     "react-native/no-inline-styles": "error",
     "react-native/no-color-literals": "error",
     "react-native/no-single-element-style-arrays": "error",
