@@ -95,6 +95,12 @@ const houseStyle = {
  * release PR fails the format check that the release PR itself created, forever,
  * with a diff nobody wants to read. Costs nothing in a repo that generates no
  * changelog.
+ *
+ * It does cost something in a repo that writes its changelog by hand and wants
+ * it formatted: `oxfmt CHANGELOG.md` — a path that is now excluded — exits **2**
+ * with "Expected at least one target file", so a release script that formats the
+ * file explicitly starts failing on the upgrade. `withoutIgnorePatterns` below
+ * is the supported way back.
  */
 const sharedIgnorePatterns = [
   "**/node_modules/**",
@@ -206,6 +212,45 @@ const sortImports = {
   // `import "./global.css"`) must not move: their position *is* their meaning.
   sortSideEffects: false,
 } as const satisfies MagicOxfmtConfig["sortImports"];
+
+const quoteList = (values: Iterable<string>): string =>
+  [...values].map((pattern) => `"${pattern}"`).join(", ");
+
+/**
+ * Opt back into formatting a file the shared config ignores.
+ *
+ *     import base, { withoutIgnorePatterns } from "magic-oxfmt-config";
+ *
+ *     // This repo writes CHANGELOG.md by hand, so it should be formatted.
+ *     export default withoutIgnorePatterns(base, ["**\/CHANGELOG.md"]);
+ *
+ * Spreading and filtering by hand works too, and is what this replaces. The
+ * difference is the throw: a pattern that is not in the config is a typo, and a
+ * typo that silently keeps the ignore in place is the exact failure mode this
+ * package keeps warning about — oxfmt accepts unknown keys without a word, so
+ * nothing downstream would report it either.
+ */
+export const withoutIgnorePatterns = <T extends MagicOxfmtConfig>(
+  config: T,
+  patterns: string[],
+): T => {
+  const present = new Set(config.ignorePatterns);
+  const missing = patterns.filter((pattern) => !present.has(pattern));
+
+  if (missing.length > 0) {
+    throw new Error(
+      `magic-oxfmt-config: withoutIgnorePatterns() was asked to remove ${quoteList(missing)}, ` +
+        `which this config does not ignore. It ignores: ${quoteList(present)}`,
+    );
+  }
+
+  const removed = new Set(patterns);
+
+  return {
+    ...config,
+    ignorePatterns: [...present].filter((pattern) => !removed.has(pattern)),
+  };
+};
 
 export const base: MagicOxfmtConfig = {
   ...houseStyle,

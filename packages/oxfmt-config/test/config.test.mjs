@@ -190,6 +190,52 @@ describe("variants", () => {
     }
   });
 
+  it("withoutIgnorePatterns lets a hand-written CHANGELOG.md be formatted", async () => {
+    const module = await import(join(packageRoot, "dist", "index.js"));
+    const config = module.withoutIgnorePatterns(module.base, [
+      "**/CHANGELOG.md",
+    ]);
+
+    assert.ok(!config.ignorePatterns.includes("**/CHANGELOG.md"));
+    assert.ok(
+      config.ignorePatterns.includes("**/node_modules/**"),
+      "the rest of the ignore list must survive",
+    );
+    assert.ok(
+      module.base.ignorePatterns.includes("**/CHANGELOG.md"),
+      "the shared config must not be mutated",
+    );
+
+    const dir = mkdtempSync(join(tmpdir(), "magic-oxfmt-unignore-"));
+    try {
+      writeFileSync(join(dir, ".oxfmtrc.json"), JSON.stringify(config));
+      writeFileSync(join(dir, "CHANGELOG.md"), "# Changelog\n\n* an entry\n");
+
+      // The failure this fixes: with the ignore in place, naming the file
+      // explicitly exits 2 ("Expected at least one target file"), so a release
+      // script that formats its own changelog dies mid-release.
+      execFileSync(oxfmtBin, ["CHANGELOG.md"], { cwd: dir, encoding: "utf8" });
+
+      assert.equal(
+        readFileSync(join(dir, "CHANGELOG.md"), "utf8"),
+        "# Changelog\n\n- an entry\n",
+        "oxfmt should have reformatted the bullet",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("withoutIgnorePatterns throws on a pattern that is not there", async () => {
+    const module = await import(join(packageRoot, "dist", "index.js"));
+
+    assert.throws(
+      () => module.withoutIgnorePatterns(module.base, ["CHANGELOG.md"]),
+      /does not ignore/,
+      "a near-miss pattern must not silently no-op",
+    );
+  });
+
   it("every variant keeps the house style", async () => {
     const module = await import(join(packageRoot, "dist", "index.js"));
 

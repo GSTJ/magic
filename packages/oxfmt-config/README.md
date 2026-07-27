@@ -41,6 +41,39 @@ export default {
 };
 ```
 
+### Formatting a file the shared config ignores
+
+The shared ignore list is aimed at files a tool owns and nobody reads the diff
+of — `CHANGELOG.md`, `*.generated.*`, minified output. A repo that writes one of
+those by hand can take it back:
+
+```ts
+import base, { withoutIgnorePatterns } from "magic-oxfmt-config";
+
+// This repo's CHANGELOG.md is hand-written, so it should be formatted.
+export default withoutIgnorePatterns(base, ["**/CHANGELOG.md"]);
+```
+
+`withoutIgnorePatterns` throws on a pattern the config does not actually ignore,
+rather than quietly doing nothing — this is a config format where unknown keys
+and unmatched patterns both fail open.
+
+**Naming an ignored path explicitly is an error, not a no-op.** oxfmt 0.60.0
+exits **2** when every path it was handed is excluded:
+
+```sh
+$ oxfmt CHANGELOG.md
+Expected at least one target file. All matched files may have been excluded by ignore rules.
+$ echo $?
+2
+```
+
+That is what breaks on the upgrade: a release script shaped like
+`node tools/changelog.mjs && oxfmt CHANGELOG.md`, run from `npm version`, now
+dies after rewriting the changelog and before `git add`. Either drop the
+explicit `oxfmt CHANGELOG.md` (it is a no-op once the file is ignored) or opt out
+with `withoutIgnorePatterns`.
+
 ### If you can't run a TS config
 
 ```sh
