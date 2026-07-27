@@ -37,9 +37,33 @@ preset's ignore patterns, and neither does `.oxlintrc.json` with
 with one, seeded files under `generated/`, `ios/` and `android/` were still
 linted. Only patterns at the top level of the config oxlint loaded are applied,
 so consumers must re-declare them: `ignorePatterns: expo.ignorePatterns` (JS) or
-a literal copy (JSON). Same run, hoisted: one diagnostic. Documented in both
-READMEs; `.gitignore` is what was masking this in real repos, and it does not
-cover the `ios/` and `android/` that bare RN repos commit.
+a literal copy (JSON). Same run, hoisted: one diagnostic. `.gitignore` is what
+was masking this in real repos, and it does not cover the `ios/` and `android/`
+that bare RN repos commit.
+
+**Corrected 2026-07-27.** This said "Documented in both READMEs". It was
+documented in one — `packages/oxlint-config/README.md`. The root README, which is
+what the migration brief tells agents to follow verbatim, showed
+`defineConfig({ extends: [base] })` with no `ignorePatterns` in Step 2 and in all
+five copy-paste snippets, and said nothing about it in Gotchas. Seven of eleven
+migrated repos shipped a config with zero ignore patterns;
+`oxlint --print-config | jq .ignorePatterns` returned `[]` in every one.
+
+Documenting it harder was not the fix. Two changes make the footgun unreachable
+instead:
+
+- **Step 2 no longer uses `extends`.** The recommended consumer config is
+  `export { default } from "magic-oxlint-config/base";` — oxlint loads the preset
+  as _the_ config, so there is no extending step to drop anything. This also
+  makes it symmetric with the `oxfmt.config.mts` recipe one step below.
+- **Local rules go through `extendConfig`,** which was already exported and
+  already merges into one flat object. Verified: `extendConfig(base, {...})` as a
+  default export keeps all 13 ignore patterns and applies the local rules.
+
+The `extends` form is still documented, with the `ignorePatterns: base.ignorePatterns`
+line beside it, because repos already on 1.0.0 have it. This repo's own
+`oxlint.config.mts` now re-declares them too — it was the counter-example, and
+consumers copy it as a template.
 
 `oxlint.config.ts` / `.mts` is the supported sharing path: `extends` there takes
 **imported objects**, not strings. Verified end-to-end with a real npm package.
@@ -86,7 +110,27 @@ resolve to absolute paths via `createRequire(import.meta.url)` from inside
 nothing extra. The emitted JSON can't do that and uses bare specifiers, which is
 documented.
 
-### oxlint `--type-aware` — usable, but gated on TypeScript 7
+### oxlint `--type-aware` — usable today, on any TypeScript version
+
+**Corrected 2026-07-27.** This section previously read "gated on TypeScript 7"
+and built design reasoning on it ("half the migration set is still on TypeScript
+5.x and can't switch today"). That was wrong, and wrong in a way worth naming:
+the requirement was inferred from the implementation rather than tested, and the
+very phrase used to justify it — "built on typescript-go" — is the reason the
+installed compiler does not matter. `oxlint-tsgolint@7.0.2001` embeds
+typescript-go and never reads the repo's `typescript`. Verified firing
+`typescript/no-unnecessary-type-assertion` with `typescript@6.0.3` installed.
+
+The correction improves the design story rather than damaging it: type-aware
+linting is available to the TypeScript 5.x half of the migration set **now**, one
+devDependency and one flag, exactly as the dormant-rules decision below intended.
+
+It also removed a trap. The old install line was
+`pnpm add -D oxlint-tsgolint typescript@^7`, which pushes consumers onto a
+compiler that breaks Next: `typescript@7.0.2` makes `next@15.5.19` fail to load
+`next.config.ts` with `TypeError: Cannot read properties of undefined (reading
+'fileExists')`, and converting that file to `.mjs` then makes Next silently stop
+resolving tsconfig `paths`. The line is now `pnpm add -D oxlint-tsgolint`.
 
 Needs the optional peer `oxlint-tsgolint` (a Go binary on typescript-go).
 Enabled by `--type-aware` or `options.typeAware`. Type-aware rules are ordinary
@@ -104,9 +148,9 @@ repo on is one flag plus two devDependencies, with no config change. This
 matters because half the migration set is still on TypeScript 5.x and can't
 switch today, but shouldn't need a config edit later.
 
-Constraints for whoever enables it: TypeScript >= 7, no `baseUrl` in tsconfig,
-`pnpm -r build` before linting in a monorepo (it reads dependency `.d.ts`), and
-don't leave `"include": ["**/*"]` in a root tsconfig.
+Constraints for whoever enables it: no `baseUrl` in tsconfig, `pnpm -r build`
+before linting in a monorepo (it reads dependency `.d.ts`), and don't leave
+`"include": ["**/*"]` in a root tsconfig. Not TypeScript 7 — see above.
 
 ### oxfmt — has import sorting, has no config sharing
 
@@ -180,6 +224,11 @@ Fixed in the README rather than by switching `unicorn/prefer-export-from` off fo
 `*.config.mts` in the preset, because the rule is right and the two-liner was
 just written the wrong way round.
 
+**Update 2026-07-27:** the rule is now `"off"` everywhere — its fixer deletes
+exports, see §2. The README still recommends the re-export form; it is simply
+style advice again rather than something the linter enforces. Nothing else in
+that reasoning changes, and in particular the _diagnostic_ was never the problem.
+
 ### Renovate preset lives in `default.json`, not `renovate.json`
 
 `github>GSTJ/magic` resolves to `default.json`. Serving a preset out of
@@ -192,8 +241,24 @@ extending the preset via `local>GSTJ/magic` like any other consumer.
 ### Versions
 
 - pnpm `latest` = 11.17.0. Root pins `packageManager: pnpm@11.17.0`.
-- TypeScript `latest` = **7.0.2** (not 6.x). The portfolio repo is already on it,
-  and 7.0 is also the floor for type-aware linting, so 7.x is the target.
+- **Vercel-deployed repos pin pnpm 10.34.5 instead, and this is not optional.**
+  Vercel supports pnpm 6–10 and selects the version from the lockfile's
+  `lockfileVersion` (9.0 → pnpm 9 or 10); `packageManager` is consulted only when
+  Corepack is on, which is an `ENABLE_EXPERIMENTAL_COREPACK` env var in the
+  Vercel **project settings** — a repo cannot set it from its own files. So a
+  repo pinned to pnpm 11 gets pnpm 9 on Vercel, run against the
+  `pnpm-workspace.yaml` that pnpm 11 auto-created locally, and the deploy dies
+  with `ERROR packages field missing or empty` while the GitHub integration
+  starts reporting `"isMonorepo": true`. One repo hit this (only one deploys to
+  Vercel) but it is unconditional for that class and undiagnosable from inside
+  the repo — a platform silently running a different package manager than the one
+  you pinned. pnpm 10 also still reads the `pnpm` key in `package.json`, so
+  `overrides` and `onlyBuiltDependencies` stay where they are.
+- TypeScript `latest` = **7.0.2** (not 6.x). The portfolio repo is already on it.
+  Note the original reasoning here also cited "7.0 is the floor for type-aware
+  linting" — that premise is gone (see above), so 7.x is the target on its own
+  merits only, and `typescript@7.0.2` is known to break `next@15.5.19`. Repos on
+  5.x or 6.x are not behind on anything that matters.
 - turbo 2.10.7.
 - oxlint 1.75.0 and oxfmt 0.60.0 pinned exactly, not caret-ranged.
 
@@ -223,6 +288,39 @@ clean. Now `"error"` in `base`; `react` and below re-declare it as
 specifier — verified: `react` and `@radix-ui/react-dialog` pass, `node:path` and
 `./x` are reported). Off in the test override, since
 `import * as api from "./api"` is how `jest.spyOn(api, …)` works.
+
+**The mechanism, stated correctly.** Two places in this document used to describe
+this as "an `overrides[]` entry that omits `plugins` re-activates category rules
+for the files it matches". That is what it looks like from inside the presets,
+and it is not what oxlint does. Verified on 1.75.0 against a consumer config:
+
+| consumer writes                                            | `jest/valid-title` |
+| ---------------------------------------------------------- | ------------------ |
+| nothing                                                    | fires              |
+| top-level `rules: { "jest/valid-title": "off" }`           | **still fires**    |
+| override entry, `rules` only, no `plugins`                 | **still fires**    |
+| override entry, `plugins: [...base list, "jest"]`, `rules` | silent             |
+
+The rule is: **a rule belonging to a plugin that is not enabled for a given
+override entry's own plugin set is ignored there, silently.** `jest` is enabled
+only inside `base`'s test-file override, so no other entry — the consumer's
+included — can configure a `jest/*` rule. The top-level row fails for the
+adjacent, ordinary reason that an override beats a top-level rule on files it
+matches.
+
+Consequence: every rule the preset sets inside an override is effectively
+unconfigurable downstream unless the consumer repeats the plugin list. Two repos
+lost time to this; one renamed a `describe` block rather than turn a rule off.
+`testFilePlugins` is now exported from `magic-oxlint-config` so the workaround is
+an import instead of an incantation, the root README's Gotchas carries the exact
+before/after, and `fixtures/adversarial/override` executes both directions on
+every run.
+
+The presets' _other_ override entries were audited at the same time. They do not
+have this problem: everything they configure (`import/*`, `unicorn/*`,
+`react/*`, core rules) comes from a plugin that is in the top-level list, and
+adding the offs that M7 and M17 needed to the `next` App Router entry worked
+without touching its `plugins` — verified before shipping, not assumed.
 
 **`jest.configs["flat/recommended"]` is enumerated by hand, not inherited from a
 category.** The old base applied the whole recommended set. `categories` do not
@@ -416,6 +514,22 @@ contact, which is the acceptable direction):
   alongside the core rule on the same code. invest-radar resolved that by
   turning the core rule off; do that per-repo when it actually happens, because
   doing it in the preset today would lose the rule everywhere else.
+- `typescript/consistent-type-definitions` is `["error", "type"]`, not the rule's
+  default `"interface"`. Direction matters here and the default is unsafe as an
+  autofix: an interface has no implicit index signature, so
+  `type LngProps = { lng: Locale }` becoming `interface LngProps` stops
+  satisfying `Record<string, unknown>` and Next's `Params` constraint — and the
+  errors appear at every _use_ site, not at the converted declaration. One repo's
+  `--fix` did 98 of those conversions and broke every App Router page. The
+  interface → type direction is safe (a type alias satisfies everything an
+  interface does, plus index signatures) and it matches the type-alias-first
+  style the rest of the preset leans toward. This repo converted its own ~25
+  interfaces when the option flipped, which is the dogfood.
+- `jest/valid-title`'s `mustNotMatch` is
+  `(^should\b|^it\b|correctly|\.$)`. Without the word boundaries it banned
+  titles starting with those _letters_, so `describe("itemsToChunks")` and
+  `describe("shouldRetry")` were both reported — and describe blocks are normally
+  named after the function under test. `it("should return null")` still fails.
 - Rules the incumbents shipped at `warn` are uniformly `error` here — there is
   no warn tier in these presets, a rule is either worth failing CI or it's off.
   Affects `react/exhaustive-deps`, `react/no-children-prop`,
@@ -448,9 +562,50 @@ contact, which is the acceptable direction):
   run it at error — it consistently misfires on generic helper signatures
   (`const pick = <T, K extends keyof T>(…)`), which shared-utility packages are
   full of.
-- `unicorn/no-array-sort` is off, the one g2i safety bullet not carried:
-  invest-radar and pegada also disable it, and on pre-`toSorted()` targets the
-  autofix churn outweighs the mutation-safety win.
+- `unicorn/no-array-sort` **and `unicorn/no-array-reverse`** are off, the one g2i
+  safety bullet not carried: invest-radar and pegada also disable `no-array-sort`,
+  and on pre-`toSorted()` targets the autofix churn outweighs the mutation-safety
+  win. `no-array-reverse` was left on at 1.0.0, which was an inconsistency rather
+  than a decision — same rule family, same ES2023 method family, same targets.
+  Its autofix rewrote `[...arr].reverse()` to `arr.toReversed()`, and
+  `magic-tsconfig/base.json` pins `lib: ["ES2022"]`, so the shipped preset was
+  autofixing code into a state the shipped tsconfig rejects. Hermes has the same
+  gap at runtime. Raising `lib` to ES2023 was considered and rejected: it changes
+  the compile target of every repo to accommodate one autofix, and does nothing
+  for Hermes.
+
+- `unicorn/prefer-export-from` is off. **Its fixer deletes code.** Verified on
+  oxlint 1.75.0 — a module that re-exports imported names in two `export { … }`
+  statements with an unrelated `export const` between them is rewritten under
+  `--fix-suggestions` to a single `export … from`, and everything in between is
+  gone. No diagnostic, no type error at the fix site. In the repo that reported
+  it, a scheduled command string became
+  `timeout --signal=TERM --kill-after=30s undefineds pnpm …`, caught only because
+  two tests asserted on it; in the same run another file went from 39 exported
+  names to 3.
+
+  `["error", { checkUsedVariables: false }]` was tried first and is genuinely
+  better than nothing — it makes the reported shape silent, because the derived
+  export _uses_ one of the imported bindings. It is not enough: a barrel whose
+  re-exported names are used nowhere else still collapses, taking any unrelated
+  statement between the first and last re-export with it. Verified both.
+
+  The fixer is a _suggestion_, so plain `--fix` never triggers it. That is not a
+  reason to keep the rule: the README instructs every migrating repo to run
+  `--fix` and read the result, two repos reached for `--fix-suggestions` on their
+  own, and silent deletion of exported values is the worst failure on the list.
+  Revisit when oxc fixes it; `fixtures/adversarial/base/src/derived-reexport.ts`
+  is the shape to re-test with.
+
+- `unicorn/catch-error-name` carries `{ ignore: ["^cause$"] }`. The rule is a
+  naming convention and the convention is fine; the fixer rewrites the shorthand
+  property **key** along with the binding, so
+  `.catch((cause) => { throw new E(m, { cause }) })` became `{ error }` — an
+  option `Error` does not know — and the error chain was lost with nothing to
+  report it. That is a semantic change wearing a rename's clothes, and `{ cause }`
+  is the standard idiom in exactly the code paths where error reporting matters
+  most. The rule's second reported failure (renaming into an existing binding,
+  TS2451) is loud and left alone.
 - `for..in` degraded from a wholesale ban to `guard-for-in` — see
   "Replaced with a different mechanism" above.
 
@@ -504,7 +659,69 @@ consumers breaks this repo's own build first.
 
 - **No type-aware CI run anywhere yet.** The rules are configured and verified
   firing locally, but no repo in the migration set is switched on. invest-radar
-  is closest (already runs `--type-aware` with its own config).
+  is closest (already runs `--type-aware` with its own config). The TypeScript 7
+  floor that used to be given as the reason nobody can turn it on does not exist
+  (§1) — this is now purely "nobody has".
+
+- **The presets declare `jest`, not `vitest`, and one migration target runs
+  vitest.** §2 already notes that the `process.env` ban lists `vi.clearAllMocks`
+  "since invest-radar runs vitest and a jest-only ban would miss the closest
+  migration target". The awareness is there; the plugin selection does not follow
+  it. Concretely: `jest/no-untyped-mock-factory --fix-suggestions` writes
+  `vi.mock<typeof import("x")>("x", factory)`, which is jest's
+  `mock<T>(path: string, factory)` signature. vitest 4.1.9 declares
+  `mock(path: string, factory?)` and `mock<T>(module: Promise<T>, factory?)`, so
+  an explicit type argument rules out the string overload — all 25 fixes it
+  applied were type errors. Documented in the README for now (swap the plugin in
+  a local override); a `vitest` variant is the real fix and is not built.
+
+- **`magic-oxlint-config` reinstalls the ESLint tree in every consumer.** Its two
+  bundled JS plugins, `eslint-plugin-safe-jsx` and `eslint-plugin-react-native`,
+  each declare a **required** (non-optional) `eslint` peer, and pnpm's default
+  `autoInstallPeers: true` resolves it: `pnpm add -D magic-oxlint-config` into a
+  repo with zero eslint dependencies pulls eslint 9, ~16
+  `eslint`/`@eslint`/`@typescript-eslint` directories, 3.8 MB for eslint alone.
+  Nothing executes any of it.
+
+  This is the same objection §6 used to reject `@shopify/eslint-plugin` ("262
+  packages, 97 MB") — smaller, and self-inflicted rather than avoided. Half of it
+  is fixable at the source: `eslint-plugin-safe-jsx` is a GSTJ package and
+  publishing 1.3.1 with `peerDependenciesMeta: { eslint: { optional: true } }`
+  would halve the tree, and §1 already verified the plugin works fully under
+  oxlint's jsPlugin host with no eslint present. That is a change in another
+  repository and a publish, so it is not done here. `eslint-plugin-react-native`
+  is upstream; vendoring the two rules actually used into `magic-oxlint-plugin`
+  would end it permanently and is the better long-term answer.
+
+  Mitigated for now by documenting `peerDependencyRules.ignoreMissing: ["eslint"]`
+  in the README's pnpm section, and by no longer claiming in the first paragraph
+  that "ESLint and Prettier are gone" — they do not run, which is a different and
+  true statement.
+
+- **`eslint-plugin-safe-jsx`'s autofix destroys narrowing.**
+  `safe-jsx/jsx-explicit-boolean` rewrites `{toast && <Toast {...toast} />}` to
+  `{Boolean(toast) && <Toast {...toast} />}`. `Boolean(x)` does not narrow, so
+  the spread stays `ToastPayload | null` and `tsc` fails with TS2322 — lint
+  passes, and the error has no visible connection to the autofix. `x !== null`
+  satisfies the same rule and narrows. Since safe-jsx is a GSTJ package the fixer
+  itself can be improved: when the tested operand is also spread or
+  member-accessed inside the consequent, emit the comparison instead. Even
+  without type information that is a cheap syntactic check. Not done here (other
+  repository); the README Gotchas carries the manual check, folded into the
+  existing "`--fix` can need two passes" paragraph, which already uses this exact
+  rewrite as its example.
+
+- **Upstream bugs to file against oxc.** All verified locally on 1.75.0, all
+  worked around in this repo:
+  - `unicorn/prefer-export-from`'s fixer deletes statements between re-exports.
+  - `unicorn/catch-error-name`'s fixer rewrites shorthand property keys, and does
+    not check for an existing binding in scope.
+  - `--report-unused-disable-directives` reports a multi-rule
+    `/* eslint-disable a, b, c */` as entirely unused when only one of the three
+    is, and names no rule. The diagnostic asserts something false in a confident
+    tone about code the reader has no other reason to inspect — which is exactly
+    the wrong shape for automated migration. Naming the unused rule would make it
+    actionable.
 
 - **`func-style: expression` will be noisy on first contact.** It's the
   `prefer-arrow-functions` replacement and named exports are exempt, but repos
@@ -524,8 +741,49 @@ consumers breaks this repo's own build first.
   a reusable workflow, but this repo has no `.release-it.js` and no publish
   trigger of its own. Publishing is manual for now.
 
-- **`magic-tsconfig` has no test.** The JSON is simple enough that a broken
-  `extends` would surface immediately in any consumer, but there's no check here.
+- ~~**`magic-tsconfig` has no test.**~~ It does now, and it found something the
+  reasoning here had waved away. `base.json` shipped `"incremental": true` with
+  no `tsBuildInfoFile`, so tsc wrote `<config>.tsbuildinfo` **next to the
+  config**, outside `outDir`. A consumer whose build script is
+  `rimraf dist && tsc -p tsconfig.build.json` got a correct first build and then
+  **nothing** on every subsequent one: exit 0, no output, no error, and the
+  failure surfacing at `require("./build")` as MODULE_NOT_FOUND. One repo's
+  second `npm pack` produced a tarball with no `lib/` in it.
+
+  Invisible in this repo because `base.json` also sets `"noEmit": true`, so
+  magic's own typecheck-only usage never writes output to go stale — only
+  consumers who flip `noEmit: false` for a real build are exposed, which is
+  exactly what the README's library recipe told them to do.
+
+  `"incremental"` is now gone from `base.json` (and the redundant repeat in
+  `nextjs.json`). A base that publishable packages extend should not carry
+  build-cache state; a repo that wants it opts in with a scoped
+  `tsBuildInfoFile` inside the output directory, so `rimraf <out>` invalidates
+  the cache by construction. `packages/tsconfig/test/tsconfig.test.mjs` builds a
+  throwaway library, removes the output, builds again, and asserts the second
+  build emitted — plus that no variant ever reintroduces `incremental` without
+  saying where the cache goes.
+
+- **`magic-tsconfig/internal-package.json` is fine; the README pointing at it was
+  not.** It sets `declaration`, `declarationMap`, `noEmit: false` and
+  `emitDeclarationOnly: true` — a coherent config for an internal workspace
+  package whose JavaScript comes from a bundler, which is what the name says. The
+  README's "Plain TypeScript / Node **library**" section prescribed it and paired
+  it with `outDir`/`rootDir`, which reads unmistakably as a normal emit config.
+  Following that verbatim publishes a package with `main: dist/index.js` and no
+  `.js` anywhere. Two repos noticed and extended `base.json` instead; nothing in
+  the config or the docs would have stopped them if they had not.
+
+  The section now shows a `tsconfig.build.json` extending `base.json` with
+  `noEmit: false`, which is what those repos and every package in this monorepo
+  actually ended up writing, and says in one line what `internal-package.json` is
+  for. Related, and the reason both this and the `incremental` bug survived to
+  publish: `packages/*/tsconfig.build.json` in this repo extended **nothing**, so
+  the repo had no dogfooded instance of the recipe it prescribes. They now extend
+  `magic-tsconfig/base.json` and add only what a published Node ESM build needs
+  on top (`module: nodenext`, `outDir`/`rootDir`, `noEmit: false`, `declaration`,
+  `lib: ["ES2023"]`). Every future change to the shared base now has to survive
+  this repo's own build before it reaches a consumer.
 
 - **TypeScript 7 (tsgo) does not auto-include `@types/node` under
   `magic-tsconfig/base.json`.** Found in the consumer simulation: a plain-ts
@@ -752,6 +1010,65 @@ is preserved as written.
 prose in `.md` are found and printed under `NEEDS REVIEW`, never edited. A
 `moduleNameMapper` key is a regex whose escaping belongs to its author; a
 `package.json` `exports` path is a published contract.
+
+**Two things that should have been in that list from the start** (added
+2026-07-27, both from real breakages the dry run did not mention):
+
+- **Bare string literals that resolve to a file being renamed.** An Expo config
+  plugin (`plugins: ["./plugins/withExpoModulesCoreSwiftStrictConcurrency"]` in
+  `app.config.ts`), the argument to a repo's own `require`-wrapper, a workspace
+  subpath in a route manifest. None of them is a specifier to any AST pass, and a
+  string whose value resolves to a rename source is strictly _easier_ to detect
+  than the computed `import()` the README already promised to report. The Expo
+  case is the worst shape available: it only fails on Linux/EAS, because APFS
+  resolves the stale path fine — so a migration agent verifies green locally and
+  ships a broken build. That is the same trap the third-name rename dance exists
+  to prevent, so the reasoning was already house doctrine; it just was not
+  applied here.
+
+- **Alias-shaped specifiers nothing could resolve.** See the tsconfig note below.
+
+**tsconfig discovery walks the workspace.** It used to look for
+`tsconfig.json` / `tsconfig.base.json` / `jsconfig.json` **at the run root
+only**. In a monorepo the root usually has none, and the codemod printed
+
+```
+tsconfig: (none found - path aliases will not be rewritten)
+```
+
+and then rewrote every relative specifier while leaving every `@/…` import
+pointing at a file it had just renamed. Two repos hit it. Neither agent called it
+a silent failure, because the line _is_ printed — both read it as "this repo has
+no aliases" rather than "I am about to rewrite half your imports", which in a
+monorepo is almost always the wrong reading. `--write` would have left an example
+app broken in one and three imports pointing at a deleted file in the other, and
+`--strict` said nothing.
+
+Two layers, and the second is the one that matters:
+
+1. Discovery reads `paths` from the root, from every package matched by
+   `pnpm-workspace.yaml`'s `packages` globs, and from a generic
+   `*/tsconfig.json` / `*/*/tsconfig.json` sweep, merging all of them.
+   `--tsconfig` is now repeatable, and a `--tsconfig` pointing at a file that
+   does not exist is an error rather than a silent fall-through to discovery.
+2. Independently of (1): an alias-shaped specifier (`@/`, `~/`, `#`) whose last
+   segment names a file being renamed, that **no** loaded `paths` entry resolves,
+   goes under `NEEDS REVIEW` and makes `--strict` exit non-zero. This is the
+   safety net — a repo can alias through a bundler config no tsconfig walk will
+   ever find, and a destructive operation should not be quiet about that.
+
+**An unmatched `--rename` is fatal.** Keys are full basenames _including the
+extension_: `--rename zodI18n.ts=zod-i18n.ts` works, `--rename zodI18n=zod-i18n`
+used to be accepted, silently ignored, and the file renamed to the codemod's own
+target instead — exit 0, no warning. The requirement was discoverable only by
+example in the README and stated nowhere. Silence was the whole bug: `--rename`
+exists specifically for the files a human looked at and overruled (CONFLICTS
+resolution, `S3.ts`), so an ignored key discards that decision on exactly the
+files someone thought about. It now errors, suggests the key you meant when the
+only difference is a missing extension, and exits non-zero. A key naming a file
+the detector never reported is the same error — under `--detect oxlint` the
+preset already exempts `__mocks__/AsyncStorage.ts`, and "your override was inert"
+is worth a sentence rather than nothing.
 
 **A local module's `__mocks__` moves with it.** `__mocks__/Button.ts` next to a
 `Button.tsx` being renamed is paired up and given the same stem, because jest
@@ -986,3 +1303,89 @@ positive and negative cases for each, so a README snippet that stops firing fail
 gained a second pass that resolves every `magic/*` name written in any config or
 doc against the plugin's actual rule map, and fails on a rule the plugin ships
 but the README never documents.
+
+---
+
+## 7. What the 1.0.0 consumers found
+
+Added 2026-07-27. Eleven repos migrated onto the published 1.0.0 packages and
+reported back with repros. Twenty-six findings; every one is fixed or explicitly
+deferred with a reason. The per-topic detail lives with the decision it corrects
+— §1 for the config-shape and version claims, §2 for rule dispositions, §4 for
+the gaps, §5 for the codemod. This section is the index and the pattern.
+
+### The pattern worth naming
+
+Four of the five worst findings share one shape: **a claim that was reasoned
+rather than executed.**
+
+- "`extends` drops `ignorePatterns` … documented in both READMEs" — it was
+  documented in one, and seven of eleven repos shipped with zero ignore
+  patterns.
+- "`oxlint-tsgolint` requires TypeScript 7" — inferred from "built on
+  typescript-go", which is precisely the reason it does not. Verified firing on
+  `typescript@6.0.3`.
+- "an override entry that omits `plugins` re-activates category rules" — close
+  enough to be useful inside the presets, wrong about the thing consumers hit.
+- "`MagicOxlintConfig` … consumers pass these objects into `defineConfig()`,
+  which is where the real typing happens" — nobody had ever compiled that
+  sentence. `plugins?: string[]` is _wider_ than oxlint's literal union, so the
+  README's own Step 2 failed `tsc --noEmit` in every repo that put
+  `*.config.mts` in a tsconfig `include`. This repo missed it because `typecheck`
+  is `turbo run typecheck`, per package, and the root config file is in no
+  package's `include`.
+
+The fifth, `incremental` without `tsBuildInfoFile`, is the same failure in a
+different key: invisible here because `base.json` also sets `noEmit: true`, so
+this repo never wrote output that could go stale.
+
+So the guard added for each is an executed one, not a sentence:
+
+| Finding                                      | The check that would have caught it                                                           |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `MagicOxlintConfig` not assignable           | `fixtures/adversarial/typecheck` (`tsc --noEmit` on the README's own snippets, every variant) |
+| `incremental` without a build-info path      | `packages/tsconfig/test` — build, `rm -rf` the output, build again                            |
+| override `off` silently ignored              | `fixtures/adversarial/override` — both shapes, both directions                                |
+| App Router rules with no passing shape       | `fixtures/adversarial/next` — page, layout, middleware, pages router                          |
+| `prefer-export-from` deleting exports        | `fixtures/adversarial/base/src/derived-reexport.ts` under `--fix-suggestions`                 |
+| the codemod's monorepo/string-literal misses | `packages/codemods/test` — a second fixture repo with no root tsconfig                        |
+
+### Everything else, in one place
+
+**Autofixers that break the code they fix.** Five of them, all verified, all now
+off or reconfigured: `unicorn/prefer-export-from` (deletes exports),
+`unicorn/catch-error-name` (rewrites shorthand keys, losing `{ cause }`),
+`unicorn/no-array-reverse` (emits ES2023 the shipped tsconfig rejects),
+`typescript/consistent-type-definitions` (interface has no implicit index
+signature), `unicorn/prefer-string-raw` (breaks Next's static analysis of
+`middleware.ts`). §2 has each one. The common thread is that a rule being _right_
+about style says nothing about its fixer being safe, and the preset chooses to
+run it either way.
+
+**Documentation that only fails downstream.** `--fix-suggestions` was not
+mentioned in the README at all, so an agent that discovered it reasonably assumed
+it was the same class of safe as `--fix`. `--report-unused-disable-directives`,
+which the README _does_ prescribe in the standard scripts, reports a multi-rule
+directive as entirely unused when one rule is — the diagnostic asserts something
+false, confidently, about code the reader has no other reason to inspect. Both
+are now Gotchas.
+
+**pnpm 11.** Four separate walls (gated install scripts erroring rather than
+warning, `onlyBuiltDependencies` → `allowBuilds` and list → map, the dropped
+`pnpm` key in `package.json`, the 24h release quarantine), plus one that is
+unconditional for Vercel-deployed repos and unfixable from inside the repo. None
+of it is a magic defect and all of it is magic's to document, because magic pins
+the version. It also turned out magic had **already solved the quarantine for
+itself** in `pnpm-workspace.yaml` without telling anyone. The Renovate preset now
+carries `minimumReleaseAge: "3 days"` to match, so the two halves of the
+toolchain stop disagreeing by default.
+
+### Not fixed here
+
+- `eslint-plugin-safe-jsx` 1.3.1 with an optional `eslint` peer, and the
+  narrowing-preserving autofix. Both are changes in another repository plus a
+  publish. §4.
+- A `vitest` preset variant. §4.
+- `eslint-plugin-react-native`'s required `eslint` peer — upstream, or vendor the
+  two rules used. §4.
+- The four upstream oxc bugs. Worked around; filing them is the follow-up. §4.

@@ -10,7 +10,12 @@ import { defineConfig } from "oxlint";
 export default defineConfig({
   extends: [base],
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
+  // `extends` drops `ignorePatterns` — see DECISIONS.md §1. This file works
+  // either way because .gitignore masks it, which is exactly why it is worth
+  // being explicit here: consumers copy this file as a template, and their repo
+  // may well commit the `ios/`, `android/` or `generated/` that ours does not.
   ignorePatterns: [
+    ...(base.ignorePatterns ?? []),
     "fixtures/**/*",
     "packages/*/dist/**",
     "packages/oxlint-config/*.json",
