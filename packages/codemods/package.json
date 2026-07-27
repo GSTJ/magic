@@ -1,0 +1,64 @@
+{
+  "name": "magic-codemods",
+  "version": "1.0.0",
+  "description": "Migration codemods for GSTJ projects. magic-kebab: rename files to kebab-case and rewrite every import that pointed at them.",
+  "keywords": [
+    "codemod",
+    "filename-case",
+    "kebab-case",
+    "migration",
+    "oxlint",
+    "ts-morph"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/codemods#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/codemods"
+  },
+  "bin": {
+    "magic-kebab": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "prepack": "pnpm run build",
+    "clean": "rm -rf dist .turbo",
+    "lint": "oxlint",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "ts-morph": "^28.0.0"
+  },
+  "devDependencies": {
+    "magic-oxlint-config": "workspace:*",
+    "magic-tsconfig": "workspace:*",
+    "oxlint": "1.75.0",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
