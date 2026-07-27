@@ -11,14 +11,14 @@
  * equivalent `.oxfmtrc.json`.
  */
 
-export interface SortImportsCustomGroup {
+export type SortImportsCustomGroup = {
   groupName: string;
   elementNamePattern?: string[];
   selector?: string;
   modifiers?: string[];
-}
+};
 
-export interface MagicOxfmtConfig {
+export type MagicOxfmtConfig = {
   printWidth?: number;
   tabWidth?: number;
   useTabs?: boolean;
@@ -55,7 +55,7 @@ export interface MagicOxfmtConfig {
     excludeFiles?: string[];
     options: Omit<MagicOxfmtConfig, "overrides" | "ignorePatterns">;
   }[];
-}
+};
 
 /**
  * House style. These are Prettier's defaults, which is what the incumbent
@@ -85,6 +85,17 @@ const houseStyle = {
   insertFinalNewline: true,
 } as const satisfies MagicOxfmtConfig;
 
+/**
+ * The general shape here is "a tool owns this file, and nobody reads its diff".
+ *
+ * `CHANGELOG.md` is the one that bit. Every changelog generator — release-please,
+ * @release-it/conventional-changelog, changesets, standard-version — re-appends
+ * entries in its own style, and the first `oxfmt .` rewrites the whole file
+ * (`*` bullets to `-`, blank line under each heading stripped). From then on the
+ * release PR fails the format check that the release PR itself created, forever,
+ * with a diff nobody wants to read. Costs nothing in a repo that generates no
+ * changelog.
+ */
 const sharedIgnorePatterns = [
   "**/node_modules/**",
   "**/dist/**",
@@ -94,6 +105,8 @@ const sharedIgnorePatterns = [
   "**/.next/**",
   "**/.expo/**",
   "**/generated/**",
+  "**/CHANGELOG.md",
+  "**/*.generated.*",
   "**/*.min.js",
   "**/*.min.css",
   "pnpm-lock.yaml",

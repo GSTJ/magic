@@ -151,6 +151,45 @@ describe("variants", () => {
     assert.ok(!module.base.ignorePatterns.includes("**/ios/**"));
   });
 
+  it("every variant leaves a generated CHANGELOG.md alone", async () => {
+    const module = await import(join(packageRoot, "dist", "index.js"));
+
+    // release-please and friends re-append entries in their own style on every
+    // release. Formatting the file once means the format check fails on every
+    // release PR from then on — a permanent, self-inflicted red CI.
+    const generated = [
+      "# Changelog\n",
+      "## [1.2.0](https://example.test/compare/v1.1.0...v1.2.0) (2026-07-27)\n",
+      "\n",
+      "### Features\n",
+      "\n",
+      "* **api:** add the thing ([abc1234](https://example.test/commit/abc1234))\n",
+    ].join("");
+
+    for (const name of ["base", "react", "reactNative", "next", "expo"]) {
+      assert.ok(
+        module[name].ignorePatterns.includes("**/CHANGELOG.md"),
+        `${name} does not ignore CHANGELOG.md`,
+      );
+    }
+
+    const dir = mkdtempSync(join(tmpdir(), "magic-oxfmt-changelog-"));
+    try {
+      writeFileSync(join(dir, ".oxfmtrc.json"), JSON.stringify(module.base));
+      writeFileSync(join(dir, "CHANGELOG.md"), generated);
+
+      execFileSync(oxfmtBin, ["."], { cwd: dir, encoding: "utf8" });
+
+      assert.equal(
+        readFileSync(join(dir, "CHANGELOG.md"), "utf8"),
+        generated,
+        "oxfmt rewrote CHANGELOG.md",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("every variant keeps the house style", async () => {
     const module = await import(join(packageRoot, "dist", "index.js"));
 
