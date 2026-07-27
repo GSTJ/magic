@@ -187,6 +187,14 @@
     },
     {
       "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      "files": [
         "**/*.test.{js,jsx,ts,tsx}",
         "**/*.spec.{js,jsx,ts,tsx}",
         "**/__tests__/**"
@@ -202,6 +210,22 @@
     },
     {
       "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      "files": [
         "**/app/**/*.{js,jsx,ts,tsx}",
         "**/app.config.{js,ts}",
         "**/babel.config.js"
@@ -209,6 +233,14 @@
       "rules": {
         "import/no-default-export": "off",
         "func-style": "off"
+      }
+    },
+    {
+      "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
       }
     }
   ],
@@ -266,7 +298,16 @@
     "promise/avoid-new": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
-    "unicorn/filename-case": "off",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase",
+        "ignore": [
+          "\\[",
+          "^App\\."
+        ]
+      }
+    ],
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-array-sort": "off",
     "unicorn/no-immediate-mutation": "off",

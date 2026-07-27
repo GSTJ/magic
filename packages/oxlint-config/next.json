@@ -179,6 +179,14 @@
     },
     {
       "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      "files": [
         "**/*.test.{js,jsx,ts,tsx}",
         "**/*.spec.{js,jsx,ts,tsx}",
         "**/__tests__/**"
@@ -194,6 +202,14 @@
     },
     {
       "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      "files": [
         "**/app/**/{page,layout,template,loading,error,not-found,route,default,global-error}.{js,jsx,ts,tsx}",
         "**/app/**/{sitemap,robots,manifest,opengraph-image,twitter-image,icon,apple-icon}.{js,jsx,ts,tsx}",
         "**/pages/**",
@@ -205,6 +221,14 @@
         "func-style": "off",
         "react/only-export-components": "off",
         "no-restricted-properties": "off"
+      }
+    },
+    {
+      "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
       }
     }
   ],
@@ -261,7 +285,15 @@
     "promise/avoid-new": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
-    "unicorn/filename-case": "off",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase",
+        "ignore": [
+          "\\["
+        ]
+      }
+    ],
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-array-sort": "off",
     "unicorn/no-immediate-mutation": "off",

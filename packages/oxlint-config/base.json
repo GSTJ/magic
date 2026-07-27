@@ -72,7 +72,15 @@
     "promise/avoid-new": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
-    "unicorn/filename-case": "off",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase",
+        "ignore": [
+          "\\["
+        ]
+      }
+    ],
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-array-sort": "off",
     "unicorn/no-immediate-mutation": "off",
@@ -423,6 +431,14 @@
             "message": "Enable `clearMocks` in the vitest config instead of calling vi.clearAllMocks() per suite."
           }
         ]
+      }
+    },
+    {
+      "files": [
+        "**/__mocks__/**"
+      ],
+      "rules": {
+        "unicorn/filename-case": "off"
       }
     }
   ]

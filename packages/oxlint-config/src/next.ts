@@ -1,3 +1,4 @@
+import { mocksFilenameCase } from "./base.ts";
 import { extendConfig, type MagicOxlintConfig } from "./internal.ts";
 import { react } from "./react.ts";
 
@@ -53,6 +54,19 @@ export const next: MagicOxlintConfig = extendConfig(react, {
         "no-restricted-properties": "off",
       },
     },
+    // No `unicorn/filename-case` exemption is needed for the App Router: every
+    // reserved filename is already kebab-valid (`page`, `layout`, `not-found`,
+    // `global-error`, `opengraph-image`, `route`, `middleware`), and `_app` /
+    // `_document` pass because the rule trims leading underscores before
+    // checking. Dynamic segments (`[postId].tsx`) are covered by the bracket
+    // entry in `filenameCaseIgnore`. Route groups `(marketing)`, parallel
+    // routes `@modal` and intercepting routes `(.)photo` are *directory* names,
+    // and the rule only ever looks at basenames. `test/variants.test.mjs`
+    // asserts all of that against a real App Router tree rather than trusting
+    // this comment.
+    //
+    // Must stay last — see the `mocksFilenameCase` docblock in base.ts.
+    mocksFilenameCase,
   ],
 });
 

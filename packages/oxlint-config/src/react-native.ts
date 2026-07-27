@@ -1,3 +1,4 @@
+import { filenameCaseIgnore, mocksFilenameCase } from "./base.ts";
 import { extendConfig, jsPlugin, type MagicOxlintConfig } from "./internal.ts";
 import { react } from "./react.ts";
 
@@ -84,7 +85,27 @@ export const reactNative: MagicOxlintConfig = extendConfig(react, {
     // `no-unknown-property` only knows DOM attributes.
     "react/no-unknown-property": "off",
     "react/no-unescaped-entities": "off",
+
+    // `App.tsx` is the one filename in a React Native app that is not the
+    // repo's to rename. The bare-RN template's `index.js` imports `./App`, and
+    // classic (pre-expo-router) Expo apps point `main` at
+    // `node_modules/expo/AppEntry.js`, whose `import App from "../../App"` no
+    // codemod can rewrite. Renaming to `app.tsx` therefore keeps working on a
+    // macOS dev machine — APFS is case-insensitive — and fails only once the
+    // build runs on Linux (EAS, CI). That is the worst failure shape available,
+    // so `App` is exempt rather than left to a migration agent's judgement.
+    // Anything the repo itself owns still gets renamed.
+    "unicorn/filename-case": [
+      "error",
+      {
+        case: "kebabCase",
+        ignore: [...filenameCaseIgnore, String.raw`^App\.`],
+      },
+    ],
   },
+
+  // Must stay last — see the `mocksFilenameCase` docblock in base.ts.
+  overrides: [mocksFilenameCase],
 });
 
 export default reactNative;

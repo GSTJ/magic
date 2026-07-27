@@ -74,6 +74,47 @@ const typeAwareRules: Record<string, unknown> = {
 };
 
 /**
+ * Basenames exempt from `unicorn/filename-case`.
+ *
+ * `ignore` entries are **regexes matched unanchored against the basename
+ * only** — verified against oxlint 1.75.0: `^Pascal` suppresses
+ * `src/PascalThing.ts`, `^src/Pascal` does not. An unparseable regex is a fatal
+ * config error, as is an unknown option key (the rule accepts exactly `case`,
+ * `cases`, `ignore`, `multipleFileExtensions`).
+ *
+ * Anything listed here must also be in `magic-kebab`'s skip list, or a repo ends
+ * up with a violation the codemod refuses to fix.
+ */
+export const filenameCaseIgnore: string[] = [
+  // File-based routers — Next.js app/pages router, expo-router, TanStack
+  // Router — put a *route parameter name* between brackets: `[postId].tsx`,
+  // `[[...slug]].tsx`. That name is addressable behaviour (it becomes
+  // `params.postId`), not a word in a filename, so kebab-casing it changes the
+  // route contract and breaks every reader of the param. Costs nothing in a
+  // repo that has no bracketed filenames.
+  String.raw`\[`,
+];
+
+/**
+ * A manual mock's filename is not ours to choose: jest and vitest resolve
+ * `__mocks__/<x>` by matching `<x>` against the *module being mocked*, so
+ * `__mocks__/AsyncStorage.ts` has to stay `AsyncStorage.ts` for exactly as long
+ * as the package is called that. Deliberately narrower than the test-file
+ * override — `button.test.tsx` is ours and does get kebab-cased.
+ *
+ * Exported (and appended last by every variant) because an `overrides[]` entry
+ * that omits `plugins` re-activates category rules for the files it matches —
+ * see the jest note in DECISIONS.md §2. `unicorn/filename-case` is a `style`
+ * rule, so a later, broader override could switch it back on for `__mocks__`
+ * from underneath us. Being last is the only thing that makes it stick, and
+ * `test/variants.test.mjs` asserts it holds in all five variants.
+ */
+export const mocksFilenameCase = {
+  files: ["**/__mocks__/**"],
+  rules: { "unicorn/filename-case": "off" },
+};
+
+/**
  * The general-purpose preset. Everything here applies to any TypeScript
  * codebase — no framework assumptions, no project conventions.
  *
@@ -163,12 +204,17 @@ export const base: MagicOxlintConfig = {
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
 
-    // Defaults to kebab-case, and the repos genuinely disagree: magic-modal,
-    // pegada and the portfolio are mostly PascalCase for components, only
-    // invest-radar is kebab. Enabling it would rename hundreds of files during
-    // a migration that is already changing everything else. A repo that wants
-    // one convention should turn it on locally with its own `case` option.
-    "unicorn/filename-case": "off",
+    // ON since 2026-07-27 (Gabriel's call, reversing decision #6 — see
+    // DECISIONS.md §5). `case` is stated explicitly even though `kebabCase` is
+    // the current default, on the same reasoning as oxfmt's `groups`: a default
+    // change upstream must not silently re-case every repo at once.
+    //
+    // The mass rename this implies is not hand work — `magic-codemods`' `magic-kebab`
+    // does the renames and the import rewrites together.
+    "unicorn/filename-case": [
+      "error",
+      { case: "kebabCase", ignore: filenameCaseIgnore },
+    ],
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-array-sort": "off",
     "unicorn/no-immediate-mutation": "off",
@@ -524,6 +570,7 @@ export const base: MagicOxlintConfig = {
         ],
       },
     },
+    mocksFilenameCase,
   ],
 };
 

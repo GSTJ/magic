@@ -239,3 +239,123 @@ describe("variant composition", () => {
     );
   });
 });
+
+/**
+ * Turning `unicorn/filename-case` on (DECISIONS.md §6) means every framework
+ * that derives behaviour from a filename is now one bad exemption away from a
+ * broken app. These assert against a real tree rather than against the comments
+ * in the source, because the rule's actual semantics are surprising: it checks
+ * only the segment before the *first* dot, it trims leading and trailing
+ * underscores, and it rejects nothing but uppercase, spaces and interior
+ * underscores — `+not-found.tsx` and `$ref.ts` pass on their own merits, while
+ * `[userId].tsx` needs the bracket exemption.
+ */
+describe("unicorn/filename-case exemptions", () => {
+  /** Lint one named file with a variant and say whether filename-case fired. */
+  const reportsFilenameCase = (variant, fileName) => {
+    const result = lintWith(
+      join(packageRoot, `${variant}.json`),
+      "export default 1;\n",
+      fileName,
+    );
+    return result.diagnostics.some((d) => d.code === "unicorn(filename-case)");
+  };
+
+  const NEVER_REPORTED = [
+    // Next.js App Router reserved files — all already kebab-valid.
+    "page.tsx",
+    "layout.tsx",
+    "loading.tsx",
+    "error.tsx",
+    "not-found.tsx",
+    "global-error.tsx",
+    "template.tsx",
+    "default.tsx",
+    "route.ts",
+    "sitemap.ts",
+    "robots.ts",
+    "manifest.ts",
+    "opengraph-image.tsx",
+    "apple-icon.tsx",
+    "middleware.ts",
+    "instrumentation.ts",
+    // Pages Router — pass only because leading underscores are trimmed.
+    "_app.tsx",
+    "_document.tsx",
+    // expo-router.
+    "_layout.tsx",
+    "+not-found.tsx",
+    "+html.tsx",
+    // Dynamic segments across every file-based router. These are the ones that
+    // need the `ignore` entry: the parameter name is camelCase by convention.
+    "[postId].tsx",
+    "[userId].ts",
+    "[...slug].tsx",
+    "[[...filters]].tsx",
+    // Ordinary code that happens to be fine.
+    "use-theme.ts",
+    "index.ts",
+    "button.test.tsx",
+    "theme.ios.ts",
+  ];
+
+  for (const variant of VARIANTS) {
+    it(`${variant} leaves framework-reserved filenames alone`, () => {
+      const reported = NEVER_REPORTED.filter((name) =>
+        reportsFilenameCase(variant, name),
+      );
+      assert.deepEqual(
+        reported,
+        [],
+        `${variant} would demand a rename of files whose names are a framework contract`,
+      );
+    });
+
+    it(`${variant} still reports ordinary PascalCase and camelCase files`, () => {
+      assert.equal(reportsFilenameCase(variant, "AlertBanner.tsx"), true);
+      assert.equal(reportsFilenameCase(variant, "formatDate.ts"), true);
+      assert.equal(reportsFilenameCase(variant, "Button.stories.tsx"), true);
+    });
+  }
+
+  it("exempts App.tsx in the React Native family and nowhere else", () => {
+    // Bare RN's `index.js` imports `./App`, and classic Expo points `main` at
+    // `node_modules/expo/AppEntry.js` whose `import App from "../../App"` is
+    // unreachable from any codemod. On APFS the rename looks fine locally and
+    // breaks on the first Linux build.
+    for (const variant of ["react-native", "expo"]) {
+      assert.equal(
+        reportsFilenameCase(variant, "App.tsx"),
+        false,
+        `${variant} should exempt App.tsx`,
+      );
+    }
+    for (const variant of ["base", "react", "next"]) {
+      assert.equal(
+        reportsFilenameCase(variant, "App.tsx"),
+        true,
+        `${variant} has no React Native entry point to protect`,
+      );
+    }
+  });
+
+  it("keeps the __mocks__ exemption last, in every variant", () => {
+    // An `overrides[]` entry that omits `plugins` re-activates category rules
+    // for the files it matches, and `unicorn/filename-case` is a `style` rule.
+    // So the exemption only holds if nothing broader follows it — hence the
+    // duplicated `mocksFilenameCase` at the end of each variant. Assert the
+    // outcome, not the arrangement.
+    for (const variant of VARIANTS) {
+      const { overrides } = JSON.parse(
+        readFileSync(join(packageRoot, `${variant}.json`), "utf8"),
+      );
+      const last = overrides.at(-1);
+      assert.deepEqual(
+        last.files,
+        ["**/__mocks__/**"],
+        `${variant}.json does not end with the __mocks__ override`,
+      );
+      assert.equal(last.rules["unicorn/filename-case"], "off");
+    }
+  });
+});

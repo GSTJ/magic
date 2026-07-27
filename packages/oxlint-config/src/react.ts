@@ -1,4 +1,4 @@
-import { base } from "./base.ts";
+import { base, mocksFilenameCase } from "./base.ts";
 import { extendConfig, jsPlugin, type MagicOxlintConfig } from "./internal.ts";
 
 /**
@@ -33,6 +33,12 @@ export const react: MagicOxlintConfig = extendConfig(base, {
     "react/jsx-max-depth": "off",
     "react/hook-use-state": "off",
     "react/jsx-handler-names": "off",
+    // The `@shopify/jsx-no-hardcoded-content` replacement, deliberately left
+    // off. It is an i18n rule: it only pays for itself once a repo has a
+    // translation layer to move the strings into, and nothing in the migration
+    // set has one. Turning it on is a per-repo decision — the plugin README
+    // carries the configured snippet (`noStrings`, `ignoreProps`,
+    // `elementOverrides` for `<Trans>`) and the two gotchas found verifying it.
     "react/jsx-no-literals": "off",
     "react/jsx-filename-extension": "off",
     "react/no-multi-comp": "off",
@@ -129,6 +135,10 @@ export const react: MagicOxlintConfig = extendConfig(base, {
         "react-perf/jsx-no-jsx-as-prop": "off",
       },
     },
+    // Must stay last — see the `mocksFilenameCase` docblock in base.ts. The
+    // test-file override above omits `plugins`, which is exactly the shape that
+    // re-activates category rules for the files it matches.
+    mocksFilenameCase,
   ],
 });
 
