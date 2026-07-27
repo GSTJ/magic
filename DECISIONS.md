@@ -293,15 +293,22 @@ things, and all three map to real rules now:
 
 ### Ported as opt-in plugin rules (`magic-oxlint-plugin`, off by default)
 
-| Rule                          | Origin                                                             |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `magic/prefer-early-return`   | `@shopify/prefer-early-return`, `maximumStatements` option         |
-| `magic/no-barrel-file`        | invest-radar's `scripts/no-barrel.sh`, now a real rule             |
-| `magic/no-module-mocks`       | g2i `testing-policy/no-module-mocks`, generalised to jest + vitest |
-| `magic/prefer-suspense-query` | g2i `prefer-suspense-query/no-use-query`, roots configurable       |
+| Rule                                 | Origin                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| `magic/prefer-early-return`          | `@shopify/prefer-early-return`, `maximumStatements` option                |
+| `magic/no-ancestor-directory-import` | `@shopify/no-ancestor-directory-import`, reimplemented without a resolver |
+| `magic/react-require-autocomplete`   | `@shopify/react-require-autocomplete`, `inputComponents` option           |
+| `magic/react-hooks-strict-return`    | `@shopify/react-hooks-strict-return`, `maximumReturnValues` option        |
+| `magic/no-barrel-file`               | invest-radar's `scripts/no-barrel.sh`, now a real rule                    |
+| `magic/no-module-mocks`              | g2i `testing-policy/no-module-mocks`, generalised to jest + vitest        |
+| `magic/prefer-suspense-query`        | g2i `prefer-suspense-query/no-use-query`, roots configurable              |
 
-Per the governing directive, none of these is in any default preset. The last
-two are stack-specific; the first two are policies a repo should choose.
+Per the governing directive, none of these is in any default preset. Some are
+stack-specific; the rest are policies a repo should choose.
+
+The bottom three rows date from the first pass. The top four are the outcome of
+governing directive #6 and are dispositioned rule by rule in §6 — three of them
+were listed as _dropped_ in the table below until 2026-07-27.
 
 **Rule API (revised).** These rules originally probed `require("oxlint").defineRule`
 and used `createOnce` only if it turned up. It never turned up: oxlint 1.75.0's
@@ -322,12 +329,12 @@ now covers it.
 
 | Rule                                                       | Why                                                                                                                                                                                                  |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@shopify/jsx-no-hardcoded-content`                        | Only pays off with i18n; `react/jsx-no-literals` is near-native if wanted                                                                                                                            |
-| `@shopify/strict-component-boundaries`                     | Fails under oxlint — `unable to load resolver "node"`                                                                                                                                                |
-| `@shopify/react-require-autocomplete`                      | Web-form specific, narrow                                                                                                                                                                            |
-| `@shopify/react-hooks-strict-return`                       | Opinionated beyond its payoff                                                                                                                                                                        |
-| `@shopify/no-ancestor-directory-import`                    | Expressible with `no-restricted-imports` patterns                                                                                                                                                    |
-| `@shopify/restrict-full-import`                            | Same                                                                                                                                                                                                 |
+| `@shopify/jsx-no-hardcoded-content`                        | **Superseded by §6** — native `react/jsx-no-literals`, configured, off in the preset because it needs an i18n layer to be worth anything                                                             |
+| `@shopify/strict-component-boundaries`                     | **Still dropped, see §6** — fails under oxlint (`unable to load resolver "node"`), and `no-restricted-imports` `patterns` covers it                                                                  |
+| `@shopify/react-require-autocomplete`                      | **Superseded by §6** — ported as `magic/react-require-autocomplete`                                                                                                                                  |
+| `@shopify/react-hooks-strict-return`                       | **Superseded by §6** — ported as `magic/react-hooks-strict-return`                                                                                                                                   |
+| `@shopify/no-ancestor-directory-import`                    | **Superseded by §6** — ported as `magic/no-ancestor-directory-import`. "Expressible with `no-restricted-imports` patterns" was wrong; it needs an unbounded ladder of globs                          |
+| `@shopify/restrict-full-import`                            | **Superseded by §6** — native `no-restricted-imports` with `importNames: ["default"]`, per-repo config                                                                                               |
 | `react/jsx-no-leaked-render`                               | `safe-jsx/jsx-explicit-boolean` covers the `&&` case, which is the leak that matters. **Removed from oxlint before 1.75** — it's in the MM config and no longer loads.                               |
 | `testing-library/*`                                        | Works as a jsPlugin unmodified, but shipping the dependency to every consumer isn't worth it. Add per repo.                                                                                          |
 | `jest-formatting/*`                                        | Pure formatting; oxfmt handles spacing. oxlint's own `jest/padding-around-*` are off for the same reason                                                                                             |
@@ -533,3 +540,449 @@ consumers breaks this repo's own build first.
   passes to converge (safe-jsx's `Boolean(x)` rewrite is then rewritten again
   by `unicorn/explicit-length-check`). Run `--fix` until the diff is empty;
   the README's Gotchas section says the same.
+
+---
+
+## 5. `unicorn/filename-case` is on, and the rename is a codemod
+
+Added 2026-07-27, implementing governing directive #5.
+
+### Decision #6 is reversed
+
+The table in §2 counted PascalCase against kebab-case across the migration set,
+found three repos of four PascalCase-dominant, and switched the rule off.
+Gabriel overruled that: kebab-case everywhere, per the g2i and invest-radar
+convention, with the mass rename handled by a codemod shipped from this repo so
+every migration agent runs the same script rather than inventing one.
+
+The original reasoning was not wrong about the cost — it was wrong about who
+pays it. "Hundreds of files during a migration that is already changing
+everything else" is an argument for automating the rename, not for declining to
+have a convention. The disposition table entry for `unicorn/filename-case` in §2
+is superseded by this section.
+
+`base` now carries:
+
+```ts
+"unicorn/filename-case": ["error", { case: "kebabCase", ignore: filenameCaseIgnore }]
+```
+
+`case` is stated explicitly although `kebabCase` is the current default, for the
+same reason `groups` and `internalPattern` are stated explicitly in the oxfmt
+config: a default change upstream must not silently re-case every repo at once.
+
+Real numbers, `git ls-files` across the migration set on 2026-07-27:
+
+| repo                      | lintable files | violations |
+| ------------------------- | -------------- | ---------- |
+| pegada                    | 638            | 98         |
+| morphosis                 | 397            | 71         |
+| gabriel-taveira-portfolio | 73             | 19         |
+| react-native-magic-modal  | 87             | 13         |
+| seedgen                   | 121            | 10         |
+| e-card                    | 52             | 9          |
+| invest-radar              | 1016           | 0          |
+| padrinhos                 | 28             | 0          |
+| would-you-rather          | 100            | 0          |
+
+220 renames across the set. invest-radar being already at zero is the strongest
+argument that the convention is livable — it is the largest repo in the list.
+
+### What the rule actually does, verified
+
+Every claim here comes from running oxlint 1.75.0 against generated trees, not
+from the upstream ESLint rule's documentation, which describes something
+stricter.
+
+**Only the segment before the first dot is checked.** `charlie.Test.ts` passes;
+`Bravo.test.ts` fails. A `.stories`, a `.config`, a `.ios` suffix is never
+inspected. (`multipleFileExtensions: false` would inspect `Bravo.test` instead;
+we leave the default.)
+
+**Leading and trailing underscore runs are trimmed before the check.**
+`_layout.tsx`, `__mocks__.ts` and `alpha_.ts` pass; `foo_bar.ts` does not.
+
+**The only things rejected are uppercase letters, spaces, and interior
+underscores.** Everything else passes, including every punctuation character
+tested (`[ ] + $ ( ) @ ~ ! & % = , ; # ^ { } ' \` — · —`), repeated and leading
+hyphens (`a--b.ts`, `-x.ts`), and caseless scripts (`日本.ts`). The upstream
+ESLint rule uses `^[a-z\d]+(-[a-z\d]+)*$`; assuming that here produces false
+positives on every file-based router in the set.
+
+A 765-name differential run pinned the predicate to zero disagreements:
+
+```
+stem      = basename up to the first "."
+trimmed   = stem with leading and trailing "_" runs removed
+valid iff no character of `trimmed` is uppercase, a space, or "_"
+```
+
+**Uppercase is Unicode, not ASCII.** `ÉZ` is a word boundary to oxlint (it is
+Rust, asking `char::is_uppercase`), so `ZÉaA.ts` wants `z-éa-a.ts`. An
+ASCII-only `[A-Z]` implementation produces `zéa-a.ts` — a name the rule still
+rejects. Caught by the differential test, not by reading.
+
+**The diagnostic carries the target.** `help` is
+`Rename the file to 'pascal-thing.ts'`, so nothing downstream has to reimplement
+the word-splitting. Its corners: `S3.ts` → `s-3.ts`, `V2.ts` → `v-2.ts`,
+`AppV2.ts` → `app-v-2.ts`, `OAuth2Client.ts` → `o-auth2-client.ts` (an uppercase
+letter followed by a digit is a boundary).
+
+**Options are strictly validated.** The rule accepts exactly `case`, `cases`,
+`ignore`, `multipleFileExtensions`; an unknown key or an unknown case name is a
+fatal config error, as is an unparseable regex in `ignore`. `ignore` entries are
+regexes matched **unanchored against the basename only** — `^Pascal` suppresses
+`src/PascalThing.ts`, `^src/Pascal` matches nothing. The schema types the rule as
+`DummyRule` (no typed options), so none of this is discoverable from the schema;
+it came from probing the binary.
+
+### Exemptions, and where they live
+
+The rule is now the thing that decides whether a filename is a bug, so every
+framework that derives behaviour from a filename had to be checked against a
+real tree. `packages/oxlint-config/test/variants.test.mjs` asserts all of it in
+all five variants rather than trusting the analysis.
+
+**Almost nothing needed an exemption.** Next.js App Router reserved names
+(`page`, `layout`, `loading`, `error`, `not-found`, `global-error`, `template`,
+`default`, `route`, `sitemap`, `robots`, `manifest`, `opengraph-image`,
+`apple-icon`, `middleware`, `instrumentation`) are already kebab-valid. Pages
+Router `_app.tsx` and `_document.tsx` pass because underscores are trimmed.
+expo-router's `_layout.tsx`, `+not-found.tsx` and `+html.tsx` pass because `+` is
+not a rejected character. Route groups `(marketing)`, parallel routes `@modal`
+and intercepting routes `(.)photo` are _directories_, and the rule only looks at
+basenames.
+
+Three real exemptions:
+
+- **`ignore: ["\\["]` in `base`.** Dynamic segments carry a _route parameter
+  name_ between brackets, and `[postId].tsx` / `[userId].tsx` are camelCase by
+  universal convention. Kebab-casing one changes `params.postId` to
+  `params.post-id` — which is not even a valid identifier — so this is the one
+  case where the rule is straightforwardly wrong. Costs nothing in a repo with
+  no bracketed filenames, which is why it sits in `base` rather than in the
+  `next` and `expo` variants separately.
+
+- **`__mocks__/**` override, `off`.** jest and vitest resolve `__mocks__/<x>` by
+  matching `<x>` against the module being mocked, so `__mocks__/AsyncStorage.ts`
+  keeps that name for exactly as long as the package is called that. Narrower
+  than the existing test-file override on purpose: `button.test.tsx` is ours and
+  does get renamed.
+
+- **`^App\.` in `react-native` (and therefore `expo`).** Bare RN's `index.js`
+  template imports `./App`, and classic pre-expo-router Expo apps point `main` at
+  `node_modules/expo/AppEntry.js`, whose `import App from "../../App"` is inside
+  a dependency and unreachable from any codemod. Renaming to `app.tsx` therefore
+  _works locally_ — APFS is case-insensitive — and fails only once the build runs
+  on Linux (EAS, CI). That is the worst available failure shape, so `App` is
+  exempt by config rather than left to a migration agent's judgement. Asserted to
+  be exempt in `react-native` and `expo` and still reported in `base`, `react`
+  and `next`, which have no RN entry point to protect.
+
+  **The codemod's matching skip is conditional, and had to be.** The first
+  version skipped every `App.*` unconditionally and the dry-runs immediately
+  showed why that is wrong: e-card and morphosis are Vite web apps whose
+  `src/App.tsx` is reached by an ordinary `./App` from `main.tsx`. Those repos
+  use the `react` preset, which does _not_ exempt `App`, so the linter demands
+  the rename and a codemod that refuses it produces exactly the orphaned-error
+  state this whole design is meant to prevent. `magic-kebab` now walks up to the
+  nearest `package.json` and only skips `App.*` when `react-native` or `expo` is
+  a declared dependency there — matching, package by package, which preset that
+  code would be linted with.
+
+Remix / React Router file routes (`$postId.tsx`) would want `ignore: ["^\\$"]`.
+Not in `base` — nothing in the migration set uses them, and `base` should not
+accumulate exemptions for frameworks nobody runs. Add it locally.
+
+**The `__mocks__` override has to be last, and is duplicated to stay that way.**
+An `overrides[]` entry that omits `plugins` re-activates category rules for the
+files it matches — the same behaviour documented in §2 for the jest rules — and
+`unicorn/filename-case` is a `style` rule. So a later, broader override can
+switch it back on for `__mocks__` from underneath. `mocksFilenameCase` is
+exported from `base.ts` and appended as the final override of every variant;
+`variants.test.mjs` asserts each emitted JSON ends with it.
+
+### magic-codemods / magic-kebab
+
+New package. `bin: magic-kebab`, ts-morph based. Full interface in
+`packages/codemods/README.md`; the decisions worth recording here:
+
+**Detection defers to oxlint.** The default `--detect oxlint` runs the target
+repo's own linter and reads its `unicorn(filename-case)` diagnostics, taking the
+rename target from the diagnostic's `help` text. A codemod that reimplements a
+lint rule and then disagrees with it is worse than no codemod, and this makes
+disagreement structurally impossible — the repo's `ignore` list, `overrides` and
+`ignorePatterns` all apply because the linter is the one answering.
+`--detect builtin` exists for repos that have not adopted the preset yet, and
+`test/kebab.test.mjs` holds it to oxlint over a generated corpus.
+
+**A plain lint run, not a scoped one.** `oxlint -A all -D unicorn/filename-case`
+looks like the fast path and is wrong: verified on 1.75.0, `-D <rule>` re-enables
+the rule with its **default options** and discards the config's `ignore` list, so
+a scoped run reports every `[postId].tsx` in the repo. `overrides` survive it;
+rule options do not.
+
+**Rename via a temporary name, unconditionally.** On APFS `Button.tsx` and
+`button.tsx` are the same path. `git mv` between them is refused, or with `-f`
+becomes a no-op that still updates the index — producing a commit that claims a
+rename the working tree never performed, and a file that materialises only when
+someone checks out on Linux. Doing the two-step for every rename rather than only
+for case-only ones keeps one code path, and it is invisible in history: git
+records no rename in a commit, it infers renames from content similarity at diff
+time, so two `git mv`s before one commit produce one rename in that commit.
+
+**Rewrite first, move second.** Specifiers are rewritten to point at names that
+do not exist yet, then the files are moved to make them true. The reverse order
+resolves specifiers against a half-renamed tree where `./Button` is ambiguous
+between the file that moved and the one that has not. Between the phases the tree
+does not typecheck, which is fine — nothing observes it, and the clean-tree
+precondition means one `git checkout .` undoes both.
+
+**Refuses a dirty tree, untracked files included.** `git checkout .` has to be a
+complete undo, and it only is when the tree started clean. A `git mv` onto an
+untracked path clobbers it silently.
+
+**Only basenames change, never directories.** This is the invariant that makes
+specifier rewriting tractable: only the last segment of any specifier is ever
+touched, and its extension — present, absent, or `.js` standing in for `.ts` —
+is preserved as written.
+
+**Report, never guess.** Computed specifiers (`import(`./${name}`)`),
+`moduleNameMapper` regexes, bundler aliases, `package.json` `main`/`exports`, and
+prose in `.md` are found and printed under `NEEDS REVIEW`, never edited. A
+`moduleNameMapper` key is a regex whose escaping belongs to its author; a
+`package.json` `exports` path is a published contract.
+
+**A local module's `__mocks__` moves with it.** `__mocks__/Button.ts` next to a
+`Button.tsx` being renamed is paired up and given the same stem, because jest
+would otherwise silently stop applying it. A `__mocks__` entry with no
+same-named sibling is a package mock and is skipped with a printed reason.
+
+Dry-run numbers against the real migration set (`--detect builtin`, so the
+repo's own config is not consulted): pegada 96 renames / 2 skipped, morphosis 70,
+gabriel-taveira-portfolio 19, react-native-magic-modal 13, seedgen 10, e-card 8.
+**Zero conflicts anywhere**, which is the number that mattered — a conflict is
+the one outcome a migration agent cannot resolve without thinking.
+
+Also run for real against a throwaway clone of e-card: 8 renames including the
+case-only `App.tsx` → `app.tsx`, 8 specifier rewrites, on-disk casing correct, no
+temp files left behind, `git status` showing `R` for every move, and
+`git log --follow -- src/app.tsx` reaching back through five commits to `init`
+with `R086 src/App.tsx src/app.tsx` in `--name-status`.
+
+Verified end to end against a throwaway git repo carrying one instance of each
+hazard — case-only rename, alias imports, barrel re-exports, dynamic `import()`,
+a platform-variant trio, both kinds of mock, a route parameter, a
+`moduleNameMapper`, a computed import. 45 assertions, including that
+`git log --follow` still reaches back past the rename (`R100 old -> new` in
+`--name-status`), that `tsc --noEmit` passes afterwards, that oxlint's
+filename-case goes silent, and that `--dry-run` leaves the tree byte-identical.
+
+### Dogfood outcome: zero renames
+
+This repo was already entirely kebab-case — 89 tracked files, 0 violations under
+both detectors, before and after turning the rule on. So the rule went on, the
+full check chain stayed green, and the codemod's honest result here is
+"Nothing to rename."
+
+That is a weak dogfood and worth saying plainly rather than dressing up. The
+fixture repo in `packages/codemods/test` is the real proving ground, and the
+`--dry-run` numbers in the table above are the real evidence the thing works on
+the repos it was built for.
+
+One thing the repo's own lint did surface while writing the package:
+`oxc/no-map-spread` and `unicorn/prefer-spread` are in direct conflict on
+`flatMap((x) => [x, ...f(x)])` — the first rejects the spread, the second rejects
+the `.concat()` you would reach for instead. Both are on via the categories.
+The way out is a plain loop; noted in `resolve.ts` where it bites.
+
+---
+
+## 6. Every `@shopify/*` rule, dispositioned
+
+Added 2026-07-27, implementing governing directive #6. The first pass dropped
+six of the eight Shopify rules the incumbent config used, four of them with a
+one-line reason. Gabriel overruled that: each rule gets a real disposition —
+native equivalent, port, selective jsPlugin, or a documented drop.
+
+### Verification basis
+
+Everything below was run. `@shopify/eslint-plugin@50.0.0` was installed into a
+scratch directory and loaded under oxlint 1.75.0 as
+`jsPlugins: [{ name: "shopify", specifier: "@shopify/eslint-plugin" }]`.
+
+| Shopify rule                   | Under oxlint 1.75.0                          |
+| ------------------------------ | -------------------------------------------- |
+| `prefer-early-return`          | Fires                                        |
+| `no-namespace-imports`         | Fires                                        |
+| `restrict-full-import`         | Fires                                        |
+| `jsx-no-hardcoded-content`     | Fires                                        |
+| `react-require-autocomplete`   | Fires                                        |
+| `react-hooks-strict-return`    | Fires                                        |
+| `no-ancestor-directory-import` | **Fails** — `unable to load resolver "node"` |
+| `strict-component-boundaries`  | **Fails** — same                             |
+
+New against what §1 recorded: `no-ancestor-directory-import` fails on the
+resolver too. §1 only knew about `strict-component-boundaries`.
+
+**Option (c) — load the plugin selectively — is rejected for every rule, on
+weight rather than compatibility.** `@shopify/eslint-plugin@50` installs **262
+transitive packages, 97 MB**: `eslint-plugin-import-x`, `eslint-plugin-jest`,
+`eslint-plugin-jsx-a11y`, `typescript-eslint`, `prettier`,
+`eslint-config-prettier`. That is a second copy of the ESLint ecosystem landing
+in every consumer of a config whose entire reason to exist is that oxlint
+replaced it. Six rules working is not worth reinstalling the thing we left.
+
+### Disposition
+
+| Shopify rule                   | Disposition | Where it lives                                              |
+| ------------------------------ | ----------- | ----------------------------------------------------------- |
+| `prefer-early-return`          | Ported      | `magic/prefer-early-return` (existed; fidelity-fixed)       |
+| `no-ancestor-directory-import` | Ported      | `magic/no-ancestor-directory-import`                        |
+| `react-require-autocomplete`   | Ported      | `magic/react-require-autocomplete`                          |
+| `react-hooks-strict-return`    | Ported      | `magic/react-hooks-strict-return`                           |
+| `no-namespace-imports`         | Native      | `import/no-namespace` — already on in `base` and `react`    |
+| `restrict-full-import`         | Native      | `no-restricted-imports`, per-repo config                    |
+| `jsx-no-hardcoded-content`     | Native      | `react/jsx-no-literals`, off in `react`, snippet documented |
+| `strict-component-boundaries`  | Dropped     | `no-restricted-imports` `patterns`, per-repo config         |
+
+### `prefer-early-return` — a real divergence, fixed
+
+The port already in the repo treated _any_ braceless consequent as a single
+statement, so at `maximumStatements: 0` it reported `() => { if (done) return; }`
+and `() => { if (bad) throw e; }` — telling the author to invert a guard clause
+into itself. Upstream's `isOffendingConsequent` counts a braceless consequent
+only when it is an `ExpressionStatement` **and** `maxStatements === 0`. Matched
+exactly now:
+
+```ts
+if (consequent.type === "BlockStatement") {
+  if ((consequent.body ?? []).length <= maximumStatements) return;
+} else if (
+  consequent.type !== "ExpressionStatement" ||
+  maximumStatements !== 0
+) {
+  return;
+}
+```
+
+One divergence stays, documented in the source and the README: the default
+`maximumStatements` is `0` here and `1` upstream. `0` is what the incumbent GSTJ
+ESLint config passed, so a bare `"error"` means what those repos already meant.
+
+### `no-namespace-imports` — native, and stricter than the original
+
+`import/no-namespace` with `["error", { ignore: ["react", "@radix-ui/*"] }]`
+passes `react` and `@radix-ui/react-dialog`, reports `react-native` and
+`node:path`. Already wired: `base` bans it outright, `react` re-declares it with
+the allow list the old config carried, the test override turns it off (namespace
+imports are how you spy on a module).
+
+Worth knowing, though it needs no action: Shopify's `allow` is
+`new RegExp(allowed.join("|"))` — unanchored substring matching. `allow:
+["react"]` therefore also permitted `react-native`, `react-dom`, `preact` and
+`./my-react-thing`. oxlint's globs are exact-match-with-`*`, so the replacement
+is tighter than what it replaces, not looser.
+
+### `restrict-full-import` and `strict-component-boundaries` — project config
+
+Which packages are off-limits, and where a component's boundary is, are project
+decisions. Directive #3 keeps both out of the shared presets. Both snippets are
+in the plugin README and both are executed by `fixtures/adversarial/shopify`, so
+a README that stops working fails the build rather than the next migration.
+
+Verified on 1.75.0: `{ name: "lodash", importNames: ["default"] }` reports both
+`import lodash from "lodash"` and `import { default as lodash } from "lodash"`,
+and leaves `import { debounce } from "lodash/debounce.js"` alone. The namespace
+half is `import/no-namespace`'s job already. Upstream's `require()` branch has no
+native equivalent and does not come up in ESM/TS.
+
+`strict-component-boundaries` is the one true drop. It cannot load, and its core
+heuristic — a PascalCase path segment means "another component" — is dead under
+the kebab-case filename convention adopted in §5. `no-restricted-imports`
+`patterns` with `group: ["**/components/*/**"]` reports
+`../components/Card/internal/thing` and leaves `../components/Card` alone.
+
+### `no-ancestor-directory-import` — the resolver bought nothing
+
+The old disposition ("expressible with `no-restricted-imports` patterns") does
+not survive contact: matching `.`, `..`, `../..`, `../index`, `../../index.ts`
+and so on means enumerating an unbounded ladder of globs.
+
+Reading upstream's `relative(filename, resolvedSource)` logic, the exact set it
+reports is _specifiers composed only of `.`/`..` segments with an optional
+trailing `index` basename_ — decidable from syntax, no resolver needed. Two
+divergences, both documented: upstream stays silent when a specifier fails to
+resolve (this reports; such an import does not typecheck anyway), and this
+additionally covers the re-export forms (`export * from ".."`,
+`export { x } from "."`) that upstream missed by hooking `ImportDeclaration`
+alone. Dynamic `import("..")` is not covered. `index.module.css` has basename
+`index.module`, not `index`, so CSS-module imports are not swallowed.
+
+**Dogfood finding, and why it stays opt-in.** Turning this on for this repo
+reports three real hits: `packages/codemods/src/cli.ts` and
+`packages/oxfmt-config/src/cli.ts` importing `./index.ts`. Both are true
+positives by the rule's definition and neither is a cycle — `runKebabCodemod`
+and the oxfmt variants are _defined_ in `index.ts`, so there is no other file to
+name. That is a fair illustration of why the rule is a policy and not a bug
+detector, and it is the reason it is not a candidate for `base` despite being
+general enough to live there.
+
+### `react-require-autocomplete` — `jsx-a11y/autocomplete-valid` is not a substitute
+
+Checked against 1.75.0: `jsx-a11y/autocomplete-valid` validates the _value_ of an
+`autoComplete` attribute and says nothing when the attribute is missing, which is
+the entire case. An autofillable `<input>` with no `autoComplete` gets whatever
+the browser guesses, which is how a password manager fills an address into a
+one-time-code box. `autoComplete="off"` is an accepted answer; the rule wants the
+decision made.
+
+Two divergences from upstream, both cutting false positives: an element with a
+spread attribute is skipped (`autoComplete` may be in the spread), and a computed
+`type={kind}` is skipped where upstream falls back to treating it as text.
+Options: `inputComponents`, for components that render an `<input>` and forward
+props.
+
+### `react-hooks-strict-return` — one path dropped deliberately
+
+A hook returning `[a, b, c, d]` makes every call site memorise a positional order
+nothing checks. Two is the limit that keeps `const [value, setValue] = useThing()`
+readable; object returns are never reported at any size, which matches upstream
+and is the escape hatch.
+
+Upstream additionally resolves an indirect return (`const pair = [a, b, c];
+return pair;`) through scope analysis. That path is dropped: it needs the array
+literal in scope and assigned to the returned identifier, which a `useX` hook
+rarely looks like. A `SpreadElement` counts as one value rather than being
+expanded. Both choices err toward silence. Options: `maximumReturnValues`
+(default `2`; upstream hardcodes it).
+
+### `jsx-no-hardcoded-content` — native, off, and two gotchas
+
+`react/jsx-no-literals` covers it and is off in the `react` preset: it is an i18n
+rule, and it only pays for itself once a repo has somewhere to move the strings
+to. Nothing in the migration set does. The configured snippet is in the plugin
+README.
+
+Two things found while verifying it on 1.75.0, both of which cost time:
+`elementOverrides` needs `allowElement: true` to exempt an element —
+`{ "noStrings": false }` reads like it should work and silently does nothing. And
+`restrictedAttributes` does **not** narrow checking to the attributes you list;
+it reports every string attribute and merely uses a different message for the
+listed ones, so `ignoreProps: true` is what keeps the rule on children.
+
+### Where this is wired
+
+Nowhere in the presets, except the two that were already there
+(`import/no-namespace` in `base` and `react`) and the one explicit opt-out
+(`react/jsx-no-literals` in `react`, now carrying its provenance in a comment).
+The plugin's "nothing is on by default" invariant holds with seven rules exactly
+as it did with four.
+
+What is new is that all of it is executed. `fixtures/adversarial/shopify` runs
+every disposition — the four ported rules and the four native snippets — with
+positive and negative cases for each, so a README snippet that stops firing fails
+`pnpm run check` rather than the next repo to paste it. `scripts/validate-rules.mjs`
+gained a second pass that resolves every `magic/*` name written in any config or
+doc against the plugin's actual rule map, and fails on a rule the plugin ships
+but the README never documents.

@@ -10,6 +10,7 @@ slightly-wrong version.
 | [`magic-oxfmt-config`](packages/oxfmt-config)   | oxfmt config, including the import sort order                   |
 | [`magic-oxlint-plugin`](packages/oxlint-plugin) | Four opt-in lint rules with no oxlint equivalent                |
 | [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases   |
+| [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck  |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm          |
 | `default.json`                                  | Renovate preset, consumable as `github>GSTJ/magic`              |
@@ -363,9 +364,70 @@ overrides: [
 ],
 ```
 
+## Kebab-case filenames
+
+`unicorn/filename-case` is on at `kebabCase` in every preset, so adopting `base`
+in an existing repo means renaming `Button.tsx` to `button.tsx` and fixing every
+import that pointed at it. `magic-codemods` does both.
+
+```sh
+pnpm add -D magic-codemods
+
+# 1. Clean tree. The codemod refuses to run otherwise, and means it.
+git status
+
+# 2. Read the plan. Changes nothing.
+pnpm exec magic-kebab --dry-run
+
+# 3. Apply.
+pnpm exec magic-kebab --write
+
+# 4. Verify, then commit the renames on their own.
+pnpm exec tsc --noEmit && pnpm run lint && pnpm run test
+git add -A && git commit -m "refactor: kebab-case filenames"
+```
+
+Commit renames separately from anything else. `git log --follow` survives this
+because git infers renames from content similarity at diff time, and a
+rename-only commit gives it the easiest possible job.
+
+`--dry-run` prints three sections that are not decoration:
+
+- **SKIPPED** — files the linter reported that the codemod refuses to rename,
+  with the reason. Route parameters, package mocks, the RN entry point.
+- **NEEDS REVIEW** — `moduleNameMapper` regexes, computed `import()` specifiers,
+  `package.json` `exports`, docs. Found and printed, never edited, because
+  guessing at any of them turns a lint fix into an outage.
+- **CONFLICTS** — two files that want the same name, or a target that would still
+  violate the rule. Nothing is renamed for these; resolve them with `--rename`.
+
+Filenames that are a framework contract are exempt in the presets themselves, not
+by convention or vigilance:
+
+| Pattern                        | Exempted by                    | Why                                                                                      |
+| ------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------- |
+| `[postId].tsx`, `[[...x]].tsx` | `ignore` in `base`             | The brackets hold a route parameter name. `params.postId` is not `params.post-id`.       |
+| `__mocks__/AsyncStorage.ts`    | `__mocks__` override in `base` | jest/vitest match the filename against the _package_ being mocked.                       |
+| `App.tsx`                      | `react-native` and `expo`      | Bare RN's `index.js` and Expo's `AppEntry.js` import `./App` from inside `node_modules`. |
+
+Everything else you might worry about already passes on its own: `page.tsx`,
+`layout.tsx`, `not-found.tsx`, `route.ts`, `middleware.ts`, `_app.tsx`,
+`_document.tsx`, `_layout.tsx`, `+not-found.tsx`. Route groups `(marketing)` and
+parallel routes `@modal` are directories, and the rule only looks at basenames.
+
+Remix / React Router file routes (`$postId.tsx`) are not exempt — nothing in the
+migration set uses them. Add `ignore: ["^\\$"]` locally if yours does.
+
+Renaming `Button.tsx` to `button.tsx` does not change how it is imported:
+`import { Button } from "./button"` and `import Button from "./button"` both work
+unchanged. Only the specifier moves.
+
+See the [codemods README](packages/codemods) for the full option list.
+
 ## Opt-in rules
 
-`magic-oxlint-plugin` ships four rules. None is on by default anywhere.
+`magic-oxlint-plugin` ships seven rules. None is on by default anywhere — pick
+the ones a given repo wants.
 
 ```sh
 pnpm add -D magic-oxlint-plugin
@@ -381,14 +443,29 @@ export default defineConfig({
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
   rules: {
     "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
+    "magic/no-ancestor-directory-import": "error",
     "magic/no-barrel-file": "error",
     "magic/no-module-mocks": "error",
     "magic/prefer-suspense-query": ["error", { roots: ["api", "trpc"] }],
+    // React repos only.
+    "magic/react-require-autocomplete": "error",
+    "magic/react-hooks-strict-return": "error",
   },
 });
 ```
 
 See the [plugin README](packages/oxlint-plugin) for what each one does.
+
+### Coming from `@shopify/eslint-plugin`
+
+Four of those rules are ports of Shopify rules; four more Shopify rules have a
+native oxlint equivalent and need config rather than a plugin. Loading
+`@shopify/eslint-plugin` itself as a jsPlugin works for six of its eight rules,
+but pulls 262 packages and 97 MB of the ESLint ecosystem back into a repo that
+just left it — so nothing here depends on it. The plugin README has the measured
+compatibility matrix, the per-rule disposition, and the copy-paste config for
+`restrict-full-import`, `jsx-no-hardcoded-content` and
+`strict-component-boundaries`.
 
 ## Type-aware linting
 
@@ -429,6 +506,20 @@ from each file and uses the nearest config it finds. If a subdirectory has its
 own `oxlint.config.mts` or `.oxlintrc.json`, files under it use that config and
 the root's ignore patterns never apply. Pass `--disable-nested-config` at the
 monorepo root unless you specifically want per-package configs.
+
+**A case-only rename is a no-op on macOS.** APFS is case-insensitive by default,
+so `Button.tsx` and `button.tsx` are the same path. `git mv` between them is
+refused, or with `-f` updates the index while leaving the file alone — you get a
+commit claiming a rename that never happened, and a file that only materialises
+when someone checks out on Linux. `magic-kebab` always renames through a third
+name for this reason. If you are doing it by hand, do the same.
+
+**Scoping a lint run with `-D` throws away that rule's options.** Verified on
+1.75.0: `oxlint -A all -D unicorn/filename-case` re-enables the rule with its
+_default_ configuration, so the `ignore` list in your config stops applying and
+every `[postId].tsx` gets reported. `overrides` survive it, rule options do not.
+There is no way to ask oxlint about one rule and keep its config; run it plainly
+and filter the JSON.
 
 **An unknown rule name is fatal.** oxlint refuses to start:
 `x Rule 'jsx-no-leaked-render' not found in plugin 'react'`. Rules do get
