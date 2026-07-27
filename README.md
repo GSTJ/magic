@@ -12,7 +12,7 @@ slightly-wrong version.
 | [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases   |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck  |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm          |
-| `renovate.json`                                 | Renovate preset, consumable as `github>GSTJ/magic`              |
+| `default.json`                                  | Renovate preset, consumable as `github>GSTJ/magic`              |
 
 ESLint and Prettier are gone. oxlint replaces ESLint, oxfmt replaces Prettier
 **and** `@ianvs/prettier-plugin-sort-imports`.
@@ -59,17 +59,22 @@ That's the whole file. Repo-specific rules go in the same object — see
 
 ```ts
 // oxfmt.config.mts
-import base from "magic-oxfmt-config";
-
-export default base;
+export { default } from "magic-oxfmt-config";
 ```
 
 Variants, if the project has native or framework directories to skip:
 
 ```ts
-import { expo } from "magic-oxfmt-config"; // also: react, reactNative, next
-export default expo;
+// oxfmt.config.mts — also: react, reactNative, next
+export { expo as default } from "magic-oxfmt-config";
 ```
+
+Write it as a re-export, not `import base from …; export default base;`. The two
+behave identically in oxfmt, but the second form trips
+`unicorn/prefer-export-from` in the lint preset shipped alongside it, so
+`pnpm run lint` would fail on the file this README told you to write. If the
+config needs to change something — extra `ignorePatterns`, say — spread it into
+a new object instead, which is what this repo's own `oxfmt.config.mts` does.
 
 Then delete `.prettierrc`, `.prettierignore`, `prettier.config.*`, and the
 `prettier` key from `package.json`.
@@ -88,14 +93,19 @@ Then delete `.prettierrc`, `.prettierignore`, `prettier.config.*`, and the
 // package.json
 {
   "scripts": {
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint --report-unused-disable-directives",
+    "lint:fix": "oxlint --report-unused-disable-directives --fix",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
     "typecheck": "tsc --noEmit",
   },
 }
 ```
+
+`--report-unused-disable-directives` matters: the old ESLint config baked
+`reportUnusedDisableDirectives` into the shared config so stale
+`// eslint-disable` comments couldn't accumulate. oxlint has no config key for
+it — the flag is the only carrier, so it lives in the script.
 
 In a monorepo, add `--disable-nested-config` to the root `lint` script. See
 [Gotchas](#gotchas).
@@ -107,8 +117,12 @@ In a monorepo, add `--disable-nested-config` to the root `lint` script. See
 ### Plain TypeScript / Node library
 
 ```sh
-pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig @types/node
 ```
+
+(`@types/node` because `magic-tsconfig/base.json` doesn't pull in any global
+type packages — without it the first `process.` or `node:fs` import fails
+typecheck.)
 
 ```ts
 // oxlint.config.mts
@@ -120,9 +134,7 @@ export default defineConfig({ extends: [base] });
 
 ```ts
 // oxfmt.config.mts
-import base from "magic-oxfmt-config";
-
-export default base;
+export { default } from "magic-oxfmt-config";
 ```
 
 ```jsonc
@@ -130,7 +142,14 @@ export default base;
 {
   "extends": "magic-tsconfig/internal-package.json",
   "include": ["src"],
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // Required under TypeScript 7 (tsgo): auto-inclusion of @types packages
+    // does not kick in with this config shape, so `process` and `node:*`
+    // imports fail typecheck without it. Verified against tsgo 7.0.2.
+    "types": ["node"],
+  },
 }
 ```
 
@@ -151,9 +170,7 @@ export default defineConfig({ extends: [next] });
 
 ```ts
 // oxfmt.config.mts
-import { next } from "magic-oxfmt-config";
-
-export default next;
+export { next as default } from "magic-oxfmt-config";
 ```
 
 ```jsonc
@@ -161,7 +178,13 @@ export default next;
 {
   "extends": "magic-tsconfig/nextjs.json",
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/*"] },
+    // Needed under TypeScript 7 (tsgo), which doesn't auto-include @types
+    // packages with this config shape — without it `process.env` fails
+    // typecheck even with @types/node installed.
+    "types": ["node"],
+  },
 }
 ```
 
@@ -187,9 +210,7 @@ export default defineConfig({ extends: [expo] });
 
 ```ts
 // oxfmt.config.mts
-import { expo } from "magic-oxfmt-config";
-
-export default expo;
+export { expo as default } from "magic-oxfmt-config";
 ```
 
 ```jsonc
@@ -246,7 +267,9 @@ jobs:
       lint-command: "" # empty string skips the step
 ```
 
-This repo is public, so private repos can call the workflow.
+This repo is public, so private repos can call the workflow. It also calls
+`ci.yml` on itself (`.github/workflows/self-ci.yml`), so a change that breaks
+the reusable workflow fails here before it reaches a consumer.
 
 For releases:
 
@@ -254,6 +277,12 @@ For releases:
 jobs:
   release:
     uses: GSTJ/magic/.github/workflows/release.yml@main
+    # Required. A called workflow can't exceed the caller's grant, and the
+    # default GITHUB_TOKEN is read-only in new repos — without these the
+    # version-bump push and the provenance publish both fail.
+    permissions:
+      contents: write
+      id-token: write
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
@@ -264,6 +293,10 @@ jobs:
 // renovate.json in the consuming repo
 { "extends": ["github>GSTJ/magic"] }
 ```
+
+That resolves to `default.json` at the root of this repo, which is where the
+preset lives. Renovate deprecated serving a preset from `renovate.json`; this
+repo's own `renovate.json` just extends the preset like everyone else's.
 
 ---
 
@@ -315,6 +348,21 @@ Multiple entries with the same `name` work and each keeps its own message —
 that's why the ESLint config's `no-restricted-syntax` workaround is no longer
 needed.
 
+E2E suites are another local-override case. The presets' test globs only match
+`*.test.*` / `*.spec.*` / `__tests__`, so Playwright / Maestro / Detox specs in
+an `e2e/` directory get the full strict set — `no-console`, `func-style`, and
+(under `--type-aware`) every type-aware rule. Repos with an e2e directory
+should add their own override:
+
+```ts
+overrides: [
+  {
+    files: ["e2e/**"],
+    rules: { "no-console": "off", "func-style": "off" },
+  },
+],
+```
+
 ## Opt-in rules
 
 `magic-oxlint-plugin` ships four rules. None is on by default anywhere.
@@ -324,7 +372,10 @@ pnpm add -D magic-oxlint-plugin
 ```
 
 ```ts
-// oxlint.config.mts
+// oxlint.config.mts — complete file, imports included
+import base from "magic-oxlint-config/base";
+import { defineConfig } from "oxlint";
+
 export default defineConfig({
   extends: [base],
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
@@ -416,9 +467,19 @@ the first `oxfmt .` produces a large, harmless diff in every manifest.
 **There is no `.oxfmtignore`.** oxfmt honours `.gitignore` and `.prettierignore`
 plus the config's own `ignorePatterns`. A `.oxfmtignore` file does nothing.
 
-**`no-restricted-syntax` doesn't exist in oxlint.** The two things it was used
-for are now real rules: `no-restricted-properties` for the `process.env` ban,
-`no-restricted-imports` for restricted imports.
+**`no-restricted-syntax` doesn't exist in oxlint.** The three things it was
+used for map to real rules: `no-restricted-properties` for the `process.env`
+ban, `no-restricted-imports` for restricted imports, and the statement bans
+(`ForInStatement`, `LabeledStatement`, `WithStatement`) land on `guard-for-in`,
+`no-labels` and `no-with`. One deliberate relaxation in that last group: the
+old config banned `for..in` outright, `guard-for-in` accepts a
+`hasOwnProperty`-guarded loop.
+
+**`oxlint --fix` can need two passes.** Some fixes cascade: safe-jsx rewrites
+`items.length && <li/>` to `Boolean(items.length) &&`, which
+`unicorn/explicit-length-check` then rewrites to `items.length > 0 &&`. Run
+`--fix` until the diff is empty (two passes in practice) before reading the
+result.
 
 ## Development
 
@@ -433,3 +494,8 @@ asserts on exactly which rules fire. If a config change stops catching leaked
 
 `pnpm run validate-rules` checks every rule name in every preset against
 oxlint's own shipped JSON schema. Run it after any oxlint bump.
+
+`pnpm run adversarial` runs `fixtures/adversarial` — end-to-end
+expected-outcome checks against the real binaries: every emitted variant on a
+clean file, the opt-in plugin rules, the README's restricted-imports snippet,
+safe-jsx's autofix convergence, and oxfmt's import-sort edge cases.
