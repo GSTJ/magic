@@ -54,8 +54,12 @@ the same commit is what breaks history.
 --dry-run             Explicit form of the default. Mutually exclusive with --write.
 --detect <mode>       oxlint (default) | builtin
 --root <dir>          Where to start looking for the repo. Default: cwd.
---tsconfig <path>     tsconfig whose `paths` drive alias rewriting.
---rename <old=new>    Override one target basename. Repeatable.
+--tsconfig <path>     tsconfig whose `paths` drive alias rewriting. Repeatable.
+                      Default: every tsconfig.json / tsconfig.base.json /
+                      jsconfig.json at the repo root and in each workspace
+                      package, merged.
+--rename <old=new>    Override one target basename. Repeatable. Keys are FULL
+                      basenames, extension included — `S3=s3` is an error.
 --allow-dirty         Skip the clean-tree check.
 --strict              Exit 1 if anything needs manual review.
 --json                Emit the whole result as JSON.
@@ -63,8 +67,36 @@ the same commit is what breaks history.
 
 Positional arguments scope the run: `magic-kebab --dry-run src/components`.
 
-Exit codes: `0` success, `1` refused (dirty tree, bad arguments) or the plan has
-conflicts, or `--strict` and something needs review.
+Exit codes: `0` success, `1` refused (dirty tree, bad arguments, a `--rename`
+that matched nothing) or the plan has conflicts, or `--strict` and something
+needs review.
+
+### `--rename` keys are full basenames
+
+`--rename zodI18n.ts=zod-i18n.ts` works. `--rename zodI18n=zod-i18n` is an
+**error**, not a no-op — it used to be silently ignored, and the file was renamed
+to the codemod's own target instead. `--rename` exists precisely for the files a
+human looked at and overruled, so discarding one quietly is the worst thing this
+tool could do with it. The message suggests the key you meant.
+
+The same applies to a key naming a file the detector never reported: under
+`--detect oxlint` the preset already exempts `__mocks__/AsyncStorage.ts`, so
+`--rename AsyncStorage.ts=…` matches nothing and fails. Use `--detect builtin` if
+you want to force one of those.
+
+### Path aliases in a monorepo
+
+The resolver reads `paths` from every tsconfig it can find: the repo root, then
+each package matched by `pnpm-workspace.yaml`'s `packages` globs, then a generic
+`*/tsconfig.json` / `*/*/tsconfig.json` sweep. It used to look only at the run
+root — which in a monorepo usually has no tsconfig at all — print one line saying
+so, and then rewrite relative imports while leaving every `@/…` alias pointing at
+a file it had just renamed.
+
+If an alias still cannot be resolved (declared only in a bundler config, say) and
+its last segment names a file being renamed, that import is printed under
+`NEEDS REVIEW` and `--strict` exits non-zero. Pass `--tsconfig` — repeatable —
+at the config that defines it.
 
 ### `--detect oxlint` vs `--detect builtin`
 
@@ -98,6 +130,8 @@ every `[postId].tsx` in the repo.
 | tsconfig `paths` aliases (`@/components/Button`)                      | rewritten    |
 | `.js` specifiers standing in for `.ts` files (NodeNext)               | rewritten    |
 | `import(`./${name}`)` and other computed specifiers                   | **reported** |
+| bare string literals that resolve to a renamed file                   | **reported** |
+| an unresolvable `@/` `~/` `#` alias naming a renamed file             | **reported** |
 | `moduleNameMapper`, `resolve.alias`, bundler configs                  | **reported** |
 | `package.json` `main` / `exports` / `bin`, `.md` docs, YAML           | **reported** |
 
@@ -105,6 +139,13 @@ The split is deliberate. A `moduleNameMapper` key is a _regex_ whose escaping
 belongs to whoever wrote it, and a `package.json` `exports` path is a published
 contract. Guessing at either is how a codemod turns a lint fix into an outage, so
 those are printed under `NEEDS REVIEW` and left exactly as they were.
+
+Bare string literals are the newest entry and the one that cost the most: an
+Expo config plugin (`plugins: ["./plugins/withThing"]`), the argument to a repo's
+own `require`-wrapper, a route manifest. None of those is a specifier to any AST
+pass, all of them resolve to a file, and the Expo case only fails on Linux/EAS —
+APFS resolves the stale path fine, so a migration verifies green locally and
+ships a broken build.
 
 One invariant makes the rest tractable: **directories never move.** Only the
 basename stem changes, so only the last segment of any specifier is ever touched.

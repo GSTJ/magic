@@ -25,10 +25,14 @@ Options
                         builtin applies this package's copy of the rule to tracked
                                 files. Use before the repo has adopted the preset.
   --root <dir>          Where to start looking for the repo. Default: cwd.
-  --tsconfig <path>     tsconfig whose \`paths\` drive alias rewriting.
-                        Default: tsconfig.json / tsconfig.base.json / jsconfig.json.
+  --tsconfig <path>     tsconfig whose \`paths\` drive alias rewriting. Repeatable.
+                        Default: every tsconfig.json / tsconfig.base.json /
+                        jsconfig.json at the repo root and in each workspace
+                        package, merged.
   --rename <old=new>    Override one target basename, e.g. --rename S3.ts=s3.ts.
-                        Repeatable. Also forces a rename the skip list would refuse.
+                        Keys are FULL basenames, extension included — \`S3=s3\` is
+                        an error, not a no-op. Repeatable. Also forces a rename
+                        the skip list would refuse.
   --allow-dirty         Skip the clean-tree check. You will regret this.
   --strict              Exit 1 if anything needs manual review.
   --json                Emit the whole result as JSON instead of prose.
@@ -44,7 +48,7 @@ const parsed = parseArgs({
     "dry-run": { type: "boolean", default: false },
     detect: { type: "string", default: "oxlint" },
     root: { type: "string" },
-    tsconfig: { type: "string" },
+    tsconfig: { type: "string", multiple: true, default: [] },
     rename: { type: "string", multiple: true, default: [] },
     "allow-dirty": { type: "boolean", default: false },
     strict: { type: "boolean", default: false },
@@ -100,9 +104,13 @@ const footer = (result: KebabResult): string[] => {
 const report = (result: KebabResult): void => {
   const { plan } = result;
   const verb = result.applied ? "Applied" : "Plan";
-  const tsconfig = result.tsconfigPath
-    ? relative(result.root, result.tsconfigPath)
-    : "(none found — path aliases will not be rewritten)";
+  const tsconfig =
+    result.tsconfigPaths.length > 0
+      ? result.tsconfigPaths
+          .map((path) => relative(result.root, path))
+          .join(", ")
+      : "(no tsconfig with `paths` found — ALIAS IMPORTS WILL NOT BE REWRITTEN. " +
+        "In a monorepo this is usually wrong; pass --tsconfig.)";
 
   const out = [
     `${verb} — ${summarise(result)}`,
@@ -159,7 +167,7 @@ try {
     write: parsed.values.write,
     allowDirty: parsed.values["allow-dirty"],
     detect,
-    tsconfig: parsed.values.tsconfig,
+    tsconfigs: parsed.values.tsconfig ?? [],
     overrides,
   });
 

@@ -285,6 +285,154 @@ module.exports = { Button };
 `,
   );
 
+  // A module path inside a *bare string literal*, passed to the repo's own
+  // require-wrapper. Not an import, not a `require`, not a mock helper — no AST
+  // pass calls this a specifier, and three of these went stale unreported in a
+  // real migration.
+  write(
+    root,
+    "src/lib/loader.ts",
+    `export const loadModule = async (specifier: string): Promise<unknown> =>
+  import(/* @vite-ignore */ specifier);
+`,
+  );
+  write(
+    root,
+    "src/components/registry.ts",
+    `import { loadModule } from "../lib/loader";
+
+export const panel = async (): Promise<unknown> => loadModule("./LazyPanel");
+`,
+  );
+
+  // The Expo config-plugin case, which is the same shape and the nastiest
+  // failure: APFS resolves the stale path fine, so it only breaks on Linux/EAS.
+  write(
+    root,
+    "plugins/WithMagicButton.ts",
+    `export default (config: Record<string, unknown>): Record<string, unknown> =>
+  config;
+`,
+  );
+  write(
+    root,
+    "app.config.ts",
+    `export default {
+  name: "kebab-fixture",
+  plugins: ["./plugins/WithMagicButton"],
+};
+`,
+  );
+
+  commitAll(root, "initial");
+  return root;
+};
+
+/**
+ * A monorepo with **no tsconfig at the root** — the shape that made magic-kebab
+ * print `tsconfig: (none found)` and then rewrite relative imports while
+ * silently leaving every `@/…` alias pointing at a file it had just renamed.
+ *
+ * `apps/web/tsconfig.json` holds the `paths`; `pnpm-workspace.yaml` is how the
+ * resolver is expected to find it. `apps/api` has aliases defined only in a
+ * bundler config the resolver cannot read, so its import is the case that must
+ * land in NEEDS REVIEW rather than be quietly skipped.
+ */
+export const buildMonorepoFixtureRepo = () => {
+  const root = makeTempRepo();
+
+  write(
+    root,
+    "package.json",
+    `${JSON.stringify({ name: "kebab-monorepo", private: true, type: "module" }, null, 2)}\n`,
+  );
+  write(
+    root,
+    "pnpm-workspace.yaml",
+    `packages:\n  - "apps/*"\n\nminimumReleaseAge: 4320\n`,
+  );
+
+  const { rule, mocksOverride } = presetFilenameCaseConfig();
+  write(
+    root,
+    ".oxlintrc.json",
+    `${JSON.stringify(
+      {
+        plugins: ["unicorn"],
+        ignorePatterns: ["**/node_modules/**", "**/*.d.ts"],
+        rules: { "unicorn/filename-case": rule },
+        overrides: [mocksOverride],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  write(root, ".gitignore", "node_modules/\n");
+  mkdirSync(join(root, "node_modules", ".bin"), { recursive: true });
+  symlinkSync(
+    join(repoRoot, "node_modules", "oxlint"),
+    join(root, "node_modules", "oxlint"),
+  );
+  symlinkSync(
+    "../oxlint/bin/oxlint",
+    join(root, "node_modules", ".bin", "oxlint"),
+  );
+
+  write(
+    root,
+    "apps/web/tsconfig.json",
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2022",
+          module: "preserve",
+          moduleResolution: "bundler",
+          strict: true,
+          noEmit: true,
+          paths: { "@/*": ["./src/*"] },
+        },
+        include: ["src"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  write(
+    root,
+    "apps/web/src/components/CardHeader.ts",
+    `export const CardHeader = (): string => "header";\n`,
+  );
+  write(
+    root,
+    "apps/web/src/pages/home.ts",
+    `import { CardHeader } from "@/components/CardHeader";
+
+export const home = (): string => CardHeader();
+`,
+  );
+
+  // Aliases declared only in a bundler config. Nothing here can resolve `~/`,
+  // so the import must be reported, not silently left behind.
+  write(
+    root,
+    "apps/api/vite.config.ts",
+    `export default { resolve: { alias: { "~": "./src" } } };\n`,
+  );
+  write(
+    root,
+    "apps/api/src/services/PaymentService.ts",
+    `export const charge = (): number => 1;\n`,
+  );
+  write(
+    root,
+    "apps/api/src/routes/checkout.ts",
+    `import { charge } from "~/services/PaymentService";
+
+export const checkout = (): number => charge();
+`,
+  );
+
   commitAll(root, "initial");
   return root;
 };

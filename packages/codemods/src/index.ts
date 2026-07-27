@@ -11,25 +11,26 @@ import { findStaleReferences } from "./references.ts";
 import { createResolver } from "./resolve.ts";
 import { type Edit, type ManualReview, rewriteImports } from "./rewrite.ts";
 
-export interface KebabOptions {
+export type KebabOptions = {
   readonly cwd: string;
   readonly paths: string[];
   readonly write: boolean;
   readonly allowDirty: boolean;
   readonly detect: DetectMode;
-  readonly tsconfig: string | undefined;
+  /** Explicit tsconfigs whose `paths` drive alias rewriting. Empty = discover. */
+  readonly tsconfigs: string[];
   /** `Button.tsx` → `btn.tsx`, keyed by old basename. */
   readonly overrides: Map<string, string>;
-}
+};
 
-export interface KebabResult {
+export type KebabResult = {
   readonly root: string;
   readonly plan: RenamePlan;
   readonly edits: Edit[];
   readonly manual: ManualReview[];
-  readonly tsconfigPath: string | undefined;
+  readonly tsconfigPaths: string[];
   readonly applied: boolean;
-}
+};
 
 /**
  * Order matters and is not the obvious one: **rewrite first, move second.**
@@ -52,7 +53,7 @@ export const runKebabCodemod = (options: KebabOptions): KebabResult => {
     options.overrides,
   );
   const tracked = trackedFiles(root);
-  const resolver = createResolver(root, options.tsconfig);
+  const resolver = createResolver(root, options.tsconfigs);
 
   const { edits, manual } = rewriteImports(
     root,
@@ -75,7 +76,7 @@ export const runKebabCodemod = (options: KebabOptions): KebabResult => {
     plan,
     edits,
     manual: [...manual, ...stale],
-    tsconfigPath: resolver.tsconfigPath,
+    tsconfigPaths: resolver.tsconfigPaths,
     applied: options.write,
   };
 };

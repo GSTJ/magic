@@ -2,33 +2,34 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { type DetectMode, detectViolations } from "./detect.ts";
+import { CodemodError } from "./git.ts";
 import { isKebabCase, stemOf } from "./kebab.ts";
 import { skipReasonFor } from "./skip.ts";
 
-export interface Rename {
+export type Rename = {
   readonly from: string;
   readonly to: string;
   readonly reason: "violation" | "paired-mock" | "override";
-}
+};
 
-export interface Skipped {
+export type Skipped = {
   readonly path: string;
   readonly rule: string;
   readonly explanation: string;
-}
+};
 
-export interface Conflict {
+export type Conflict = {
   readonly from: string;
   readonly to: string;
   readonly detail: string;
-}
+};
 
-export interface RenamePlan {
+export type RenamePlan = {
   readonly renames: Rename[];
   readonly skipped: Skipped[];
   readonly conflicts: Conflict[];
   readonly detectedBy: DetectMode;
-}
+};
 
 const withBasename = (relativePath: string, name: string): string => {
   const directory = dirname(relativePath);
@@ -58,11 +59,11 @@ const pairedMocks = (root: string, renames: Rename[]): Rename[] =>
       }));
   });
 
-interface Triage {
+type Triage = {
   readonly rename?: Rename;
   readonly skip?: Skipped;
   readonly conflict?: Conflict;
-}
+};
 
 const triage = (
   root: string,
@@ -113,13 +114,55 @@ const triage = (
   };
 };
 
+/**
+ * A `--rename` key that matches nothing in the plan.
+ *
+ * `--rename` exists for the cases where a human has overruled the codemod —
+ * CONFLICTS resolution, acronyms like `S3.ts`. Keys are full basenames
+ * *including the extension*; `--rename zodI18n=zod-i18n` used to be accepted,
+ * silently ignored, and the file renamed to the codemod's own target instead.
+ * So an ignored key means the human's decision was discarded on exactly the
+ * files someone looked at carefully — which is why this is fatal rather than a
+ * warning.
+ */
+const assertOverridesMatched = (
+  overrides: Map<string, string>,
+  violations: { path: string }[],
+): void => {
+  const basenames = new Set(
+    violations.map((violation) => basename(violation.path)),
+  );
+  const unmatched = [...overrides.keys()].filter((key) => !basenames.has(key));
+  if (unmatched.length === 0) return;
+
+  const lines = unmatched.map((key) => {
+    const candidates = [...basenames].filter(
+      (name) => stemOf(name) === key || name.startsWith(`${key}.`),
+    );
+    const hint =
+      candidates.length > 0
+        ? ` Did you mean ${candidates
+            .map((name) => `\`${name}=${overrides.get(key) ?? ""}\``)
+            .join(" or ")}? Keys are full basenames, extension included.`
+        : " No file in the plan has that basename.";
+    return `  --rename ${key}=${overrides.get(key) ?? ""}${hint}`;
+  });
+
+  throw new CodemodError(
+    `${unmatched.length} --rename override${unmatched.length === 1 ? "" : "s"} matched nothing:\n${lines.join("\n")}`,
+  );
+};
+
 export const buildPlan = (
   root: string,
   paths: string[],
   mode: DetectMode,
   overrides: Map<string, string>,
 ): RenamePlan => {
-  const triaged = detectViolations(root, paths, mode).map((violation) =>
+  const violations = detectViolations(root, paths, mode);
+  assertOverridesMatched(overrides, violations);
+
+  const triaged = violations.map((violation) =>
     triage(root, violation.path, violation.target, overrides),
   );
 

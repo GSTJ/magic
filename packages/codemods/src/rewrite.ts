@@ -13,26 +13,27 @@ import {
 } from "ts-morph";
 
 import { isLintable, stemOf } from "./kebab.ts";
+import { isAliasShaped } from "./resolve.ts";
 
-export interface Edit {
+export type Edit = {
   readonly file: string;
   readonly line: number;
   readonly from: string;
   readonly to: string;
   readonly kind: string;
-}
+};
 
-export interface ManualReview {
+export type ManualReview = {
   readonly file: string;
   readonly line: number | undefined;
   readonly detail: string;
   readonly text: string;
-}
+};
 
-export interface RewriteResult {
+export type RewriteResult = {
   readonly edits: Edit[];
   readonly manual: ManualReview[];
-}
+};
 
 /**
  * Module-mocking helpers whose first argument is a module specifier resolved
@@ -90,10 +91,10 @@ const rewrittenSpecifier = (
   return matches ? head + newStem + tail.slice(oldStem.length) : undefined;
 };
 
-interface SpecifierSite {
+type SpecifierSite = {
   readonly literal: StringLiteral;
   readonly kind: string;
-}
+};
 
 const callSpecifierKind = (expression: Node): string | undefined => {
   if (expression.getKind() === SyntaxKind.ImportKeyword)
@@ -135,6 +136,58 @@ const specifierLiterals = (sourceFile: SourceFile): SpecifierSite[] => {
   }
 
   return found;
+};
+
+/**
+ * String literals that are module paths but sit somewhere no AST pass calls a
+ * specifier: an Expo config plugin (`plugins: ["./plugins/withThing"]`), the
+ * argument to a repo's own `require`-wrapper, a workspace subpath in a manifest
+ * of routes.
+ *
+ * Two real breakages came from here, neither reported by `--dry-run`, and the
+ * Expo one only fails on Linux/EAS — APFS resolves the old path fine, so a
+ * migration agent verifies green locally and ships a broken build. That is the
+ * same trap the third-name rename dance exists to prevent.
+ *
+ * Reported, never edited. A bare string that happens to match a renamed file
+ * might be a module path, a fixture name, or an analytics event; the split the
+ * README already argues for applies.
+ */
+const collectBareModulePaths = (
+  root: string,
+  sourceFile: SourceFile,
+  isRenamed: (fromFile: string, value: string) => Rename[],
+  handled: Set<StringLiteral>,
+): ManualReview[] => {
+  const filePath = sourceFile.getFilePath();
+  const file = relative(root, filePath);
+
+  return sourceFile
+    .getDescendantsOfKind(SyntaxKind.StringLiteral)
+    .filter((literal) => !handled.has(literal))
+    .flatMap((literal) => {
+      const value = literal.getLiteralValue();
+      // Cheap gate before touching the filesystem: a module path has a slash or
+      // is a bare sibling name, and never has a space.
+      if (value.length === 0 || value.includes(" ")) return [];
+
+      const hits = isRenamed(filePath, value);
+      if (hits.length === 0) return [];
+
+      const targets = [...new Set(hits.map((hit) => basename(hit.to)))];
+      return [
+        {
+          file,
+          line: literal.getStartLineNumber(),
+          detail:
+            `The string "${value}" resolves to a file being renamed to ` +
+            `${targets.join(", ")}, but it is not in an import position — ` +
+            `an Expo config plugin, a require-wrapper argument, a route ` +
+            `manifest. Not rewritten; check it by hand.`,
+          text: literal.getText(),
+        },
+      ];
+    });
 };
 
 /** Things that look like module references but cannot be resolved statically. */
@@ -263,12 +316,60 @@ export const rewriteImports = (
     return { file, line, from: specifier, to: next, kind: site.kind };
   };
 
+  const renamesFor = (fromFile: string, value: string): Rename[] =>
+    resolver
+      .candidates(fromFile, value)
+      .map((candidate) => byOldAbsolute.get(candidate))
+      .filter((rename): rename is Rename => rename !== undefined);
+
+  /**
+   * An alias-shaped specifier naming a file we are about to rename, that we
+   * could not resolve.
+   *
+   * This is the loud half of the monorepo-tsconfig fix. Even with the workspace
+   * walk, a repo can alias through a bundler config we never read — and the old
+   * behaviour there was to print one calm line about no tsconfig being found and
+   * then rewrite half the imports anyway. `--strict` exits non-zero on anything
+   * in `manual`, which is what makes this a gate rather than a note.
+   */
+  const unresolvedAlias = (
+    filePath: string,
+    site: SpecifierSite,
+  ): ManualReview | undefined => {
+    const specifier = site.literal.getLiteralValue();
+    if (!isAliasShaped(specifier)) return undefined;
+    if (renamesFor(filePath, specifier).length > 0) return undefined;
+
+    const tail = specifier.slice(specifier.lastIndexOf("/") + 1);
+    const matching = renames.filter(
+      (rename) => stemOf(basename(rename.from)) === stemOf(tail),
+    );
+    if (matching.length === 0) return undefined;
+
+    return {
+      file: relative(root, filePath),
+      line: site.literal.getStartLineNumber(),
+      detail:
+        `"${specifier}" names a file being renamed (${matching
+          .map((rename) => rename.from)
+          .join(", ")}) but no \`paths\` entry resolves it, so it was NOT ` +
+        `rewritten. ${
+          resolver.hasAliases
+            ? "The tsconfigs that were read do not cover this alias."
+            : "No tsconfig with `paths` was found at all."
+        } Point --tsconfig at the config that defines it and re-run.`,
+      text: site.literal.getText(),
+    };
+  };
+
   for (const sourceFile of sourceFiles) {
     const filePath = sourceFile.getFilePath();
 
-    const outcomes = specifierLiterals(sourceFile).map((site) => ({
+    const sites = specifierLiterals(sourceFile);
+    const handledLiterals = new Set(sites.map((site) => site.literal));
+    const outcomes = sites.map((site) => ({
       site,
-      outcome: considerSite(filePath, site),
+      outcome: considerSite(filePath, site) ?? unresolvedAlias(filePath, site),
     }));
 
     const fileEdits = outcomes
@@ -286,6 +387,7 @@ export const rewriteImports = (
             outcome !== undefined && !isEdit(outcome),
         ),
       ...collectAmbiguous(root, sourceFile, stems),
+      ...collectBareModulePaths(root, sourceFile, renamesFor, handledLiterals),
     );
 
     edits.push(...fileEdits.map((entry) => entry.outcome));

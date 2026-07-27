@@ -3,7 +3,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { buildFixtureRepo, filenameCaseViolations } from "./fixture-repo.mjs";
+import {
+  buildFixtureRepo,
+  buildMonorepoFixtureRepo,
+  filenameCaseViolations,
+} from "./fixture-repo.mjs";
 import {
   cleanup,
   commitAll,
@@ -89,6 +93,7 @@ describe("magic-kebab --dry-run", () => {
       (match) => match[1],
     );
     assert.deepEqual(planned.sort(), [
+      "plugins/WithMagicButton.ts",
       "src/components/Button.tsx",
       "src/components/LazyPanel.tsx",
       "src/components/UserProfile.tsx",
@@ -131,6 +136,22 @@ describe("magic-kebab --dry-run", () => {
     assert.match(dry.stdout, /jest\.config\.js:\d+/u);
     assert.match(dry.stdout, /docs\/architecture\.md:\d+/u);
     assert.match(dry.stdout, /computed specifier/u);
+  });
+
+  it("reports a bare string literal that is really a module path", () => {
+    // The Expo config-plugin case. Only breaks on Linux/EAS, because APFS
+    // resolves the stale path fine — so nothing local catches it.
+    assert.match(dry.stdout, /app\.config\.ts:\d+/u);
+    assert.match(dry.stdout, /"\.\/plugins\/WithMagicButton"/u);
+
+    // The require-wrapper case: a local helper, not `require` or `jest.mock`.
+    assert.match(dry.stdout, /src\/components\/registry\.ts:\d+/u);
+    assert.match(dry.stdout, /not in an import position/u);
+  });
+
+  it("never rewrites those strings, only reports them", () => {
+    assert.doesNotMatch(dry.stdout, /"\.\/plugins\/WithMagicButton" ->/u);
+    assert.doesNotMatch(dry.stdout, /"\.\/LazyPanel" ->/u);
   });
 
   it("is byte-identical to the plan --write then executes", () => {
@@ -360,13 +381,17 @@ describe("magic-kebab options", () => {
   it("--rename forces a file past the skip list, but only one the detector saw", () => {
     // `--rename` overrides the *target* of a reported violation; it is not a way
     // to add files. Under the default detection the preset exempts the package
-    // mock outright, so there is nothing to override and the flag is inert.
+    // mock outright, so there is nothing to override — and that now FAILS rather
+    // than being silently inert, because a discarded `--rename` means the run is
+    // not what was asked for.
     const inert = magicKebab(
       root,
       "--dry-run",
       "--rename",
       "AsyncStorage.ts=async-storage.ts",
     );
+    assert.equal(inert.status, 1);
+    assert.match(inert.stderr, /matched nothing/u);
     assert.doesNotMatch(inert.stdout, /AsyncStorage\.ts ->/u);
 
     const forced = magicKebab(
@@ -381,6 +406,17 @@ describe("magic-kebab options", () => {
       forced.stdout,
       /src\/__mocks__\/AsyncStorage\.ts -> src\/__mocks__\/async-storage\.ts {2}\[override\]/u,
     );
+  });
+
+  it("rejects a --rename key that omits the extension instead of ignoring it", () => {
+    // The whole bug: `--rename zodI18n=zod-i18n` used to exit 0, print nothing,
+    // and rename the file to the codemod's own target. Keys are full basenames.
+    const result = magicKebab(root, "--dry-run", "--rename", "Button=btn.tsx");
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /matched nothing/u);
+    assert.match(result.stderr, /Did you mean `Button\.tsx=btn\.tsx`/u);
+    assert.match(result.stderr, /full basenames/u);
   });
 
   it("rejects a --rename target that would still violate the rule", () => {
@@ -460,6 +496,65 @@ describe("magic-kebab options", () => {
     } finally {
       cleanup(collision);
     }
+  });
+});
+
+describe("a monorepo with no tsconfig at the root", () => {
+  let root;
+  let dry;
+  before(() => {
+    root = buildMonorepoFixtureRepo();
+    dry = magicKebab(root, "--dry-run");
+  });
+  after(() => cleanup(root));
+
+  it("finds the workspace packages' tsconfigs instead of giving up at the root", () => {
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.match(dry.stdout, /tsconfig: {2}apps\/web\/tsconfig\.json/u);
+    assert.doesNotMatch(dry.stdout, /none found/u);
+  });
+
+  it("rewrites the alias import that a root-only lookup would have missed", () => {
+    assert.match(
+      dry.stdout,
+      /"@\/components\/CardHeader" -> "@\/components\/card-header"/u,
+    );
+  });
+
+  it("reports — loudly — an alias it still cannot resolve", () => {
+    // `~/` is declared only in a vite config. Nothing can resolve it, so the
+    // import stays as it is; the point is that it is now impossible to miss.
+    assert.match(dry.stdout, /NEEDS REVIEW/u);
+    assert.match(dry.stdout, /apps\/api\/src\/routes\/checkout\.ts:\d+/u);
+    assert.match(dry.stdout, /"~\/services\/PaymentService"/u);
+    assert.match(dry.stdout, /names a file being renamed/u);
+  });
+
+  it("--strict refuses to let that pass", () => {
+    const strict = magicKebab(root, "--dry-run", "--strict");
+    assert.equal(strict.status, 1);
+  });
+
+  it("--tsconfig is repeatable and takes over discovery", () => {
+    const explicit = magicKebab(
+      root,
+      "--dry-run",
+      "--tsconfig",
+      "apps/web/tsconfig.json",
+    );
+    assert.match(
+      explicit.stdout,
+      /"@\/components\/CardHeader" -> "@\/components\/card-header"/u,
+    );
+
+    const missing = magicKebab(
+      root,
+      "--dry-run",
+      "--tsconfig",
+      "apps/nope/tsconfig.json",
+    );
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /does not exist/u);
   });
 });
 
