@@ -52,6 +52,15 @@ This writes a **snapshot**. Bumping `magic-oxfmt-config` won't update it — rer
 the command. The `.mts` path is strictly better; use this only if the toolchain
 forces plain JSON.
 
+**Pick one config file, not both.** oxfmt accepts exactly one of
+`.oxfmtrc.json`, `.oxfmtrc.jsonc`, `oxfmt.config.ts`, `oxfmt.config.mts` per
+directory. Two present is not a precedence question — every later oxfmt run
+dies with `Failed to load configuration file. Both '.oxfmtrc.json' and
+'oxfmt.config.mts' found in <dir>` and exits 1. So `magic-oxfmt-init` refuses to
+write next to an existing config rather than leaving you in that state, and
+`--force` does not override it (it only covers overwriting the file you named).
+Delete the other config first, or `--out` the snapshot elsewhere.
+
 ## House style
 
 Prettier's defaults, which is what the incumbent `@magic/prettier-config` used
@@ -95,6 +104,11 @@ Two behaviours worth knowing:
   type group, which is why the `-type` variants are listed first.
 - **Side-effect imports don't move.** `sortSideEffects: false`, because the
   position of `import "react-native-gesture-handler"` _is_ its meaning.
+- **`internalPattern` is the exception to the glob rule.** It takes literal
+  prefixes (`"@/"`), not globs (`"@/**"`). A glob there matches nothing, without
+  error, and every aliased import quietly sorts into the third-party group next
+  to `zod`. Ours is `["~/", "@/", "#"]`; if your repo aliases something else,
+  add the prefix.
 
 `sortPackageJson` is on (scripts keep their authored order), so the first run
 reorders keys in every `package.json`. Harmless, but expect the diff.

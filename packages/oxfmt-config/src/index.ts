@@ -176,7 +176,16 @@ const sortImports = {
     "style",
     "unknown",
   ],
-  internalPattern: ["~/**", "@/**", "#**"],
+  // NOT a glob. `internalPattern` is the one sortImports option that takes
+  // literal *prefixes* — oxfmt's schema documents the default as
+  // `["~/", "@/", "#"]` and matches with a plain starts-with. Writing
+  // perfectionist-style globs here (`"@/**"`) matches nothing, silently, so
+  // every aliased import falls through to `value-external` and sorts next to
+  // `zod`. Restated explicitly rather than left to the default so a future
+  // oxfmt default change can't reshuffle imports across every repo.
+  // (`customGroups[].elementNamePattern` above *is* glob-matched. Only this
+  // key is prefix-based.)
+  internalPattern: ["~/", "@/", "#"],
   newlinesBetween: true,
   order: "asc",
   ignoreCase: true,

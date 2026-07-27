@@ -43,6 +43,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "prepack": "pnpm run build",
     "clean": "rm -rf dist .turbo",
     "lint": "oxlint",
     "test": "node --test test/*.test.mjs",
@@ -62,6 +63,6 @@
     }
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18.0"
   }
 }

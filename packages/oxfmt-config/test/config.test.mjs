@@ -96,6 +96,34 @@ describe("import sorting", () => {
     ]);
   });
 
+  it("classifies ~/ @/ # aliases as internal, after third-party", async () => {
+    // Regression: internalPattern takes literal PREFIXES, not perfectionist
+    // globs. With globs ("@/**") nothing matches and every alias falls through
+    // to value-external, landing next to "zod" instead of in its own group.
+    const output = await format(
+      "base",
+      "a.ts",
+      [
+        `import { c } from "#charlie";`,
+        `import { z } from "zod";`,
+        `import { a } from "~/alpha";`,
+        `import { b } from "@/bravo";`,
+        "",
+        "export const all = [z, a, b, c];",
+        "",
+      ].join("\n"),
+    );
+
+    const order = output
+      .split("\n")
+      .filter((line) => line.startsWith("import"))
+      .map((line) => line.split('"')[1]);
+
+    assert.deepEqual(order, ["zod", "#charlie", "@/bravo", "~/alpha"]);
+    // ...and in a separate group, not merged into the external block.
+    assert.match(output, /"zod";\n\n/);
+  });
+
   it("does not move side-effect imports", async () => {
     const output = await format(
       "reactNative",
@@ -132,5 +160,87 @@ describe("variants", () => {
       assert.equal(module[name].semi, true, `${name} semi`);
       assert.equal(module[name].trailingComma, "all", `${name} trailingComma`);
     }
+  });
+});
+
+describe("magic-oxfmt-init", () => {
+  const cliBin = join(packageRoot, "dist", "cli.js");
+
+  /** Run the bin in a throwaway dir seeded with `files`. Never throws. */
+  const run = (files, args = []) => {
+    const dir = mkdtempSync(join(tmpdir(), "magic-oxfmt-init-"));
+    try {
+      for (const [name, body] of Object.entries(files)) {
+        writeFileSync(join(dir, name), body);
+      }
+      try {
+        const stdout = execFileSync(process.execPath, [cliBin, ...args], {
+          cwd: dir,
+          encoding: "utf8",
+        });
+        return { code: 0, stdout, stderr: "", dir };
+      } catch (error) {
+        return {
+          code: error.status,
+          stdout: error.stdout ?? "",
+          stderr: error.stderr ?? "",
+          dir,
+        };
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("writes a snapshot in a clean directory", () => {
+    const { code, stdout } = run({});
+
+    assert.equal(code, 0);
+    assert.match(stdout, /wrote base config/);
+  });
+
+  // oxfmt accepts exactly one config file per directory. Two present is a hard
+  // load error on every later run, so the bin must not create that state.
+  for (const other of [
+    "oxfmt.config.mts",
+    "oxfmt.config.ts",
+    ".oxfmtrc.jsonc",
+  ]) {
+    it(`refuses to write .oxfmtrc.json next to ${other}`, () => {
+      const { code, stderr } = run({ [other]: "export default {};\n" });
+
+      assert.equal(code, 1);
+      assert.match(stderr, /refusing to write/);
+      assert.match(stderr, new RegExp(other.replaceAll(".", String.raw`\.`)));
+    });
+
+    it(`--force does not bypass the ${other} conflict`, () => {
+      const { code, stderr } = run({ [other]: "export default {};\n" }, [
+        "base",
+        "--force",
+      ]);
+
+      assert.equal(code, 1);
+      assert.match(stderr, /refusing to write/);
+    });
+  }
+
+  it("--out lets the snapshot escape the conflict", () => {
+    const { code, stdout } = run(
+      { "oxfmt.config.mts": "export default {};\n" },
+      ["base", "--out", "snapshot.json"],
+    );
+
+    assert.equal(code, 0);
+    assert.match(stdout, /wrote base config/);
+  });
+
+  it("still guards a plain overwrite, and --force still allows it", () => {
+    const blocked = run({ ".oxfmtrc.json": "{}\n" });
+    assert.equal(blocked.code, 1);
+    assert.match(blocked.stderr, /already exists\. Pass --force/);
+
+    const forced = run({ ".oxfmtrc.json": "{}\n" }, ["base", "--force"]);
+    assert.equal(forced.code, 0);
   });
 });
