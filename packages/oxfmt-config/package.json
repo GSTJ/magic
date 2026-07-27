@@ -1,0 +1,67 @@
+{
+  "name": "magic-oxfmt-config",
+  "version": "1.0.0",
+  "description": "Shared oxfmt configuration for GSTJ projects, including the @ianvs-equivalent import sort order.",
+  "keywords": [
+    "config",
+    "format",
+    "oxc",
+    "oxfmt",
+    "prettier",
+    "sort-imports"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/oxfmt-config#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/oxfmt-config"
+  },
+  "bin": {
+    "magic-oxfmt-init": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "clean": "rm -rf dist .turbo",
+    "lint": "oxlint",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "devDependencies": {
+    "magic-tsconfig": "workspace:*",
+    "oxfmt": "0.60.0",
+    "typescript": "^7.0.2"
+  },
+  "peerDependencies": {
+    "oxfmt": ">=0.60.0"
+  },
+  "peerDependenciesMeta": {
+    "oxfmt": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
