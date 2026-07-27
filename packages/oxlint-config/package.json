@@ -1,0 +1,59 @@
+{
+  "name": "magic-oxlint-config",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shared oxlint configs for GSTJ projects. Variants: base, react, react-native, next, expo.",
+  "keywords": ["oxlint", "oxc", "lint", "config", "react", "react-native", "expo", "nextjs"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/oxlint-config"
+  },
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/oxlint-config#readme",
+  "bugs": { "url": "https://github.com/GSTJ/magic/issues" },
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "license": "MIT",
+  "publishConfig": { "access": "public" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./base": { "types": "./dist/base.d.ts", "default": "./dist/base.js" },
+    "./react": { "types": "./dist/react.d.ts", "default": "./dist/react.js" },
+    "./react-native": {
+      "types": "./dist/react-native.d.ts",
+      "default": "./dist/react-native.js"
+    },
+    "./next": { "types": "./dist/next.d.ts", "default": "./dist/next.js" },
+    "./expo": { "types": "./dist/expo.d.ts", "default": "./dist/expo.js" },
+    "./base.json": "./base.json",
+    "./react.json": "./react.json",
+    "./react-native.json": "./react-native.json",
+    "./next.json": "./next.json",
+    "./expo.json": "./expo.json",
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "*.json", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/emit-json.mjs",
+    "clean": "rm -rf dist *.json.tmp base.json react.json react-native.json next.json expo.json .turbo",
+    "lint": "oxlint",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "eslint-plugin-react-native": "^5.0.0",
+    "eslint-plugin-safe-jsx": "^1.3.0"
+  },
+  "peerDependencies": {
+    "oxlint": ">=1.75.0"
+  },
+  "peerDependenciesMeta": {
+    "oxlint": { "optional": true }
+  },
+  "devDependencies": {
+    "magic-tsconfig": "workspace:*",
+    "typescript": "^7.0.2"
+  },
+  "engines": { "node": ">=22" }
+}
