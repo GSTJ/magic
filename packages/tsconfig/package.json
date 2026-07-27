@@ -29,6 +29,10 @@
     "lint": "oxlint",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
-    "typecheck": "echo \"magic-tsconfig ships JSON only\""
+    "typecheck": "echo \"magic-tsconfig ships JSON only\"",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

@@ -1,19 +1,22 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  // The README's library recipe, dogfooded: extend the shared base, then say
+  // what a build needs on top of it. These files used to extend nothing, which
+  // is why `incremental` in base.json and the emitDeclarationOnly trap in
+  // internal-package.json both survived to publish — the repo prescribed a shape
+  // it did not itself use. See DECISIONS.md §4.
+  "extends": "magic-tsconfig/base.json",
   "compilerOptions": {
+    // ES2023 for `Array#findLast` and friends; the shared base pins ES2022
+    // because consumer runtimes (Hermes) do not all have ES2023 yet, and this
+    // package only ever runs on Node >= 22.
     "lib": ["ES2023"],
-    "target": "ES2022",
+    // The base is written for bundlers ("module": "Preserve",
+    // "moduleResolution": "Bundler"); these are published Node ESM packages.
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

@@ -7,8 +7,7 @@
     "jsx": "preserve",
     "plugins": [{ "name": "next" }],
     "allowJs": true,
-    "noEmit": true,
-    "incremental": true
+    "noEmit": true
   },
   "exclude": ["node_modules", "build", "dist", ".next", ".expo", "out"]
 }
