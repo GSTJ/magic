@@ -1,6 +1,6 @@
 {
   "name": "magic-codemods",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Migration codemods for GSTJ projects. magic-kebab: rename files to kebab-case and rewrite every import that pointed at them.",
   "keywords": [
     "codemod",
