@@ -1,31 +1,85 @@
 import { createRequire } from "node:module";
 
+/** Mirrors oxlint's `AllowWarnDeny`. */
+export type MagicOxlintSeverity =
+  | "allow"
+  | "off"
+  | "warn"
+  | "error"
+  | "deny"
+  | number;
+
+/**
+ * Mirrors oxlint's `DummyRule`. `Record<string, unknown>` looks equivalent and
+ * is not: `unknown` is not assignable to `DummyRule`, so a config typed that way
+ * cannot be handed to `defineConfig()`. Same failure as `plugins` below.
+ */
+export type MagicOxlintRuleEntry =
+  | MagicOxlintSeverity
+  | [MagicOxlintSeverity, ...unknown[]];
+
+/**
+ * The built-in plugin names oxlint accepts in `plugins`.
+ *
+ * Duplicated from oxlint's own `LintPluginOptionsSchema` on purpose — see the
+ * `MagicOxlintConfig` docblock. It must stay a literal union rather than
+ * `string[]`: oxlint types `plugins` as this exact union, and `string[]` is
+ * *wider*, so a `string[]` field is not assignable to it. That is the direction
+ * consumers need, and getting it wrong made the README's own
+ * `defineConfig({ extends: [base] })` fail `tsc --noEmit` in every repo that put
+ * `*.config.mts` in a tsconfig `include`.
+ */
+export type MagicOxlintPlugin =
+  | "eslint"
+  | "react"
+  | "unicorn"
+  | "typescript"
+  | "oxc"
+  | "import"
+  | "jsdoc"
+  | "jest"
+  | "vitest"
+  | "jsx-a11y"
+  | "nextjs"
+  | "react-perf"
+  | "promise"
+  | "node"
+  | "vue";
+
 /**
  * Minimal structural type for an oxlint config object. We deliberately do not
  * import `Oxlintrc` from `oxlint` — that would make `oxlint` a hard dependency
  * of this package's public types, and oxlint's JS-plugin surface is explicitly
  * outside semver. Consumers pass these objects into `defineConfig()` from their
  * own oxlint install, which is where the real typing happens.
+ *
+ * Not importing oxlint's types does *not* license being loose about them: every
+ * field here has to be assignable to its `OxlintConfig` counterpart, or the
+ * README's own two-line config fails to typecheck.
+ * `fixtures/adversarial/typecheck` compiles that exact snippet against the real
+ * `oxlint` types on every `pnpm run check`.
  */
-export interface MagicOxlintConfig {
-  plugins?: string[];
+export type MagicOxlintOverride = {
+  files: string[];
+  excludeFiles?: string[];
+  rules?: Record<string, MagicOxlintRuleEntry>;
+  plugins?: MagicOxlintPlugin[];
+  jsPlugins?: (string | { name: string; specifier: string })[];
+  env?: Record<string, boolean>;
+  globals?: Record<string, "readonly" | "writable" | "off">;
+};
+
+export type MagicOxlintConfig = {
+  plugins?: MagicOxlintPlugin[];
   jsPlugins?: (string | { name: string; specifier: string })[];
   categories?: Record<string, "off" | "warn" | "error">;
   env?: Record<string, boolean>;
   globals?: Record<string, "readonly" | "writable" | "off">;
   ignorePatterns?: string[];
-  rules?: Record<string, unknown>;
+  rules?: Record<string, MagicOxlintRuleEntry>;
   settings?: Record<string, unknown>;
-  overrides?: {
-    files: string[];
-    excludeFiles?: string[];
-    rules?: Record<string, unknown>;
-    plugins?: string[];
-    jsPlugins?: (string | { name: string; specifier: string })[];
-    env?: Record<string, boolean>;
-    globals?: Record<string, "readonly" | "writable" | "off">;
-  }[];
-}
+  overrides?: MagicOxlintOverride[];
+};
 
 const require_ = createRequire(import.meta.url);
 

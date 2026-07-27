@@ -5,7 +5,7 @@ import {
   unwrapCallee,
 } from "../rule-api.ts";
 
-interface Options {
+type Options = {
   /**
    * Identifiers that start a tRPC/TanStack Query call chain. The rule walks the
    * member chain back to its root identifier and only reports when that root is
@@ -14,7 +14,7 @@ interface Options {
   roots?: string[];
   /** Hook names to flag. */
   hooks?: string[];
-}
+};
 
 const MESSAGE_ID = "preferSuspenseQuery";
 

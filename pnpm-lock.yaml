@@ -20,6 +20,9 @@ importers:
       magic-oxlint-plugin:
         specifier: workspace:*
         version: link:packages/oxlint-plugin
+      magic-tsconfig:
+        specifier: workspace:*
+        version: link:packages/tsconfig
       oxfmt:
         specifier: 0.60.0
         version: 0.60.0
@@ -104,7 +107,11 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
-  packages/tsconfig: {}
+  packages/tsconfig:
+    devDependencies:
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
 packages:
 

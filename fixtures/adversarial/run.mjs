@@ -129,6 +129,78 @@ process.stdout.write("\n[base] default preset, no opt-ins\n");
     "__mocks__/AsyncStorage.ts is exempt (the package names the file)",
     !cased.some((d) => d.filename.includes("__mocks__")),
   );
+
+  // ---- rule dispositions reversed after the 1.0.0 consumer reports ----
+  check(
+    "unicorn/no-array-reverse is off (its autofix needs ES2023; base pins ES2022)",
+    !codes(r, "array-reverse.ts").includes("unicorn(no-array-reverse)"),
+    codes(r, "array-reverse.ts").join(", ") || "none",
+  );
+  check(
+    "unicorn/catch-error-name leaves a `{ cause }` binding alone",
+    !codes(r, "error-cause.ts").includes("unicorn(catch-error-name)"),
+    codes(r, "error-cause.ts").join(", ") || "none",
+  );
+  const typeShape = diag(
+    r,
+    "type-shape.ts",
+    "typescript(consistent-type-definitions)",
+  );
+  check(
+    "consistent-type-definitions prefers `type`: the interface is reported, the alias is not",
+    typeShape.length === 1 &&
+      line(typeShape[0]) ===
+        lineOf("base", "type-shape.ts", "export interface WrongWayRound"),
+    typeShape.map(line).join(", ") || "none",
+  );
+  const titles = diag(r, "titles.test.ts", "jest(valid-title)");
+  check(
+    "jest/valid-title fires on the 3 real offenders, not on identifier-shaped titles",
+    titles.length === 3,
+    titles.map(line).join(", ") || "none",
+  );
+  check(
+    '`describe("itemsToChunks")` and `describe("shouldRetry")` pass (the \\b fix)',
+    titles.every(
+      (d) =>
+        line(d) !== lineOf("base", "titles.test.ts", '"itemsToChunks"') &&
+        line(d) !== lineOf("base", "titles.test.ts", '"shouldRetry"'),
+    ),
+    titles.map(line).join(", "),
+  );
+
+  // unicorn/prefer-export-from: off, because its suggestion fixer deletes every
+  // statement between the first and last re-export. Assert both halves — the
+  // rule is silent, AND running the destructive flag changes nothing.
+  check(
+    "unicorn/prefer-export-from does not fire on a derived-export barrel",
+    !codes(r, "derived-reexport.ts").includes("unicorn(prefer-export-from)"),
+    codes(r, "derived-reexport.ts").join(", ") || "none",
+  );
+  {
+    const target = join(here, "base", "src", "derived-reexport.ts");
+    const before = readFileSync(target, "utf8");
+    try {
+      execFileSync(
+        oxlintBin,
+        ["--fix-suggestions", "src/derived-reexport.ts"],
+        {
+          cwd: join(here, "base"),
+        },
+      );
+    } catch {
+      /* non-zero exit is fine — other diagnostics may remain */
+    }
+    const after = readFileSync(target, "utf8");
+    if (after !== before) writeFileSync(target, before, "utf8");
+    check(
+      "`--fix-suggestions` no longer deletes the derived exports (M18)",
+      after === before,
+      after.includes("TIMEOUT_SECONDS")
+        ? "file was rewritten"
+        : "TIMEOUT_SECONDS was DELETED",
+    );
+  }
 }
 
 // --------------------------------------------------------------- optin ----
@@ -361,6 +433,61 @@ process.stdout.write(
   );
 }
 
+// ---------------------------------------------------------------- next ----
+process.stdout.write(
+  "\n[next] App Router file conventions the preset promises to exempt\n",
+);
+{
+  const r = lint(join(here, "next"), ["src"]);
+
+  check(
+    "middleware.ts keeps its plain-string matcher (unicorn/prefer-string-raw off)",
+    !codes(r, "middleware.ts").includes("unicorn(prefer-string-raw)"),
+    codes(r, "middleware.ts").join(", ") || "none",
+  );
+  check(
+    "`export default async () => {}` passes in an App Router page",
+    !codes(r, "page.tsx").includes("import(no-anonymous-default-export)"),
+    codes(r, "page.tsx").join(", ") || "none",
+  );
+  check(
+    "`export default function Layout()` passes in an App Router layout",
+    !codes(r, "layout.tsx").includes("react(function-component-definition)"),
+    codes(r, "layout.tsx").join(", ") || "none",
+  );
+  check(
+    "the Pages Router keeps the same exemptions",
+    codes(r, "legacy.tsx").length === 0,
+    codes(r, "legacy.tsx").join(", ") || "none",
+  );
+  check(
+    "the whole App Router fixture is clean — no page shape is left unlintable",
+    r.diagnostics.length === 0,
+    r.diagnostics.map((d) => `${d.filename}:${d.code}`).join(", "),
+  );
+}
+
+// ------------------------------------------------------------ override ----
+process.stdout.write(
+  "\n[override] can a consumer turn off a rule the preset sets inside an override?\n",
+);
+{
+  const r = lint(join(here, "override"), ["src"]);
+  const withoutPlugins = diag(r, "no-plugins.test.ts", "jest(valid-title)");
+  const withPlugins = diag(r, "with-plugins.test.ts", "jest(valid-title)");
+
+  check(
+    "an override entry that omits `plugins` cannot switch a jest rule off",
+    withoutPlugins.length === 1,
+    `got ${withoutPlugins.length} — if this is 0, oxlint changed and the README Gotchas bullet is stale`,
+  );
+  check(
+    "repeating the plugin list via `testFilePlugins` makes the same `off` work",
+    withPlugins.length === 0,
+    withPlugins.map((d) => d.code).join(", "),
+  );
+}
+
 // --------------------------------------------------------------- clean ----
 process.stdout.write(
   "\n[clean] false-positive guard under every emitted JSON variant\n",
@@ -460,6 +587,34 @@ process.stdout.write(
   // Idempotency: a second oxfmt run must change nothing.
   execFileSync(oxfmtBin, ["--check", "work"], { cwd: fmtDir });
   check("formatting is idempotent (second run --check passes)", true);
+}
+
+// ----------------------------------------------------------- typecheck ----
+process.stdout.write(
+  "\n[typecheck] the README's own config files, compiled against oxlint's types\n",
+);
+{
+  const tscBin = join(
+    dirname(require_.resolve("typescript/package.json", { paths: [repoRoot] })),
+    "bin",
+    "tsc",
+  );
+  let output = "";
+  let ok = true;
+  try {
+    execFileSync(process.execPath, [tscBin, "--noEmit", "-p", "typecheck"], {
+      cwd: here,
+      encoding: "utf8",
+    });
+  } catch (error) {
+    ok = false;
+    output = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim().split("\n")[0];
+  }
+  check(
+    "every variant's README snippet is assignable to oxlint's OxlintConfig",
+    ok,
+    output,
+  );
 }
 
 // -------------------------------------------------------------- report ----

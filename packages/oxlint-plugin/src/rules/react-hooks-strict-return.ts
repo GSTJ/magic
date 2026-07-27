@@ -4,14 +4,14 @@ import {
   type RuleContext,
 } from "../rule-api.ts";
 
-interface Options {
+type Options = {
   /**
    * How many values a hook's returned tuple may hold. Upstream hardcodes 2;
    * this exposes it, because "two" is a house-style number rather than a fact
    * about React.
    */
   maximumReturnValues?: number;
-}
+};
 
 const MESSAGE_ID = "hooksStrictReturn";
 
@@ -26,11 +26,11 @@ const FUNCTION_TYPES = new Set([
   "ArrowFunctionExpression",
 ]);
 
-interface AstNode {
+type AstNode = {
   type?: string;
   id?: { type?: string; name?: string };
   argument?: { type?: string; elements?: unknown[] } | null;
-}
+};
 
 /**
  * Name of the nearest enclosing function, if that function is a hook.

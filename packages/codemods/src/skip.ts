@@ -3,10 +3,10 @@ import { basename, dirname, join } from "node:path";
 
 import { stemOf } from "./kebab.ts";
 
-export interface SkipReason {
+export type SkipReason = {
   readonly rule: string;
   readonly explanation: string;
-}
+};
 
 const segments = (relativePath: string): string[] =>
   relativePath.split(/[/\\]/u);

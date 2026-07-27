@@ -6,14 +6,14 @@ import {
   unwrapCallee,
 } from "../rule-api.ts";
 
-interface Options {
+type Options = {
   /** Mock namespaces to police. Defaults to both vitest and jest. */
   objects?: string[];
   /** Method names on those namespaces that constitute module-level mocking. */
   methods?: string[];
   /** Files the rule applies to, as a regex source string. */
   testFilePattern?: string;
-}
+};
 
 const MESSAGE_ID = "noModuleMocks";
 const CONDITIONAL_MESSAGE_ID = "mockInConditional";

@@ -158,8 +158,8 @@
           "error",
           {
             "mustNotMatch": [
-              "(^should|^it|correctly|\\.$)",
-              "Don't end with a full-stop, and don't start with 'should' or 'it'. Don't use 'correctly', it is presumed."
+              "(^should\\b|^it\\b|correctly|\\.$)",
+              "Don't end with a full-stop, and don't start with the word 'should' or 'it'. Don't use 'correctly', it is presumed."
             ]
           }
         ],
@@ -290,6 +290,8 @@
     ],
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    "unicorn/prefer-export-from": "off",
     "unicorn/no-immediate-mutation": "off",
     "unicorn/no-null": "off",
     "unicorn/no-object-as-default-parameter": "off",
@@ -401,9 +403,16 @@
     "prefer-spread": "error",
     "prefer-template": "error",
     "symbol-description": "error",
+    "unicorn/catch-error-name": [
+      "error",
+      {
+        "ignore": [
+          "^cause$"
+        ]
+      }
+    ],
     "unicorn/no-accessor-recursion": "error",
     "unicorn/no-array-for-each": "error",
-    "unicorn/no-array-reverse": "error",
     "unicorn/no-instanceof-builtins": "error",
     "unicorn/no-lonely-if": "error",
     "unicorn/no-negated-condition": "error",
@@ -447,7 +456,10 @@
     "promise/no-nesting": "error",
     "promise/no-return-wrap": "error",
     "promise/param-names": "error",
-    "typescript/consistent-type-definitions": "error",
+    "typescript/consistent-type-definitions": [
+      "error",
+      "type"
+    ],
     "typescript/consistent-type-imports": "error",
     "typescript/method-signature-style": "error",
     "typescript/no-confusing-non-null-assertion": "error",

@@ -7,13 +7,13 @@ import { isKebabCase, isLintable, kebabifyBasename } from "./kebab.ts";
 
 export type DetectMode = "oxlint" | "builtin";
 
-export interface Violation {
+export type Violation = {
   /** Repo-relative path, POSIX separators. */
   readonly path: string;
   /** Target basename, not a path. */
   readonly target: string;
   readonly source: DetectMode;
-}
+};
 
 const OXLINT_CODE = "unicorn(filename-case)";
 

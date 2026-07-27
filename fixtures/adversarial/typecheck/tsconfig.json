@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "magic-tsconfig/base.json",
+  "include": ["*.config.mts", "local-override.mts"]
+}

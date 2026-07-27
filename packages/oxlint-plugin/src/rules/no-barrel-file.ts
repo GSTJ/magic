@@ -5,7 +5,7 @@ import {
   type RuleContext,
 } from "../rule-api.ts";
 
-interface Options {
+type Options = {
   /**
    * Which files count as a barrel. Substring match against the POSIX-normalised
    * path, so `"/src/index.ts"` matches `packages/foo/src/index.ts`.
@@ -13,7 +13,7 @@ interface Options {
   files?: string[];
   /** Paths that may keep a wildcard re-export (same substring matching). */
   allow?: string[];
-}
+};
 
 const MESSAGE_ID = "noBarrelFile";
 

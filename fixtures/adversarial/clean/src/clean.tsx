@@ -4,10 +4,12 @@
 // choice worth flagging to the integrator).
 import { useMemo } from "react";
 
-interface Item {
+// A type alias, not an interface: `typescript/consistent-type-definitions` is
+// configured as `["error", "type"]`. See DECISIONS.md §2.
+type Item = {
   id: string;
   label: string;
-}
+};
 
 const byLabel = (a: Item, b: Item): number => a.label.localeCompare(b.label);
 

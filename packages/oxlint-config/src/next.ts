@@ -44,6 +44,9 @@ export const next: MagicOxlintConfig = extendConfig(react, {
         "**/app/**/{sitemap,robots,manifest,opengraph-image,twitter-image,icon,apple-icon}.{js,jsx,ts,tsx}",
         "**/pages/**",
         "**/middleware.{js,ts}",
+        // Next 16's rename of `middleware`. Listed now so the exemptions do not
+        // silently stop applying on the upgrade.
+        "**/proxy.{js,ts}",
         "**/instrumentation.{js,ts}",
       ],
       rules: {
@@ -52,6 +55,28 @@ export const next: MagicOxlintConfig = extendConfig(react, {
         "react/only-export-components": "off",
         // Server components and route handlers read env by definition.
         "no-restricted-properties": "off",
+
+        // Exempting `import/no-default-export` and `func-style` alone left no
+        // page shape that passes: the idiomatic `export default async () => {}`
+        // trips `import/no-anonymous-default-export`, and the obvious fix
+        // `export default function Page()` trips
+        // `react/function-component-definition`, which the react preset pins to
+        // arrow functions. Only `const Page = …; export default Page` satisfied
+        // both, which is not a convention worth enforcing on framework files.
+        // `import/no-anonymous-default-export` is on deliberately (DECISIONS §2)
+        // with "config files where it is idiomatic get an override exemption
+        // instead" — App Router pages are that case and had been missed.
+        "react/function-component-definition": "off",
+        "import/no-anonymous-default-export": "off",
+
+        // Next statically analyses the `config` export of `middleware.ts` and
+        // understands a small, fixed set of node types. `unicorn/prefer-string-raw`
+        // autofixes `matcher: ["/((?!api|_next|.*\\..*).*)"]` into a
+        // `String.raw` tagged template, and the build then dies with
+        // `Unsupported node type "TaggedTemplateExpression"` — while lint,
+        // typecheck and tests all stay green. A statically-analysed export is a
+        // framework contract, not a style choice.
+        "unicorn/prefer-string-raw": "off",
       },
     },
     // No `unicorn/filename-case` exemption is needed for the App Router: every

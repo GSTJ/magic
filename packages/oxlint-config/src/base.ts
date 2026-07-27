@@ -1,4 +1,8 @@
-import type { MagicOxlintConfig } from "./internal.ts";
+import type {
+  MagicOxlintConfig,
+  MagicOxlintOverride,
+  MagicOxlintPlugin,
+} from "./internal.ts";
 
 /**
  * Rules that are only evaluated when oxlint runs with `--type-aware` (which
@@ -109,10 +113,42 @@ export const filenameCaseIgnore: string[] = [
  * from underneath us. Being last is the only thing that makes it stick, and
  * `test/variants.test.mjs` asserts it holds in all five variants.
  */
-export const mocksFilenameCase = {
+export const mocksFilenameCase: MagicOxlintOverride = {
   files: ["**/__mocks__/**"],
   rules: { "unicorn/filename-case": "off" },
 };
+
+/**
+ * The plugin list the test-file override declares.
+ *
+ * Exported because a consumer who wants to reconfigure any `jest/*` rule the
+ * preset sets **must repeat this list verbatim** in their own override, and
+ * nobody derives that from first principles. `jest` is enabled only inside an
+ * override, and a rule belonging to a plugin that is not enabled for an override
+ * entry's own plugin set is silently ignored there — so a consumer entry with
+ * `rules: { "jest/valid-title": "off" }` and no `plugins` key does nothing, and
+ * so does a top-level `rules` entry. Verified against oxlint 1.75.0; the
+ * before/after is in the root README's Gotchas and
+ * `fixtures/adversarial/override` executes both directions.
+ *
+ *   import { testFilePlugins } from "magic-oxlint-config";
+ *
+ *   overrides: [
+ *     {
+ *       files: ["**\/*.test.ts"],
+ *       plugins: testFilePlugins,
+ *       rules: { "jest/valid-title": "off" },
+ *     },
+ *   ]
+ */
+export const testFilePlugins: MagicOxlintPlugin[] = [
+  "typescript",
+  "unicorn",
+  "oxc",
+  "import",
+  "promise",
+  "jest",
+];
 
 /**
  * The general-purpose preset. Everything here applies to any TypeScript
@@ -222,7 +258,25 @@ export const base: MagicOxlintConfig = {
       { case: "kebabCase", ignore: filenameCaseIgnore },
     ],
     "unicorn/no-array-callback-reference": "off",
+    // `no-array-sort` and `no-array-reverse` are the same rule against the same
+    // ES2023 method family, and this preset ships next to a tsconfig that pins
+    // `lib: ["ES2022"]`. Leaving `no-array-reverse` on meant `oxlint --fix`
+    // rewrote `[...arr].reverse()` to `arr.toReversed()` and `tsc` then rejected
+    // it — the shipped preset autofixing code into a state the shipped tsconfig
+    // cannot compile. Hermes has the same gap at runtime. Raising `lib` to
+    // ES2023 is the wrong lever: it changes the compile target of every repo to
+    // accommodate one autofix, and does nothing for Hermes.
     "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    // Its `--fix-suggestions` fixer deletes code. Verified on oxlint 1.75.0
+    // against a module that re-exports imported names in two `export { … }`
+    // statements with an unrelated `export const` between them: the fixer
+    // replaces the whole span with one `export … from`, and everything between
+    // the first and last re-export is silently gone. No diagnostic, no type
+    // error at the fix site. `{ checkUsedVariables: false }` narrows it but does
+    // not close it — see DECISIONS.md §2 and
+    // `fixtures/adversarial/base/src/derived-reexport.ts`.
+    "unicorn/prefer-export-from": "off",
     "unicorn/no-immediate-mutation": "off",
     "unicorn/no-null": "off",
     "unicorn/no-object-as-default-parameter": "off",
@@ -313,9 +367,15 @@ export const base: MagicOxlintConfig = {
     "prefer-template": "error",
     "symbol-description": "error",
 
+    // `cause` is the standard `new Error(msg, { cause })` chaining idiom, and
+    // the autofixer rewrites the shorthand property *key* along with the
+    // binding — so `.catch((cause) => { throw new E(m, { cause }) })` silently
+    // became `{ error }`, an option `Error` does not know, and the error chain
+    // was lost with nothing to report it. The rename itself is fine; rewriting a
+    // shorthand key is a semantic change wearing a rename's clothes.
+    "unicorn/catch-error-name": ["error", { ignore: ["^cause$"] }],
     "unicorn/no-accessor-recursion": "error",
     "unicorn/no-array-for-each": "error",
-    "unicorn/no-array-reverse": "error",
     "unicorn/no-instanceof-builtins": "error",
     "unicorn/no-lonely-if": "error",
     "unicorn/no-negated-condition": "error",
@@ -369,7 +429,13 @@ export const base: MagicOxlintConfig = {
     // ---------------------------------------------------------------------
     // TypeScript (syntax-only — the type-aware set is merged in below)
     // ---------------------------------------------------------------------
-    "typescript/consistent-type-definitions": "error",
+    // `"type"`, not the rule's default `"interface"`. The interface→type
+    // direction is safe; type→interface is not. An interface has no implicit
+    // index signature, so autofixing `type LngProps = { lng: Locale }` into an
+    // interface stops it satisfying `Record<string, unknown>` and Next's
+    // `Params` constraint — and the errors land at every *use* site, not at the
+    // converted declaration. A repo-wide `--fix` did 98 of those conversions.
+    "typescript/consistent-type-definitions": ["error", "type"],
     "typescript/consistent-type-imports": "error",
     "typescript/method-signature-style": "error",
     "typescript/no-confusing-non-null-assertion": "error",
@@ -447,7 +513,7 @@ export const base: MagicOxlintConfig = {
       // NOTE: `overrides[].plugins` *replaces* the top-level list rather than
       // merging it, so the base plugins have to be repeated here or every
       // typescript/unicorn/import rule silently switches off inside tests.
-      plugins: ["typescript", "unicorn", "oxc", "import", "promise", "jest"],
+      plugins: testFilePlugins,
       env: { jest: true },
       rules: {
         "no-console": "off",
@@ -538,12 +604,18 @@ export const base: MagicOxlintConfig = {
         "jest/require-hook": "off",
         "jest/require-top-level-describe": "off",
         "jest/no-large-snapshots": "off",
+        // The `\b`s are load-bearing. `^should` / `^it` match the first
+        // *letters*, not the first word, so `describe("itemsToChunks")` and
+        // `describe("shouldRetry")` were both reported — and describe blocks are
+        // normally named after the function under test, so that is a large share
+        // of them. With the word boundary, `it("should return null")` still
+        // fails and the identifier-shaped titles pass.
         "jest/valid-title": [
           "error",
           {
             mustNotMatch: [
-              String.raw`(^should|^it|correctly|\.$)`,
-              "Don't end with a full-stop, and don't start with 'should' or 'it'. Don't use 'correctly', it is presumed.",
+              String.raw`(^should\b|^it\b|correctly|\.$)`,
+              "Don't end with a full-stop, and don't start with the word 'should' or 'it'. Don't use 'correctly', it is presumed.",
             ],
           },
         ],

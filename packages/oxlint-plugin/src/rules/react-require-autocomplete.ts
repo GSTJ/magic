@@ -4,10 +4,10 @@ import {
   type RuleContext,
 } from "../rule-api.ts";
 
-interface Options {
+type Options = {
   /** Component names that render an `<input>` and forward its props. */
   inputComponents?: string[];
-}
+};
 
 const MESSAGE_ID = "requireAutocomplete";
 

@@ -31,6 +31,7 @@
     "magic-oxfmt-config": "workspace:*",
     "magic-oxlint-config": "workspace:*",
     "magic-oxlint-plugin": "workspace:*",
+    "magic-tsconfig": "workspace:*",
     "oxfmt": "0.60.0",
     "oxlint": "1.75.0",
     "turbo": "^2.10.7",

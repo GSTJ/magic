@@ -20,7 +20,7 @@
  * whole lint run.
  */
 
-export interface RuleContext {
+export type RuleContext = {
   options?: unknown[];
   getFilename?: () => string;
   filename?: string;
@@ -35,13 +35,13 @@ export interface RuleContext {
     data?: Record<string, string>;
     fix?: (fixer: RuleFixer) => unknown;
   }) => void;
-}
+};
 
-export interface RuleFixer {
+export type RuleFixer = {
   remove: (node: unknown) => unknown;
   replaceText: (node: unknown, text: string) => unknown;
   replaceTextRange: (range: [number, number], text: string) => unknown;
-}
+};
 
 /**
  * Visitor map. `before` runs at the start of each file and `after` at the end,
@@ -53,19 +53,19 @@ export type RuleVisitors = Record<string, unknown> & {
   after?: () => void;
 };
 
-export interface RuleMeta {
+export type RuleMeta = {
   type: "problem" | "suggestion" | "layout";
   docs: { description: string; recommended: boolean };
   messages: Record<string, string>;
   schema: unknown[];
   fixable?: "code" | "whitespace";
-}
+};
 
-export interface EslintRuleModule {
+export type EslintRuleModule = {
   meta: RuleMeta;
   create: (context: RuleContext) => Record<string, unknown>;
   createOnce: (context: RuleContext) => RuleVisitors;
-}
+};
 
 export const defineOxlintRule = (rule: {
   meta: RuleMeta;

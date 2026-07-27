@@ -4,7 +4,7 @@ import {
   type RuleContext,
 } from "../rule-api.ts";
 
-interface Options {
+type Options = {
   /**
    * How many statements may live inside the sole `if` block before the rule
    * stops complaining. `0` — the value the ESLint config used — means *any*
@@ -18,7 +18,7 @@ interface Options {
    * meant by it.
    */
   maximumStatements?: number;
-}
+};
 
 const MESSAGE_ID = "preferEarlyReturn";
 
