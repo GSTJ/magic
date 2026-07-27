@@ -9,12 +9,27 @@
  *
  * Source of truth is oxlint's own shipped JSON schema, so the check tracks
  * whatever oxlint version is installed.
+ *
+ * The schema cannot know about JS-plugin namespaces, so `magic/*` gets its own
+ * pass below, against the built plugin's actual rule map. Verified on 1.75.0
+ * that oxlint is equally unforgiving there — `x Rule 'no-ancestor-directory-imprt'
+ * not found in plugin 'magic'`, config refused — so the same blast radius
+ * applies, and the same check has to reach the docs, where a wrong rule name is
+ * a config a consumer will paste and cannot run.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const require_ = createRequire(import.meta.url);
+
+/** Every file under `dir`, recursively. */
+const walk = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name);
+    if (entry.name === "node_modules") return [];
+    return entry.isDirectory() ? walk(full) : [full];
+  });
 
 // oxlint does not expose the schema through `exports`, so resolve the package
 // root via its manifest and walk to the file.
@@ -85,4 +100,65 @@ if (failures.length > 0) {
 
 process.stdout.write(
   `validate-rules: OK — every rule in ${variants.length} variants exists in oxlint's schema.\n`,
+);
+
+// --------------------------------------------------------------------------
+// Pass 2 — `magic/*` names, against the plugin that actually ships.
+// --------------------------------------------------------------------------
+
+const repoRoot = join(import.meta.dirname, "..");
+const pluginDir = join(repoRoot, "packages", "oxlint-plugin");
+const pluginModule = await import(join(pluginDir, "dist", "index.js"));
+const pluginRules = new Set(Object.keys(pluginModule.default.rules));
+
+/**
+ * Every place a `magic/` rule name is written down. Configs break the linter;
+ * docs break the next person to copy one. Both are worth failing the build for.
+ */
+const sourcesOfRuleNames = [
+  join(repoRoot, "oxlint.config.mts"),
+  join(repoRoot, "README.md"),
+  join(pluginDir, "README.md"),
+  join(repoRoot, "DECISIONS.md"),
+  ...walk(join(repoRoot, "fixtures")).filter((file) =>
+    file.endsWith("oxlint.config.mts"),
+  ),
+];
+
+const MAGIC_RULE = /["`]magic\/([a-z-]+)["`]/g;
+
+const nameFailures = sourcesOfRuleNames.flatMap((file) => {
+  const text = readFileSync(file, "utf8");
+  return [...text.matchAll(MAGIC_RULE)]
+    .map(([, rule]) => rule)
+    .filter((rule) => !pluginRules.has(rule))
+    .map(
+      (rule) =>
+        `${relative(repoRoot, file)}: "magic/${rule}" is not a rule in magic-oxlint-plugin`,
+    );
+});
+
+// The reverse direction: a rule nobody documented is a rule nobody will enable.
+const pluginReadme = readFileSync(join(pluginDir, "README.md"), "utf8");
+const undocumented = [...pluginRules]
+  .filter((rule) => !pluginReadme.includes(`magic/${rule}`))
+  .map(
+    (rule) =>
+      `packages/oxlint-plugin/README.md: "magic/${rule}" is undocumented`,
+  );
+
+const magicFailures = [...new Set([...nameFailures, ...undocumented])];
+
+if (magicFailures.length > 0) {
+  process.stderr.write(`${magicFailures.join("\n")}\n`);
+  process.stderr.write(
+    `\nvalidate-rules: ${magicFailures.length} problem(s) with magic/* rule names.\n` +
+      `oxlint refuses to start on an unknown rule under a loaded JS plugin, exactly as it does for a native one.\n`,
+  );
+  process.exit(1);
+}
+
+process.stdout.write(
+  `validate-rules: OK — every magic/* name in ${sourcesOfRuleNames.length} configs and docs ` +
+    `resolves to one of the ${pluginRules.size} rules the plugin exports, and every rule is documented.\n`,
 );

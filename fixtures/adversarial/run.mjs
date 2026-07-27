@@ -56,6 +56,18 @@ const diag = (report, file, code) =>
   report.diagnostics.filter(
     (d) => d.filename.endsWith(file) && d.code === code,
   );
+const line = (d) => d.labels?.[0]?.span?.line ?? 0;
+/**
+ * 1-based line of `needle` in a fixture file. Assertions about which *case* in a
+ * fixture fired have to be anchored to the source, not to a literal line number
+ * — oxfmt sorts the imports in these files and moves them around.
+ */
+const lineOf = (dir, file, needle) => {
+  const lines = readFileSync(join(here, dir, "src", file), "utf8").split("\n");
+  const index = lines.findIndex((text) => text.includes(needle));
+  if (index === -1) throw new Error(`${file}: no line contains ${needle}`);
+  return index + 1;
+};
 
 // ---------------------------------------------------------------- base ----
 process.stdout.write("\n[base] default preset, no opt-ins\n");
@@ -94,6 +106,29 @@ process.stdout.write("\n[base] default preset, no opt-ins\n");
     magic.length === 0,
     magic.map((d) => d.code).join(", "),
   );
+
+  // unicorn/filename-case, on in `base` since 2026-07-27.
+  const cased = r.diagnostics.filter(
+    (d) => d.code === "unicorn(filename-case)",
+  );
+  check(
+    "filename-case fires on BadFileName.ts and nothing else",
+    cased.length === 1 && cased[0].filename.endsWith("BadFileName.ts"),
+    cased.map((d) => d.filename).join(", ") || "none",
+  );
+  check(
+    "the diagnostic carries the rename target magic-kebab reads",
+    (cased[0]?.help ?? "").includes("'bad-file-name.ts'"),
+    cased[0]?.help ?? "no diagnostic",
+  );
+  check(
+    "[postId].tsx is exempt (route parameter, not a word)",
+    !cased.some((d) => d.filename.includes("[postId]")),
+  );
+  check(
+    "__mocks__/AsyncStorage.ts is exempt (the package names the file)",
+    !cased.some((d) => d.filename.includes("__mocks__")),
+  );
 }
 
 // --------------------------------------------------------------- optin ----
@@ -120,6 +155,126 @@ process.stdout.write(
     "useQuery fires on api + trpc roots only (2 hits, not 4)",
     suspense.length === 2,
     `got ${suspense.length}`,
+  );
+}
+
+// ------------------------------------------------------------- shopify ----
+process.stdout.write(
+  "\n[shopify] every @shopify rule's disposition, executed (DECISIONS.md §6)\n",
+);
+{
+  const r = lint(join(here, "shopify"), ["src"]);
+
+  // --- ported into magic-oxlint-plugin ---
+  const early = diag(r, "early-return.ts", "magic(prefer-early-return)");
+  check(
+    "prefer-early-return fires on a wrapped body and a braceless expression",
+    early.length === 2,
+    `got ${early.length}`,
+  );
+  const guards = lineOf("shopify", "early-return.ts", "export const bail");
+  check(
+    "a braceless `return` / `throw` consequent is NOT reported (fidelity fix)",
+    !early.some((d) => line(d) >= guards),
+    early.map(line).join(", "),
+  );
+
+  const ancestor = diag(
+    r,
+    "ancestor-import.ts",
+    "magic(no-ancestor-directory-import)",
+  );
+  check(
+    "no-ancestor-directory-import fires on 3 imports + 2 re-exports",
+    ancestor.length === 5,
+    `got ${ancestor.length}`,
+  );
+  check(
+    "`../elsewhere/index.ts` is NOT reported — it goes down, not up",
+    !ancestor.some((d) => d.message.includes("elsewhere")),
+  );
+
+  const autocomplete = diag(
+    r,
+    "autocomplete.tsx",
+    "magic(react-require-autocomplete)",
+  );
+  check(
+    "react-require-autocomplete fires on <input type=email> and a listed component",
+    autocomplete.length === 2 &&
+      autocomplete.some((d) => d.message.includes("<TextField>")),
+    `got ${autocomplete.length}`,
+  );
+  const silent = lineOf("shopify", "autocomplete.tsx", 'autoComplete="current');
+  check(
+    "an explicit autoComplete, a checkbox, a spread and a computed type are all silent",
+    autocomplete.every((d) => line(d) < silent),
+    autocomplete.map(line).join(", "),
+  );
+
+  const strictReturn = diag(
+    r,
+    "strict-return.ts",
+    "magic(react-hooks-strict-return)",
+  );
+  check(
+    "react-hooks-strict-return fires once, on the 4-tuple hook",
+    strictReturn.length === 1 &&
+      strictReturn[0].message.includes("`useCounter`"),
+    `got ${strictReturn.length}`,
+  );
+  check(
+    "an object return and a non-hook function are NOT reported",
+    !strictReturn.some(
+      (d) => d.message.includes("useNamed") || d.message.includes("buildTuple"),
+    ),
+  );
+
+  // --- covered natively, wired from the plugin README's snippets ---
+  const full = diag(r, "full-import.ts", "eslint(no-restricted-imports)");
+  check(
+    "restrict-full-import: `importNames: [default]` catches both spellings",
+    full.length === 2,
+    `got ${full.length}`,
+  );
+  const deepImport = lineOf("shopify", "full-import.ts", "lodash/debounce.js");
+  check(
+    "`import { debounce } from 'lodash/debounce.js'` is left alone",
+    full.every((d) => line(d) !== deepImport),
+    full.map(line).join(", "),
+  );
+
+  const namespaced = diag(r, "namespace.ts", "import(no-namespace)");
+  check(
+    "no-namespace-imports: only node:path is reported; react + @radix-ui pass",
+    namespaced.length === 1 &&
+      line(namespaced[0]) === lineOf("shopify", "namespace.ts", "node:path"),
+    namespaced.map(line).join(", "),
+  );
+
+  const boundary = diag(
+    r,
+    "component-boundary.ts",
+    "eslint(no-restricted-imports)",
+  );
+  check(
+    "strict-component-boundaries: `patterns` reports the deep reach, not the entry point",
+    boundary.length === 1 &&
+      boundary[0].help?.includes("Import from its entry point"),
+    `got ${boundary.length}`,
+  );
+
+  const literals = diag(r, "literals.tsx", "react(jsx-no-literals)");
+  const hardcoded = lineOf("shopify", "literals.tsx", "Hardcoded copy");
+  check(
+    "jsx-no-hardcoded-content: only the untranslatable copy is reported",
+    literals.length === 1,
+    literals.map(line).join(", "),
+  );
+  check(
+    "allowedStrings, elementOverrides.allowElement and ignoreProps all hold",
+    literals.every((d) => line(d) === hardcoded),
+    `expected line ${hardcoded}, got ${literals.map(line).join(", ")}`,
   );
 }
 
