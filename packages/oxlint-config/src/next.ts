@@ -1,12 +1,16 @@
 import { mocksFilenameCase } from "./base.ts";
-import { extendConfig, type MagicOxlintConfig } from "./internal.ts";
+import {
+  extendConfig,
+  type MagicOxlintConfig,
+  withEnvCarrier,
+} from "./internal.ts";
 import { react } from "./react.ts";
 
 /**
  * Next.js on top of `react`. The `nextjs` plugin is native to oxlint, so no JS
  * plugin and no `@next/eslint-plugin-next` dependency is needed.
  */
-export const next: MagicOxlintConfig = extendConfig(react, {
+const nextConfig: MagicOxlintConfig = extendConfig(react, {
   plugins: ["nextjs"],
 
   ignorePatterns: ["**/.next/**", "**/out/**", "**/next-env.d.ts"],
@@ -94,5 +98,7 @@ export const next: MagicOxlintConfig = extendConfig(react, {
     mocksFilenameCase,
   ],
 });
+
+export const next: MagicOxlintConfig = withEnvCarrier(nextConfig);
 
 export default next;

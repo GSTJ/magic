@@ -45,6 +45,20 @@
   "overrides": [
     {
       "files": [
+        "**"
+      ],
+      "env": {
+        "browser": true,
+        "node": true,
+        "es2024": true
+      },
+      "globals": {
+        "React": "readonly",
+        "__DEV__": "readonly"
+      }
+    },
+    {
+      "files": [
         "**/env.ts",
         "**/env.js",
         "**/env.mjs",

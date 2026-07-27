@@ -1,7 +1,8 @@
-import type {
-  MagicOxlintConfig,
-  MagicOxlintOverride,
-  MagicOxlintPlugin,
+import {
+  type MagicOxlintConfig,
+  type MagicOxlintOverride,
+  type MagicOxlintPlugin,
+  withEnvCarrier,
 } from "./internal.ts";
 
 /**
@@ -159,7 +160,7 @@ export const testFilePlugins: MagicOxlintPlugin[] = [
  * opt out of the individual rules that are wrong more often than they're right.
  * This is the strategy already proven in invest-radar and MM mobile.
  */
-export const base: MagicOxlintConfig = {
+const baseConfig: MagicOxlintConfig = {
   plugins: ["typescript", "unicorn", "oxc", "import", "promise"],
 
   categories: {
@@ -651,5 +652,12 @@ export const base: MagicOxlintConfig = {
     mocksFilenameCase,
   ],
 };
+
+/**
+ * `withEnvCarrier` mirrors `env` and `globals` into a `files: ["**"]` override
+ * so a consumer who reaches for oxlint's `extends` still gets them — `extends`
+ * drops both, silently. See the helper's docblock.
+ */
+export const base: MagicOxlintConfig = withEnvCarrier(baseConfig);
 
 export default base;

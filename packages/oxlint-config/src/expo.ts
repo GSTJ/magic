@@ -1,12 +1,16 @@
 import { mocksFilenameCase } from "./base.ts";
-import { extendConfig, type MagicOxlintConfig } from "./internal.ts";
+import {
+  extendConfig,
+  type MagicOxlintConfig,
+  withEnvCarrier,
+} from "./internal.ts";
 import { reactNative } from "./react-native.ts";
 
 /**
  * Expo on top of `react-native`. The only real difference is expo-router, which
  * is file-based and therefore default-export driven.
  */
-export const expo: MagicOxlintConfig = extendConfig(reactNative, {
+const expoConfig: MagicOxlintConfig = extendConfig(reactNative, {
   ignorePatterns: ["**/.expo/**", "**/expo-env.d.ts", "**/metro.config.js"],
 
   overrides: [
@@ -35,5 +39,7 @@ export const expo: MagicOxlintConfig = extendConfig(reactNative, {
     mocksFilenameCase,
   ],
 });
+
+export const expo: MagicOxlintConfig = withEnvCarrier(expoConfig);
 
 export default expo;

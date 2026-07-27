@@ -117,6 +117,58 @@ export const jsPlugin = (
 const uniq = <T>(values: T[]): T[] => [...new Set(values)];
 
 /**
+ * An override entry that exists only to carry `env` and `globals`.
+ *
+ * oxlint's `extends` drops the extended config's top-level `env`, `globals` and
+ * `ignorePatterns` — verified on 1.75.0, and the first two are *not* what
+ * `--print-config` says they are (it under-reports `extends` across the board;
+ * see the README's `extends` warning). The loss is real and it is silent:
+ * `document = 1` stops firing `no-global-assign` because `env: { browser: true }`
+ * never arrives, and `__DEV__` becomes undefined in the React Native variants.
+ *
+ * `overrides` **do** survive `extends`. So every variant mirrors its final
+ * `env`/`globals` into a `files: ["**"]` entry, and the two fields reach the
+ * linter down either path. Verified both ways in `fixtures/adversarial/extends`.
+ *
+ * The top-level fields stay as well: they are the canonical statement, they are
+ * what `--print-config` renders on the supported consumption paths, and env
+ * entries accumulate across matching override entries rather than replacing one
+ * another, so carrying both costs nothing.
+ *
+ * `extendConfig` concatenates `overrides`, so composing variant on variant would
+ * otherwise stack one carrier per level. Old carriers are dropped and a single
+ * fresh one — built from the merged `env`/`globals` — is put back at the front,
+ * where it cannot displace `mocksFilenameCase` from the end.
+ */
+const isEnvCarrier = (override: MagicOxlintOverride): boolean =>
+  override.files.length === 1 &&
+  override.files[0] === "**" &&
+  !override.rules &&
+  !override.plugins &&
+  !override.jsPlugins &&
+  !override.excludeFiles;
+
+export const withEnvCarrier = (
+  config: MagicOxlintConfig,
+): MagicOxlintConfig => {
+  const overrides = (config.overrides ?? []).filter(
+    (override) => !isEnvCarrier(override),
+  );
+
+  if (!config.env && !config.globals) {
+    return overrides.length === (config.overrides?.length ?? 0)
+      ? config
+      : { ...config, overrides };
+  }
+
+  const carrier: MagicOxlintOverride = { files: ["**"] };
+  if (config.env) carrier.env = { ...config.env };
+  if (config.globals) carrier.globals = { ...config.globals };
+
+  return { ...config, overrides: [carrier, ...overrides] };
+};
+
+/**
  * Merge parent configs left-to-right, then the child on top. Arrays of
  * primitives (`plugins`, `ignorePatterns`) union rather than replace, because
  * oxlint's own `plugins` field *replaces* the base set and silently dropping a

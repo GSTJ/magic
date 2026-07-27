@@ -1,5 +1,10 @@
 import { base, mocksFilenameCase } from "./base.ts";
-import { extendConfig, jsPlugin, type MagicOxlintConfig } from "./internal.ts";
+import {
+  extendConfig,
+  jsPlugin,
+  type MagicOxlintConfig,
+  withEnvCarrier,
+} from "./internal.ts";
 
 /**
  * React on top of `base`. Adds the react / react-perf / jsx-a11y plugins and
@@ -7,7 +12,7 @@ import { extendConfig, jsPlugin, type MagicOxlintConfig } from "./internal.ts";
  * the single most common React bug in this codebase family: `items.length &&
  * <Row/>` rendering a bare `0`.
  */
-export const react: MagicOxlintConfig = extendConfig(base, {
+const reactConfig: MagicOxlintConfig = extendConfig(base, {
   plugins: ["react", "react-perf", "jsx-a11y"],
 
   jsPlugins: [jsPlugin("safe-jsx", "eslint-plugin-safe-jsx")],
@@ -141,5 +146,7 @@ export const react: MagicOxlintConfig = extendConfig(base, {
     mocksFilenameCase,
   ],
 });
+
+export const react: MagicOxlintConfig = withEnvCarrier(reactConfig);
 
 export default react;

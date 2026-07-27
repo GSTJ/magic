@@ -1,5 +1,10 @@
 import { filenameCaseIgnore, mocksFilenameCase } from "./base.ts";
-import { extendConfig, jsPlugin, type MagicOxlintConfig } from "./internal.ts";
+import {
+  extendConfig,
+  jsPlugin,
+  type MagicOxlintConfig,
+  withEnvCarrier,
+} from "./internal.ts";
 import { react } from "./react.ts";
 
 /**
@@ -18,7 +23,7 @@ import { react } from "./react.ts";
  * parser services, so the rule installs and then reports nothing, which is worse
  * than leaving it out. See DECISIONS.md ("Dropped").
  */
-export const reactNative: MagicOxlintConfig = extendConfig(react, {
+const reactNativeConfig: MagicOxlintConfig = extendConfig(react, {
   jsPlugins: [jsPlugin("react-native", "eslint-plugin-react-native")],
 
   globals: {
@@ -107,5 +112,7 @@ export const reactNative: MagicOxlintConfig = extendConfig(react, {
   // Must stay last — see the `mocksFilenameCase` docblock in base.ts.
   overrides: [mocksFilenameCase],
 });
+
+export const reactNative: MagicOxlintConfig = withEnvCarrier(reactNativeConfig);
 
 export default reactNative;

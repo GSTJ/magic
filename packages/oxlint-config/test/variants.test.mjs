@@ -212,6 +212,44 @@ describe("variant composition", () => {
     }
   });
 
+  it("mirrors env and globals into an override, in every variant", () => {
+    // oxlint's `extends` drops top-level `env` and `globals`. `overrides`
+    // survive it, so each variant repeats the two fields in a `files: ["**"]`
+    // entry — and repeats them exactly once, however deep the variant chain is.
+    // `fixtures/adversarial/extends` proves the behaviour end to end; this
+    // asserts the shape that produces it, including for JSON consumers, who
+    // have no alternative to `extends`.
+    for (const variant of VARIANTS) {
+      const json = JSON.parse(
+        readFileSync(join(packageRoot, `${variant}.json`), "utf8"),
+      );
+      const carriers = json.overrides.filter(
+        (entry) => entry.files.length === 1 && entry.files[0] === "**",
+      );
+
+      assert.equal(
+        carriers.length,
+        1,
+        `${variant}.json should carry exactly one env/globals override`,
+      );
+      assert.equal(
+        json.overrides.indexOf(carriers[0]),
+        0,
+        `${variant}.json should carry it first, so nothing it sets outranks a later entry`,
+      );
+      assert.deepEqual(carriers[0].env, json.env, `${variant}.json env`);
+      assert.deepEqual(
+        carriers[0].globals ?? json.globals,
+        json.globals,
+        `${variant}.json globals`,
+      );
+      assert.ok(
+        !carriers[0].rules && !carriers[0].plugins,
+        `${variant}.json's carrier must set nothing but env/globals`,
+      );
+    }
+  });
+
   it("keeps the JSX-handler escape hatch on typescript/no-misused-promises", async () => {
     const base = await import(join(packageRoot, "dist", "base.js"));
 

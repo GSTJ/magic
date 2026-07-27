@@ -488,6 +488,94 @@ process.stdout.write(
   );
 }
 
+// ------------------------------------------------------------- extends ----
+process.stdout.write(
+  "\n[extends] what oxlint's `extends` really carries, and what it drops\n",
+);
+{
+  const dir = join(here, "extends");
+  const run = (config) => lint(dir, ["-c", config, "src"]);
+  const flat = run("flat.config.mts");
+  const extended = run("extends.config.mts");
+
+  // 1.2.0: `env` and `globals` are mirrored into a `files: ["**"]` override,
+  // because overrides survive `extends` and the top-level fields do not. Both
+  // assignments are to read-only globals — one from `env.browser`, one from the
+  // react-native preset's `globals`.
+  const assigns = (report) =>
+    diag(report, "globals.js", "eslint(no-global-assign)").length;
+  check(
+    "no-global-assign fires twice under the supported form",
+    assigns(flat) === 2,
+    `got ${assigns(flat)}`,
+  );
+  check(
+    "…and twice under `extends` too — env/globals now survive it (M1)",
+    assigns(extended) === 2,
+    `got ${assigns(extended)}`,
+  );
+
+  // The three things `--print-config` claims `extends` loses and it does not.
+  for (const [what, file, code] of [
+    ["categories", "category-only.ts", "typescript(array-type)"],
+    ["rule options", "options.ts", "typescript(consistent-type-definitions)"],
+  ]) {
+    check(
+      `${what} survive \`extends\` (contradicting --print-config)`,
+      diag(extended, file, code).length === 1 &&
+        diag(flat, file, code).length === 1,
+      `flat ${diag(flat, file, code).length}, extends ${diag(extended, file, code).length}`,
+    );
+  }
+  check(
+    "`unicorn/filename-case`'s ignore list survives `extends`",
+    codes(extended, "[postId].ts").length === 0,
+    codes(extended, "[postId].ts").join(", "),
+  );
+
+  // The one that is real, and the reason `extends` stays undocumented.
+  check(
+    "the supported form applies `**/generated/**` from ignorePatterns",
+    codes(flat, "generated/ignored.ts").length === 0,
+    codes(flat, "generated/ignored.ts").join(", "),
+  );
+  check(
+    "`extends` still drops ignorePatterns — generated/ gets linted",
+    codes(extended, "generated/ignored.ts").length > 0,
+    "0 diagnostics here means oxlint fixed `extends`; the README warning would be stale",
+  );
+
+  // And why --print-config cannot be used to audit any of the above.
+  const printed = (config) => {
+    try {
+      return JSON.parse(
+        execFileSync(oxlintBin, ["-c", config, "--print-config"], {
+          cwd: dir,
+          encoding: "utf8",
+        }),
+      );
+    } catch (error) {
+      if (error.stdout) return JSON.parse(error.stdout);
+      throw error;
+    }
+  };
+  const printedFlat = printed("flat.config.mts");
+  const printedExtends = printed("extends.config.mts");
+  check(
+    "--print-config renders the supported form in full",
+    Object.keys(printedFlat.categories ?? {}).length > 0 &&
+      Array.isArray(
+        printedFlat.rules["typescript/consistent-type-definitions"],
+      ),
+  );
+  check(
+    "--print-config under-reports `extends`: empty categories, bare rule entries",
+    Object.keys(printedExtends.categories ?? {}).length === 0 &&
+      printedExtends.rules["typescript/consistent-type-definitions"] === "deny",
+    "if this fails, oxlint fixed the printer and the README Gotcha is stale",
+  );
+}
+
 // --------------------------------------------------------------- clean ----
 process.stdout.write(
   "\n[clean] false-positive guard under every emitted JSON variant\n",
