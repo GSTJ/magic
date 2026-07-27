@@ -1,20 +1,23 @@
-import { createRequire } from "node:module";
-
 /**
  * Rule authoring shim.
  *
- * oxlint ships a faster rule API — `defineRule({ meta, createOnce })` — where
- * the visitor object is built once and reused for every file, instead of being
- * rebuilt per file like ESLint's `create()`. When the rule runs under oxlint we
- * want that path; when it runs under plain ESLint (or under an oxlint old
- * enough not to export `defineRule`) we need the classic one.
+ * oxlint ships a faster rule API — `createOnce()` — where the visitor object is
+ * built once and reused for every file, instead of being rebuilt per file like
+ * ESLint's `create()`. oxlint's own types spell out how the two coexist: "`Rule`
+ * can have either `create` method, or `createOnce` method. If `createOnce`
+ * method is present, `create` is ignored." (`oxlint/dist/plugins-dev.d.ts`,
+ * `CreateOnceRule`.)
  *
- * `createChecks` is written once and used by both. Anything that depends on the
- * current file — the filename, most obviously — must be read inside `before()`,
+ * So every rule ships **both**, unconditionally. oxlint picks `createOnce` and
+ * ignores `create`; ESLint knows nothing about `createOnce` and uses `create`.
+ * No environment detection — probing for an oxlint export would only tell us
+ * oxlint is *installed*, not that it is the thing currently linting.
+ *
+ * `createChecks` is written once and feeds both. Anything that depends on the
+ * current file — the filename and `context.options`, which oxlint documents as
+ * "rule options for this rule on this file" — must be read inside `before()`,
  * because under `createOnce` the surrounding closure runs only once for the
  * whole lint run.
- *
- * This mirrors the pattern used in the g2i work repo's JS plugins.
  */
 
 export interface RuleContext {
@@ -40,9 +43,14 @@ export interface RuleFixer {
   replaceTextRange: (range: [number, number], text: string) => unknown;
 }
 
-/** Visitor map. `before` runs at the start of each file under both APIs. */
+/**
+ * Visitor map. `before` runs at the start of each file and `after` at the end,
+ * under both APIs — the `create` wrapper below reproduces oxlint's hook
+ * semantics for ESLint.
+ */
 export type RuleVisitors = Record<string, unknown> & {
   before?: () => void;
+  after?: () => void;
 };
 
 export interface RuleMeta {
@@ -55,29 +63,9 @@ export interface RuleMeta {
 
 export interface EslintRuleModule {
   meta: RuleMeta;
-  create?: (context: RuleContext) => Record<string, unknown>;
-  createOnce?: (context: RuleContext) => RuleVisitors;
+  create: (context: RuleContext) => Record<string, unknown>;
+  createOnce: (context: RuleContext) => RuleVisitors;
 }
-
-const require_ = createRequire(import.meta.url);
-
-const loadDefineRule = ():
-  | ((rule: unknown) => EslintRuleModule)
-  | undefined => {
-  try {
-    const oxlint = require_("oxlint") as {
-      defineRule?: (rule: unknown) => EslintRuleModule;
-    };
-    return typeof oxlint.defineRule === "function"
-      ? oxlint.defineRule
-      : undefined;
-  } catch {
-    // Running under plain ESLint, or oxlint isn't resolvable from here.
-    return undefined;
-  }
-};
-
-const defineRule = loadDefineRule();
 
 export const defineOxlintRule = (rule: {
   meta: RuleMeta;
@@ -85,20 +73,34 @@ export const defineOxlintRule = (rule: {
 }): EslintRuleModule => {
   const { meta, createChecks } = rule;
 
-  if (defineRule) {
-    return defineRule({ meta, createOnce: createChecks });
-  }
-
   return {
     meta,
+
+    // oxlint's path. The visitor is built once for the whole run; `before` and
+    // `after` are called by oxlint around each file.
+    createOnce: createChecks,
+
+    // ESLint's path, ignored by oxlint. ESLint builds a fresh visitor per file,
+    // so calling `before` here is exactly equivalent to oxlint calling it at
+    // the start of each file. `after` maps onto `Program:exit`.
     create(context) {
       const visitors = createChecks(context);
-      // ESLint builds a fresh visitor per file, so calling `before` here is
-      // exactly equivalent to oxlint calling it at the start of each file.
       visitors.before?.();
 
-      const { before: _before, ...rest } = visitors;
-      return rest;
+      const { before: _before, after, ...rest } = visitors;
+      if (!after) return rest;
+
+      const ownProgramExit = rest["Program:exit"] as
+        | ((node: unknown) => void)
+        | undefined;
+
+      return {
+        ...rest,
+        "Program:exit": (node: unknown) => {
+          ownProgramExit?.(node);
+          after();
+        },
+      };
     },
   };
 };
@@ -107,4 +109,25 @@ export const defineOxlintRule = (rule: {
 export const currentFilename = (context: RuleContext): string => {
   if (typeof context.getFilename === "function") return context.getFilename();
   return context.filename ?? "";
+};
+
+/**
+ * Optional chaining (`api?.things.useQuery()`, `vi.mock?.("x")`) wraps the
+ * callee in a `ChainExpression` node. Rules that match on
+ * `callee.type === "MemberExpression"` silently miss those call sites unless
+ * they unwrap it first — every callee-matching rule in this plugin goes
+ * through here.
+ */
+export const unwrapCallee = (
+  callee: unknown,
+): { type?: string; object?: unknown; property?: unknown } => {
+  const node = callee as { type?: string; expression?: unknown };
+  if (node?.type === "ChainExpression") {
+    return node.expression as {
+      type?: string;
+      object?: unknown;
+      property?: unknown;
+    };
+  }
+  return node as { type?: string; object?: unknown; property?: unknown };
 };

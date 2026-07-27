@@ -126,11 +126,17 @@ has to be removed by hand. A rename alone produces code that doesn't compile.
 
 ## Authoring notes
 
-Rules use `oxlint`'s `defineRule` / `createOnce` fast path when it's available
-and fall back to the classic ESLint `create()` API when it isn't — see
-`src/rule-api.ts`. Under `createOnce` the visitor object is built once for the
-whole run, so anything file-dependent (the filename, most obviously) has to be
-read inside `before()`.
+Every rule ships both entry points at once — `createOnce` (oxlint's fast path,
+where the visitor object is built once for the whole run instead of per file)
+and `create` (ESLint's classic API) — from a single `createChecks` body. See
+`src/rule-api.ts`. There's no environment detection: oxlint's own types say
+"if `createOnce` method is present, `create` is ignored", and ESLint doesn't
+know `createOnce` exists, so each linter picks its own path.
+
+Because the `createOnce` closure runs once per lint run, anything that varies
+per file has to be read inside `before()` — the filename, and `context.options`,
+which oxlint documents as "rule options for this rule on this file" and which
+`overrides` / nested configs can change between files.
 
 Tests run the real oxlint binary over temp files with the real plugin loaded, so
 they exercise the actual integration rather than a mock context.

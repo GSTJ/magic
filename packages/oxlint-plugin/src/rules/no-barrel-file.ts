@@ -78,6 +78,13 @@ export const noBarrelFile: EslintRuleModule = defineOxlintRule({
       ExportAllDeclaration(node: unknown) {
         if (!active) return;
 
+        // `export type * from "./x"` is erased at compile time — it drags
+        // nothing into the consumer's runtime module graph, which is this
+        // rule's rationale. Whether type-only barrels are wanted is a separate
+        // policy question; flagging them with a runtime-cost message would be
+        // wrong either way.
+        if ((node as { exportKind?: string }).exportKind === "type") return;
+
         const source = (node as { source?: { value?: unknown } }).source?.value;
         context.report({
           node,

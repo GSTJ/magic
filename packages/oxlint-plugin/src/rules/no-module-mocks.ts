@@ -3,6 +3,7 @@ import {
   defineOxlintRule,
   type EslintRuleModule,
   type RuleContext,
+  unwrapCallee,
 } from "../rule-api.ts";
 
 interface Options {
@@ -28,27 +29,16 @@ const DEFAULT_METHODS = [
   "requireMock",
   "hoisted",
 ];
-const DEFAULT_TEST_FILE_PATTERN = String.raw`\.(test|spec)\.(ts|tsx|js|jsx|mts|cts)$`;
+// Matches the preset's test-file convention: `*.test.*` / `*.spec.*` files,
+// plus anything under a `__tests__/` directory (Jest's default, which needs no
+// infix at all).
+const DEFAULT_TEST_FILE_PATTERN = String.raw`\.(test|spec)\.(ts|tsx|js|jsx|mjs|mts|cts)$|[\\/]__tests__[\\/]`;
 
 const CONDITIONAL_TYPES = new Set([
   "IfStatement",
   "ConditionalExpression",
   "SwitchStatement",
 ]);
-
-const unwrapCallee = (
-  callee: unknown,
-): { type?: string; object?: unknown; property?: unknown } => {
-  const node = callee as { type?: string; expression?: unknown };
-  if (node?.type === "ChainExpression") {
-    return node.expression as {
-      type?: string;
-      object?: unknown;
-      property?: unknown;
-    };
-  }
-  return node as { type?: string; object?: unknown; property?: unknown };
-};
 
 /**
  * Ban module-level mocking (`vi.mock` / `jest.mock`) in test files.

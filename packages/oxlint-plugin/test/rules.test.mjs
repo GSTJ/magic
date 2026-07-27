@@ -84,6 +84,36 @@ describe("magic/prefer-early-return", () => {
     assert.equal(countFor(strict, "prefer-early-return"), 1);
     assert.equal(countFor(lenient, "prefer-early-return"), 0);
   });
+
+  // Under `createOnce` the closure runs once for the whole run, so options read
+  // outside `before()` get frozen at whatever the first file saw. Two files in
+  // one run with different options is the only shape that catches that.
+  it("re-reads options per file when an override changes them", () => {
+    const body = `export const handle = (ok: boolean) => {
+  if (ok) {
+    doA();
+  }
+};
+`;
+
+    const diagnostics = lint({
+      rules: {
+        "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
+      },
+      overrides: [
+        {
+          files: ["lenient/**"],
+          rules: {
+            "magic/prefer-early-return": ["error", { maximumStatements: 1 }],
+          },
+        },
+      ],
+      files: { "strict/a.ts": body, "lenient/b.ts": body },
+    });
+
+    assert.equal(countFor(diagnostics, "prefer-early-return"), 1);
+    assert.match(diagnostics[0].file, /strict/);
+  });
 });
 
 describe("magic/no-barrel-file", () => {
@@ -125,6 +155,17 @@ describe("magic/no-barrel-file", () => {
     });
 
     assert.equal(countFor(diagnostics, "no-barrel-file"), 0);
+  });
+
+  it("ignores type-only wildcard re-exports — they are erased at runtime", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "src/index.ts": `export type * from "./types";\nexport * from "./thing";\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-barrel-file"), 1);
   });
 });
 
@@ -171,6 +212,46 @@ describe("magic/no-module-mocks", () => {
 
     assert.equal(countFor(diagnostics, "no-module-mocks"), 1);
   });
+
+  it("reports the whole default method family, not just mock", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.test.ts": `vi.doMock("./a");\nvi.mocked(thing);\nvi.hoisted(() => ({}));\njest.requireMock("./b");\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-module-mocks"), 4);
+  });
+
+  it("reports optional-chained calls (vi?.mock)", () => {
+    const diagnostics = lint({
+      rules,
+      files: { "a.test.ts": `vi?.mock("./thing");\n` },
+    });
+
+    assert.equal(countFor(diagnostics, "no-module-mocks"), 1);
+  });
+
+  it("applies to __tests__/ files with no .test infix (Jest's default layout)", () => {
+    const diagnostics = lint({
+      rules,
+      files: { "__tests__/thing.ts": `vi.mock("./thing");\n` },
+    });
+
+    assert.equal(countFor(diagnostics, "no-module-mocks"), 1);
+  });
+
+  it("leaves vi.spyOn and vi.fn alone — instance mocking is the alternative", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.test.ts": `vi.spyOn(api, "fetchUser");\nconst cb = vi.fn();\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "no-module-mocks"), 0);
+  });
 });
 
 describe("magic/prefer-suspense-query", () => {
@@ -214,5 +295,27 @@ describe("magic/prefer-suspense-query", () => {
     });
 
     assert.equal(countFor(diagnostics, "prefer-suspense-query"), 1);
+  });
+
+  it("reports optional-chained call sites (api?.things.useQuery())", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.ts": `export const x = () => api?.things.useQuery();\nexport const y = () => api.things.useQuery?.();\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "prefer-suspense-query"), 2);
+  });
+
+  it("ignores useMutation — only the configured hooks are steered", () => {
+    const diagnostics = lint({
+      rules,
+      files: {
+        "a.ts": `export const x = () => api.things.create.useMutation();\n`,
+      },
+    });
+
+    assert.equal(countFor(diagnostics, "prefer-suspense-query"), 0);
   });
 });

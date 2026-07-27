@@ -22,10 +22,14 @@ const oxlintBin = join(
 );
 
 /**
- * @param {{ files: Record<string, string>, rules: Record<string, unknown> }} options
+ * @param {{
+ *   files: Record<string, string>,
+ *   rules: Record<string, unknown>,
+ *   overrides?: unknown[],
+ * }} options
  * @returns {{ ruleId: string, message: string, file: string, line: number }[]}
  */
-export const lint = ({ files, rules }) => {
+export const lint = ({ files, rules, overrides }) => {
   const dir = mkdtempSync(join(tmpdir(), "magic-oxlint-plugin-"));
 
   try {
@@ -38,6 +42,7 @@ export const lint = ({ files, rules }) => {
           { name: "magic", specifier: join(packageRoot, "dist", "index.js") },
         ],
         rules,
+        ...(overrides ? { overrides } : {}),
       }),
     );
 

@@ -39,6 +39,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
     "clean": "rm -rf dist .turbo",
     "lint": "oxlint",
     "test": "node --test test/*.test.mjs",

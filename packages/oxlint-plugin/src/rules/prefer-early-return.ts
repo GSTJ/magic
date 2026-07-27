@@ -1,4 +1,8 @@
-import { defineOxlintRule, type EslintRuleModule } from "../rule-api.ts";
+import {
+  defineOxlintRule,
+  type EslintRuleModule,
+  type RuleContext,
+} from "../rule-api.ts";
 
 interface Options {
   /**
@@ -46,9 +50,11 @@ export const preferEarlyReturn: EslintRuleModule = defineOxlintRule({
     ],
   },
 
-  createChecks(context) {
-    const options = (context.options?.[0] ?? {}) as Options;
-    const maximumStatements = options.maximumStatements ?? 0;
+  createChecks(context: RuleContext) {
+    // Read inside `before`, not here: under `createOnce` this closure runs once
+    // for the whole run, while options are per-file (overrides and nested
+    // configs can change them).
+    let maximumStatements = 0;
 
     const checkFunctionBody = (node: {
       body?: {
@@ -84,6 +90,11 @@ export const preferEarlyReturn: EslintRuleModule = defineOxlintRule({
     };
 
     return {
+      before() {
+        const options = (context.options?.[0] ?? {}) as Options;
+        maximumStatements = options.maximumStatements ?? 0;
+      },
+
       FunctionDeclaration: checkFunctionBody,
       FunctionExpression: checkFunctionBody,
       ArrowFunctionExpression: checkFunctionBody,

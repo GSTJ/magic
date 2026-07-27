@@ -2,6 +2,7 @@ import {
   defineOxlintRule,
   type EslintRuleModule,
   type RuleContext,
+  unwrapCallee,
 } from "../rule-api.ts";
 
 interface Options {
@@ -87,13 +88,13 @@ export const preferSuspenseQuery: EslintRuleModule = defineOxlintRule({
       },
 
       CallExpression(node: unknown) {
-        const callee = (node as { callee?: unknown }).callee as
-          | {
-              type?: string;
-              object?: unknown;
-              property?: { type?: string; name?: string };
-            }
-          | undefined;
+        // `api?.things.useQuery()` wraps the callee in a ChainExpression;
+        // unwrap it or optional-chained tRPC clients escape the rule.
+        const callee = unwrapCallee((node as { callee?: unknown }).callee) as {
+          type?: string;
+          object?: unknown;
+          property?: { type?: string; name?: string };
+        };
 
         if (callee?.type !== "MemberExpression") return;
         if (callee.property?.type !== "Identifier") return;
