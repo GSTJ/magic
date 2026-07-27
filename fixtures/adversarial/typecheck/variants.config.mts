@@ -1,27 +1,21 @@
+import { extendConfig } from "magic-oxlint-config";
 import expoConfig from "magic-oxlint-config/expo";
 import nextConfig from "magic-oxlint-config/next";
 import reactConfig from "magic-oxlint-config/react";
 import reactNativeConfig from "magic-oxlint-config/react-native";
-import { defineConfig } from "oxlint";
+import { defineConfig, type OxlintConfig } from "oxlint";
 
-// Every variant the README offers, each in the form the README prints. The bug
-// this guards reproduced for all of them, not just `base`.
-export const react = defineConfig({
-  extends: [reactConfig],
-  ignorePatterns: reactConfig.ignorePatterns,
-});
+// Every variant the README offers, in both supported shapes. The bug this
+// guards (`plugins?: string[]`, wider than oxlint's own literal union)
+// reproduced for all of them, not just `base`.
+export const react: OxlintConfig = reactConfig;
+export const reactNative: OxlintConfig = reactNativeConfig;
+export const next: OxlintConfig = nextConfig;
+export const expo: OxlintConfig = expoConfig;
 
-export const reactNative = defineConfig({
-  extends: [reactNativeConfig],
-  ignorePatterns: reactNativeConfig.ignorePatterns,
-});
-
-export const next = defineConfig({
-  extends: [nextConfig],
-  ignorePatterns: nextConfig.ignorePatterns,
-});
-
-export const expo = defineConfig({
-  extends: [expoConfig],
-  ignorePatterns: expoConfig.ignorePatterns,
-});
+export const reactExtended = defineConfig(extendConfig(reactConfig, {}));
+export const reactNativeExtended = defineConfig(
+  extendConfig(reactNativeConfig, {}),
+);
+export const nextExtended = defineConfig(extendConfig(nextConfig, {}));
+export const expoExtended = defineConfig(extendConfig(expoConfig, {}));

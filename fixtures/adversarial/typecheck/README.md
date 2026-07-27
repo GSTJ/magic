@@ -16,3 +16,10 @@ on the file the README told them to write. This repo missed it because
 
 `tsconfig.json` here puts `*.config.mts` in `include` on purpose. That is the
 whole test.
+
+Since magic-oxlint-config 1.2.0 these compile the two **supported** shapes — the
+re-export and `extendConfig` — rather than the `extends` recipe they used to.
+`extends` is not a documented consumption path any more (it drops the preset's
+`ignorePatterns`), so type-checking it here would be certifying a shape the
+README tells you not to write. What `extends` actually does at runtime is
+covered by `fixtures/adversarial/extends` instead, which executes it.

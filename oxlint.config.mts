@@ -1,21 +1,22 @@
+import { extendConfig } from "magic-oxlint-config";
 import base from "magic-oxlint-config/base";
-import { defineConfig } from "oxlint";
 
 /**
- * This repo eats its own cooking: it lints itself with the config it publishes.
+ * This repo eats its own cooking: it lints itself with the config it publishes,
+ * in the shape the README tells consumers to write.
+ *
+ * `extendConfig` rather than oxlint's `extends`. The latter drops the preset's
+ * `ignorePatterns` — this file used to re-attach them by hand, which worked and
+ * was still the wrong template to hand consumers — and it drops `env`, which
+ * meant this repo had been linting itself with no node or browser environment
+ * at all.
  *
  * `fixtures/smoke` is excluded because it is deliberately broken — it gets
  * linted on purpose by `scripts/smoke.mjs`, which asserts on what fires.
  */
-export default defineConfig({
-  extends: [base],
+export default extendConfig(base, {
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
-  // `extends` drops `ignorePatterns` — see DECISIONS.md §1. This file works
-  // either way because .gitignore masks it, which is exactly why it is worth
-  // being explicit here: consumers copy this file as a template, and their repo
-  // may well commit the `ios/`, `android/` or `generated/` that ours does not.
   ignorePatterns: [
-    ...(base.ignorePatterns ?? []),
     "fixtures/**/*",
     "packages/*/dist/**",
     "packages/oxlint-config/*.json",

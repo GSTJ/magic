@@ -65,6 +65,12 @@ line beside it, because repos already on 1.0.0 have it. This repo's own
 `oxlint.config.mts` now re-declares them too — it was the counter-example, and
 consumers copy it as a template.
 
+**Corrected again 2026-07-27 (§8).** Keeping the `extends` recipe documented was
+wrong, and the claim above about what it drops was incomplete: `env` and
+`globals` go with `ignorePatterns`. Both README recipes are gone, this repo's own
+config is now `extendConfig`, and the presets defend `env`/`globals` themselves.
+See §8.
+
 `oxlint.config.ts` / `.mts` is the supported sharing path: `extends` there takes
 **imported objects**, not strings. Verified end-to-end with a real npm package.
 Requires the npm `oxlint` package (not the standalone binary) and Node >= 22.18.
@@ -1389,3 +1395,216 @@ toolchain stop disagreeing by default.
 - `eslint-plugin-react-native`'s required `eslint` peer — upstream, or vendor the
   two rules used. §4.
 - The four upstream oxc bugs. Worked around; filing them is the follow-up. §4.
+
+---
+
+## 8. What the 1.1.0 upgrade found
+
+Added 2026-07-27, same day as §7 and the same eleven repos, one round later.
+They upgraded 1.0.0 → 1.1.0 and reported back. All eleven ended green; none of
+this was release-blocking. Two were real defects.
+
+### `extends` drops three fields, not one — and `--print-config` hides which
+
+Seven of the eleven reports were about the same thing, and between them they got
+it wrong in both directions. §1 said `extends` drops `ignorePatterns`. Five repos
+ran `oxlint --print-config` on an `extends`-shaped config, saw `categories: {}`,
+`env: { builtin: true }`, `globals: {}`, no `jsPlugins` and every rule stripped
+of its options, and concluded the preset was being gutted. Two of those five then
+proved by probe that behaviour was identical and filed it as a printer bug. Two
+other repos took the printed output at face value and reported a much larger
+defect than exists.
+
+Neither conclusion was right. Executed, rule by rule, on oxlint 1.75.0:
+
+| Field            | Survives `extends`? | What `--print-config` says        |
+| ---------------- | ------------------- | --------------------------------- |
+| `rules`          | yes                 | severities only, options stripped |
+| `categories`     | **yes**             | `{}`                              |
+| `overrides`      | yes                 | rendered                          |
+| `plugins`        | yes                 | rendered                          |
+| `jsPlugins`      | yes                 | absent                            |
+| `ignorePatterns` | **no**              | accurate — the only one           |
+| `env`            | **no**              | `{ builtin: true }`               |
+| `globals`        | **no**              | `{}`                              |
+
+The probes that settle it, all in `fixtures/adversarial/extends`:
+
+- **`categories` survive.** `typescript/array-type` is in no preset's `rules`; it
+  is on solely because `categories.pedantic` is `error`. It fires under
+  `extends`. Deleting `categories` from a flattened config silences it. So the
+  printed `{}` is post-expansion state, not a merge result.
+- **Rule options survive.** `consistent-type-definitions` reports in the `"type"`
+  direction (oxlint's own default is the opposite), `filename-case` leaves
+  `[postId].ts` alone, `no-restricted-properties` carries its message.
+- **`env` and `globals` do not.** `document = 1` in a file linted through
+  `extends` did not fire `no-global-assign` — an `error` rule in every variant —
+  because `env: { browser: true }` never arrived. Same for `__DEV__` from the
+  React Native presets' `globals`. **Nobody found this**, because the printer
+  reports it in exactly the same shape as the six fields that are fine, and
+  because the two repos that probed happened to probe rules that do not consult
+  the globals table.
+
+That last line is the reason `--print-config` is now documented as unusable for
+this: it is not merely noisy, it is noisy in a way that camouflages the real
+losses. The check the READMEs told people to run could not have found the bug the
+READMEs were wrong about.
+
+### Can the packages defend themselves?
+
+Partly, and the part that works is shipped in 1.2.0.
+
+**Detecting the misuse at runtime: no.** A consumer's
+`defineConfig({ extends: [base] })` imports our module and puts the object in an
+array. There is no observable difference, from inside the imported module,
+between that and being the default export — no callback, no `this`, no call into
+our code at all. `defineConfig` belongs to `oxlint`, so we cannot wrap it (a
+`defineConfig` exported from `magic-oxlint-config` would only be used by people
+who already read the docs). Property getters fire identically down both paths.
+oxlint reads the object and merges it in Rust. Nothing about the misuse is
+visible to JavaScript we control, so a runtime warning is not possible. Recorded
+here so it stops being re-proposed.
+
+**Restoring the dropped fields: two of three.** `overrides` survive `extends`,
+and an override entry accepts `env` and `globals`. So every variant now mirrors
+its final `env`/`globals` into a `files: ["**"]` entry (`withEnvCarrier` in
+`src/internal.ts`), and both fields reach the linter down either path. Verified:
+identical diagnostics on three fixture trees through the supported forms — the
+carrier adds nothing and removes nothing there — and `no-global-assign` firing
+under `extends`, where it did not before. Env entries accumulate across matching
+override entries rather than replacing one another, so a consumer's own override
+on the same files cannot clear it. Composing variant on variant would stack one
+carrier per level, so `withEnvCarrier` drops any it finds before adding one.
+
+This also fixes JSON consumers, who have no `extendConfig` and no choice.
+
+`ignorePatterns` is the one that cannot be defended: oxlint has no per-override
+ignore, and an `overrides` entry that turns every rule off for `node_modules/**`
+would still parse the tree and cannot express "all categories off". So `extends`
+stays undocumented, and the one-line re-export stays the recommendation.
+
+### `nextjs.json` and `incremental` — 1.1.0's collateral damage
+
+Three repos independently: after the bump, the first `next build` rewrote the
+consumer's `tsconfig.json`, adding `"incremental": true` and reformatting the
+whole file in Next's own JSON style (every array expanded one element per line).
+The next CI run then failed at the format step on a file nobody had edited, with
+nothing pointing back at a tsconfig bump.
+
+Read at the source (`next/dist/lib/typescript/writeConfigurationDefaults.js`):
+Next iterates its suggested compiler options and, for each one **not present in
+the resolved config**, writes it into the raw `tsconfig.json` and rewrites the
+file. `incremental` is on that list for any TypeScript ≥ 4.4.2. Of Next's
+suggested options — `target`, `lib`, `allowJs`, `skipLibCheck`, `strict`,
+`noEmit`, `incremental` — `incremental` was the only one this package stopped
+setting.
+
+So the fix is to set it, in `nextjs.json` only. §7's reasoning for removing it
+("a `rm -rf dist && tsc` emitted nothing at all") is about emit, and `nextjs.json`
+is `noEmit`; the case cannot arise. Next redirects its own build info to
+`.next/cache/.tsbuildinfo` (`runTypeCheck`), so the only file a consumer sees is
+the `tsconfig.tsbuildinfo` their own `tsc --noEmit` writes — hence `*.tsbuildinfo`
+stays in a Next repo's `.gitignore`, reversing part of §7's advice.
+
+`tsBuildInfoFile` cannot be shipped here to tidy that up: relative paths in an
+extended config resolve against the file that declares them, verified — the entry
+would write inside `node_modules/magic-tsconfig`.
+
+`packages/tsconfig/test` keeps the "no `incremental` without `tsBuildInfoFile`"
+rule for every other variant and exempts this one by name, with the reason and
+an assertion that the variant is still `noEmit` — so the exemption dies the day
+that stops being true.
+
+### The `CHANGELOG.md` ignore, reconsidered
+
+§7 added `**/CHANGELOG.md` to the oxfmt ignore list because generated changelogs
+are rewritten by their generator and formatting one makes every future release PR
+fail the check it created. One repo hand-maintains its changelog and formats it
+on purpose. Its `version` script was
+`node tools/changelog.mjs && oxfmt CHANGELOG.md`, and oxfmt 0.60.0 exits **2**
+when every path it was handed is excluded — so `npm version` would have died
+after rewriting the changelog and before staging it, at release time, for
+whoever cut the next release.
+
+The default stays. Generated is the common case, the failure mode of getting it
+wrong is permanent, and the failure mode of the ignore is a one-line fix. What
+was missing was the one line, so 1.2.0 exports `withoutIgnorePatterns(config,
+patterns)` and the exit-2 behaviour is documented in three places. The helper
+throws on a pattern the config does not ignore rather than returning it
+unchanged: this is a config format where unknown keys and unmatched patterns
+both fail open, and a silent no-op is the failure mode the whole package keeps
+warning about.
+
+Narrowing the pattern instead (`**/CHANGELOG.md` only when a changelog generator
+is in `devDependencies`, say) was considered and dropped — a formatter config
+that reads `package.json` to decide what it formats is a worse surprise than
+either default.
+
+### `typescript/consistent-type-definitions` stays on
+
+Four reports about its autofix, three of them reproduced here exactly:
+
+- `interface Props extends A, B {}` (empty body, two bases — the shadcn/cva prop
+  shape) fixes to `type Props = {} & A & B`, and the same preset then reports
+  `typescript(ban-types)` on the `{}`. `--fix` does not converge: it trades one
+  error for another, run after run.
+- Inside `declare module "x" { interface Y {} }` the fix produces a type alias
+  that cannot merge with the upstream interface, so the augmentation silently
+  stops applying.
+- The emitted alias has no terminating semicolon, so `oxlint --fix` output alone
+  fails `oxfmt --check`. Valid TypeScript via ASI, so typecheck and tests never
+  notice; only a repo whose CI runs the two as separate gates sees it.
+
+The fourth — an `interface X extends Y` where `Y` carries an index signature
+widening a declared member to `any` after conversion — did **not** reproduce
+minimally, on TypeScript 5.4.5 or on tsgo 7.0.2. Indexed access and destructuring
+both gave the same non-`any` type from the interface and the intersection. The
+reporting repo traced a real `any` through four files to a real conversion, so
+something in their library types (reanimated / react-native-svg / styled props)
+makes it happen; the mechanism is not the one stated. Recorded as unreproduced
+rather than adopted or dismissed.
+
+None of this changes the rule's disposition. The direction it enforces is the
+safe one — §2 has why `type` → `interface` breaks index-signature assignability
+at every use site — and oxlint offers no lever to exempt `extends` clauses or
+`declare module` bodies. So: rule stays at `error`, README Gotchas carries the
+three shapes to convert by hand, and `declare module` gets a per-site disable.
+
+One consequence worth stating for library authors, since it surfaced as a public
+API question: an exported `interface` can be declaration-merged by a consumer, a
+`type` alias cannot. Assignability, `extends` and `implements` are unaffected.
+Nothing in the migration set documented merging as supported, but the conversion
+does remove the possibility, in someone else's repo.
+
+### Everything else, and what was left alone
+
+**pnpm 11, again.** Five repos hit the same wall upgrading inside the quarantine
+window: swapping `minimumReleaseAgeExclude` to the new versions in one edit
+fails, because pnpm verifies the **committed lockfile** against the policy before
+it resolves anything, so it rejects the versions you are leaving. Both sets have
+to be listed for the one install that rewrites the lockfile. §7 documented first
+adoption and not the upgrade, which is the case every repo hits on every release.
+Now in the README, along with three smaller pnpm 11 traps the same round
+surfaced: a quarantined install silently downgrades rather than failing (one
+repo's "26-line" lockfile diff came back 253 lines), `pnpm dedupe --check` is not
+read-only on 11.17.0, and pnpm 10.34.5 warns that it ignores the `pnpm` field in
+`package.json` while still honouring it — which must not be "fixed" by adding a
+`pnpm-workspace.yaml` without a `packages` key, since that is what breaks
+Vercel.
+
+**Not acted on:**
+
+- `**/_generated/**` in the shared ignore lists. Convex writes
+  `convex/_generated/`, which `**/generated/**` does not match and
+  `**/*.generated.*` does not either. Adding it would silently stop linting a
+  directory in twelve repos to serve one, and that repo's own judgement was that
+  the pattern is project-specific. It stays local.
+- The `peerDependencyRules: ignoreMissing: [eslint]` stanza was reported as not
+  achieving its stated purpose in a repo where `expo-module-scripts` pulls eslint
+  in regardless. True, and it is still correct for the source it names — the
+  README now says to check `pnpm why eslint` first rather than pasting it.
+- Two repos reported pre-existing failures on their own `main` (40 typecheck
+  errors from a Prisma enum, 42 jest suites failing at an ESM import through
+  msw). Neither is downstream of anything magic ships.
+- One report of `pnpm run lint` being rewritten into an `eslint` invocation by a
+  local shell hook. Environment, not magic.

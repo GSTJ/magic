@@ -13,17 +13,19 @@ pnpm add -D magic-oxlint-plugin
 
 ```ts
 // oxlint.config.mts
+import { extendConfig } from "magic-oxlint-config";
 import base from "magic-oxlint-config/base";
-import { defineConfig } from "oxlint";
 
-export default defineConfig({
-  extends: [base],
+export default extendConfig(base, {
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
   rules: {
     "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
   },
 });
 ```
+
+`extendConfig`, not oxlint's `extends` — the latter drops the preset's
+`ignorePatterns`. See the [root README](../../README.md#step-2--oxlintconfigmts).
 
 ## Rules
 

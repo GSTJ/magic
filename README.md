@@ -57,29 +57,41 @@ export { default } from "magic-oxlint-config/base"; // plain TypeScript / Node /
 // export { default } from "magic-oxlint-config/expo";          // Expo
 ```
 
-That's the whole file. It is a re-export for the same reason Step 3 is, and for
-one more: **oxlint's `extends` silently drops `ignorePatterns`.** A config whose
-whole body is `defineConfig({ extends: [base] })` gets none of the preset's
-ignore patterns — verified on 1.75.0, and with no `.gitignore` in the way that
-run reported ~500k diagnostics out of `node_modules`. Re-exporting the preset
-means oxlint loads it as _the_ config and every field applies.
+That's the whole file. Re-exporting means oxlint loads the preset as _the_
+config, so every field applies. Repo-specific rules go through `extendConfig`,
+which flattens the preset and your object into one config — see
+[Local overrides](#local-overrides). Those two forms are the whole supported
+surface; there is no third.
 
-Repo-specific rules go through `extendConfig`, which flattens rather than using
-`extends`, so the same hazard cannot come back — see
-[Local overrides](#local-overrides).
-
-If you would rather write `defineConfig({ extends: [...] })`, you must re-declare
-the ignore patterns yourself, every time:
-
-```ts
-import base from "magic-oxlint-config/base";
-import { defineConfig } from "oxlint";
-
-export default defineConfig({
-  extends: [base],
-  ignorePatterns: base.ignorePatterns, // `extends` does not carry these
-});
-```
+> ### ⚠️ Never consume a preset through oxlint's `extends`
+>
+> `defineConfig({ extends: [base] })` loses the preset's **`ignorePatterns`**,
+> and a local `ignorePatterns` array **replaces** rather than supplements them.
+> On oxlint 1.75.0 with no `.gitignore` in the way, that config reported ~500k
+> diagnostics out of `node_modules`; with one, it silently linted `generated/`,
+> `ios/` and `android/` — the directories bare RN and Expo repos commit.
+>
+> Everything else does travel: severities, rule **options**, `categories`,
+> `plugins`, `jsPlugins`, `overrides`, and — since `magic-oxlint-config` 1.2.0 —
+> `env` and `globals`, which the presets now mirror into a `files: ["**"]`
+> override because overrides survive `extends` and top-level fields do not.
+> `ignorePatterns` is the one that cannot be defended: oxlint has no per-override
+> ignore.
+>
+> `ignorePatterns: base.ignorePatterns` does restore them, and this README
+> documented that recipe up to 1.1.0. It is gone: it is a line you have to
+> remember in every repo, on every variant, forever, and forgetting it is
+> invisible until the day someone edits `.gitignore`. Seven of the eleven repos
+> that migrated onto 1.0.0 shipped a config with **zero** ignore patterns.
+>
+> **Do not verify any of this with `oxlint --print-config`** — see
+> [Gotchas](#gotchas). Under `extends` it prints `categories: {}`,
+> `env: {builtin: true}`, `globals: {}` and every rule stripped of its options,
+> all of which are wrong about what is running. Lint a file instead.
+>
+> `.oxlintrc.json` consumers have no `extendConfig` and must use `extends`; they
+> copy the ignore list literally. See the
+> [package README](packages/oxlint-config#json-consumers).
 
 ### Step 3 — `oxfmt.config.mts`
 
@@ -202,12 +214,18 @@ first place. A library that publishes tsc output extends `base.json` in a
 separate `tsconfig.build.json`, as above; that is what every package in this repo
 does.
 
-Add `*.tsbuildinfo` to `.gitignore` if the repo ever turns `incremental` on. The
-shared bases do not (a base that publishable packages extend has no business
-carrying build-cache state), but a repo that opts in gets one written next to
-every tsconfig — and if it lands _outside_ `outDir`, `rimraf dist && tsc` emits
-nothing on the second run, exit 0, no output, no error. Scope it:
-`"tsBuildInfoFile": "dist/.tsbuildinfo"`.
+Add `*.tsbuildinfo` to `.gitignore` if the repo ever turns `incremental` on.
+`base.json`, `internal-package.json` and `expo.json` do not (a base that
+publishable packages extend has no business carrying build-cache state), but a
+repo that opts in gets one written next to every tsconfig — and if it lands
+_outside_ `outDir`, `rimraf dist && tsc` emits nothing on the second run, exit 0,
+no output, no error. Scope it: `"tsBuildInfoFile": "dist/.tsbuildinfo"`.
+
+The two settings are a pair, in both directions. A `tsBuildInfoFile` left behind
+without `incremental` is `error TS5069` on TypeScript 5.x — a hard typecheck
+failure on the bump alone. (tsgo 7.0.2 accepts it; 5.4.5 does not.)
+`magic-tsconfig/nextjs.json` is the one variant that keeps `incremental`, for a
+reason that has nothing to do with build caches — see the Next.js section.
 
 ### Next.js
 
@@ -240,6 +258,15 @@ export { next as default } from "magic-oxfmt-config";
   },
 }
 ```
+
+Keep `*.tsbuildinfo` in `.gitignore` here. `magic-tsconfig/nextjs.json` sets
+`incremental: true` — not for the cache, but because `next build` writes any of
+its suggested compiler options that are missing from the _resolved_ config
+straight into your `tsconfig.json`, reformatting the whole file as it goes. Leave
+`incremental` unset and every build dirties the working tree and fails the next
+`oxfmt --check` on a file nobody edited. Next keeps its own build info in
+`.next/cache`; the stray `tsconfig.tsbuildinfo` comes from your own
+`tsc --noEmit`.
 
 For App Router file conventions (`page.tsx`, `layout.tsx`, `route.ts`,
 `middleware.ts`, `proxy.ts`, `sitemap.ts`, and the rest) the `next` preset turns
@@ -384,6 +411,51 @@ preset sets `minimumReleaseAge: "3 days"` for the same reason from the other
 side: without it Renovate automerges a same-day release that pnpm then refuses to
 install, and CI goes red on a PR nobody touched and green again the next day.
 
+**Upgrading inside the window needs BOTH versions listed, briefly.** This is the
+step everyone gets wrong, because the obvious edit — bump `package.json` to
+`^1.2.0`, change the exclude entries to `@1.2.0`, install — fails on the versions
+you are _leaving_:
+
+```
+[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 4 lockfile entries failed verification:
+  magic-codemods@1.1.0 was published at …, within the minimumReleaseAge cutoff
+```
+
+pnpm verifies the **committed lockfile** against the policy before it resolves
+anything, so the old versions have to stay excluded for the one install that
+rewrites the lockfile. It also suggests `pnpm clean --lockfile`, which is a far
+bigger hammer than the situation needs. The sequence that works:
+
+```yaml
+# 1. list both, for one install
+minimumReleaseAgeExclude:
+  - magic-oxlint-config@1.1.0
+  - magic-oxlint-config@1.2.0
+```
+
+```sh
+pnpm install                    # rewrites the lockfile onto 1.2.0
+# 2. delete the @1.1.0 lines
+pnpm install --frozen-lockfile  # confirms; no-op
+```
+
+Version-pinned entries, not `magic-*`: adopting a same-day release is a decision
+worth being explicit about, and an unpinned exclusion silently stays true for
+every future release too.
+
+**`pnpm dedupe --check` is not read-only.** On 11.17.0 it runs a full resolution
+and prunes packages out of `node_modules`, after which
+`pnpm install --frozen-lockfile` reports "Already up to date" against an
+incomplete tree and only `rm -rf node_modules` recovers it. Fine as its own CI
+job; do not put it in front of a build in the same one.
+
+**A quarantined `pnpm install` downgrades rather than failing, and says
+nothing.** With the policy active, pnpm resolves _around_ anything inside the
+window: one upgrade turned `bunchee` 6.12.1 into 6.12.0 and dropped a transitive
+dependency entirely, producing a 253-line lockfile diff where 26 were expected.
+Read the lockfile diff before committing it. If it has moved packages unrelated
+to what you changed, revert it and re-resolve.
+
 **Vercel-deployed repos pin pnpm 10, not 11.** Vercel supports pnpm 6–10 and
 picks the version from the lockfile's `lockfileVersion`; `packageManager` is only
 consulted when Corepack is enabled, which is an `ENABLE_EXPERIMENTAL_COREPACK`
@@ -393,6 +465,20 @@ pnpm 11 auto-created locally, finds no `packages` key, and fails with
 `ERROR packages field missing or empty`. Pin `pnpm@10.34.5` and keep
 `pnpm.overrides` / `pnpm.onlyBuiltDependencies` in `package.json`, where pnpm 10
 still reads them.
+
+pnpm 10.34.5 prints a warning on every invocation, including `pnpm --version`,
+saying it no longer does:
+
+```
+[WARN] The "pnpm" field in package.json is no longer read by pnpm.
+       The following keys were ignored: "pnpm.overrides", "pnpm.onlyBuiltDependencies"
+```
+
+Observed behaviour contradicts it — installs still honour the overrides and the
+lockfile's `overrides:` block survives byte-identical — but it is a warning about
+a removal that is coming. Do not "fix" it by moving the settings into
+`pnpm-workspace.yaml`: that file without a `packages` key is exactly what breaks
+Vercel's pnpm. If you add one, give it `packages:`.
 
 **Stopping the ESLint tree coming back.** `magic-oxlint-config`'s two bundled JS
 plugins declare a required `eslint` peer, and pnpm's default
@@ -404,6 +490,11 @@ peerDependencyRules:
   ignoreMissing:
     - eslint
 ```
+
+It only addresses _this_ source. A repo that also depends on something with a
+real `eslint` dependency — `expo-module-scripts` is the one in this set — gets
+the tree back anyway, and the stanza is then a line that claims to do something
+it doesn't. Check what `pnpm why eslint` says before adding it.
 
 ---
 
@@ -675,11 +766,10 @@ pnpm add -D magic-oxlint-plugin
 
 ```ts
 // oxlint.config.mts — complete file, imports included
+import { extendConfig } from "magic-oxlint-config";
 import base from "magic-oxlint-config/base";
-import { defineConfig } from "oxlint";
 
-export default defineConfig({
-  extends: [base],
+export default extendConfig(base, {
   jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
   rules: {
     "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
@@ -771,6 +861,18 @@ every `[postId].tsx` gets reported. `overrides` survive it, rule options do not.
 There is no way to ask oxlint about one rule and keep its config; run it plainly
 and filter the JSON.
 
+**`oxlint --print-config` cannot be trusted on an `extends`-shaped config.** It
+renders that shape post-expansion and pre-merge, so it prints `categories: {}`,
+`env: { builtin: true }`, `globals: {}`, no `jsPlugins`, and every rule stripped
+of its options — `"typescript/consistent-type-definitions": "deny"` where the
+preset says `["deny", ["type"]]`, `unicorn/filename-case` with no `ignore` list,
+`no-restricted-properties` with no message. All of those _are_ applied at lint
+time. Seven repos ran this check during one upgrade round and concluded their
+whole preset had been dropped; three started re-declaring rule options by hand.
+The one field it reports accurately there is `ignorePatterns`, which really is
+empty. Verify by linting a file, not by reading the printed config —
+`fixtures/adversarial/extends` does exactly that on every `pnpm run check`.
+
 **An unknown rule name is fatal.** oxlint refuses to start:
 `x Rule 'jsx-no-leaked-render' not found in plugin 'react'`. Rules do get
 removed between minors. If a config that worked yesterday won't load, an oxlint
@@ -831,6 +933,18 @@ the first `oxfmt .` produces a large, harmless diff in every manifest.
 **There is no `.oxfmtignore`.** oxfmt honours `.gitignore` and `.prettierignore`
 plus the config's own `ignorePatterns`. A `.oxfmtignore` file does nothing.
 
+**Naming an ignored path explicitly is an error, not a no-op.** oxfmt 0.60.0
+exits **2** — `Expected at least one target file. All matched files may have
+been excluded by ignore rules.` — when every path it was handed is excluded.
+`oxfmt .` is unaffected. This bites release scripts: `magic-oxfmt-config` ignores
+`**/CHANGELOG.md`, so a `version` script shaped like
+`node tools/changelog.mjs && oxfmt CHANGELOG.md` now dies after rewriting the
+changelog and before `git add`-ing it — during `npm version`, and only for
+whoever cuts the next release. Drop the explicit `oxfmt CHANGELOG.md`, or, if
+the changelog is hand-written and should be formatted, opt out:
+`withoutIgnorePatterns(base, ["**/CHANGELOG.md"])` — see the
+[oxfmt-config README](packages/oxfmt-config#formatting-a-file-the-shared-config-ignores).
+
 **`no-restricted-syntax` doesn't exist in oxlint.** The three things it was
 used for map to real rules: `no-restricted-properties` for the `process.env`
 ban, `no-restricted-imports` for restricted imports, and the statement bans
@@ -849,6 +963,48 @@ result. And read the `Boolean(...)` rewrites specifically: `Boolean(x)` does
 `ToastPayload | null` and `tsc` fails with TS2322 several files away from
 anything the diff touched. `toast !== null &&` satisfies the same rule and
 narrows correctly.
+
+**`--fix` output is not formatted, and `consistent-type-definitions` is where
+you'll notice.** Its fixer emits a type alias with no terminating semicolon, so
+a repo whose CI runs `lint:fix` and `format --check` as separate gates fails the
+second one on code the first one just wrote. Valid TypeScript either way (ASI),
+so typecheck and tests never notice. Always run the formatter after the fixer;
+`lint:fix && format:fix` is the order.
+
+**`typescript/consistent-type-definitions`' autofix does not survive an
+`interface … extends`.** The rule is right and stays at `error` — the
+`type` → `interface` direction is the dangerous one, see the Read-this note in
+CHANGELOG.md — but on oxlint 1.75.0 its fixer has three failure modes on
+`extends`, and it applies them without a word. Convert those by hand.
+
+```ts
+// 1. Empty body, two bases — the shadcn/cva component prop shape. `--fix`
+//    produces a `{} &` intersection, which the same preset then reports as
+//    typescript(ban-types). The fixer does not converge: it trades one error
+//    for another, run after run.
+interface Props extends React.ComponentPropsWithoutRef<"div">, VariantProps<typeof v> {}
+// becomes: type Props = {} & React.ComponentPropsWithoutRef<"div"> & VariantProps<typeof v>
+
+// 2. Inside a `declare module` augmentation, where the conversion is not just
+//    unfixable but wrong: a type alias cannot merge with the upstream
+//    interface, so the augmentation silently stops applying (or fails with a
+//    duplicate identifier). Disable per site.
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> { … }
+}
+
+// 3. Anything exported from a published package's public API. `interface` can
+//    be declaration-merged by consumers; a `type` alias cannot. Assignability,
+//    `extends` and `implements` are unaffected — only merging stops working,
+//    and it stops working in someone else's repo.
+```
+
+`interface X extends Y` and `type X = { … } & Y` are also not the same type:
+property resolution against a base carrying an index signature differs between
+them. One consumer traced a prop widening to `any` through four files to this
+conversion. It did not reproduce on a minimal case here, on either TypeScript
+5.4.5 or tsgo 7.0.2 — but "the conversion is mechanical" is only true for an
+interface with no `extends` clause, which is what `--fix` should be trusted with.
 
 **Do not run `--fix-suggestions` (or `--fix-dangerously`) blind.** The flag is
 not `--fix` with more coverage. Suggestions are suggestions precisely because
