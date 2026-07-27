@@ -43,8 +43,33 @@ const VARIANTS = [
 const read = (name) =>
   JSON.parse(readFileSync(join(packageRoot, name), "utf8"));
 
-test("no variant turns on `incremental` without saying where the cache goes", () => {
+/**
+ * `nextjs.json` is the one variant that has to set `incremental`, and it is the
+ * one variant where doing so is harmless. Reasons, in that order:
+ *
+ * `next build` calls `writeConfigurationDefaults`, which walks its suggested
+ * compiler options and writes any that are absent from the *resolved* config
+ * straight into the consumer's `tsconfig.json` — reformatting the whole file in
+ * its own JSON style while it is there. `incremental` is the only suggested
+ * option this package leaves unset, so dropping it in 1.1.0 meant every
+ * `next build` dirtied the working tree and the next `oxfmt --check` failed on a
+ * file nobody edited. Three consumers reported it independently.
+ *
+ * And the failure the check below exists for cannot reach it: `nextjs.json` is
+ * `noEmit`, so there is no output for a stale `.tsbuildinfo` to suppress. Next
+ * redirects its own build info to `.next/cache/.tsbuildinfo` (`runTypeCheck`);
+ * a consumer's own `tsc --noEmit` writes `tsconfig.tsbuildinfo` next to their
+ * tsconfig, which is why `*.tsbuildinfo` belongs in a Next repo's `.gitignore`.
+ *
+ * `tsBuildInfoFile` cannot be set here to tidy that up: relative paths in an
+ * extended config resolve against the file that *declares* them, so the entry
+ * would write inside `node_modules/magic-tsconfig`. Verified.
+ */
+const BUILD_INFO_EXEMPT = new Set(["nextjs.json"]);
+
+test("no emitting variant turns on `incremental` without saying where the cache goes", () => {
   const offenders = VARIANTS.filter((name) => {
+    if (BUILD_INFO_EXEMPT.has(name)) return false;
     const { compilerOptions = {} } = read(name);
     return (
       compilerOptions.incremental === true &&
@@ -59,6 +84,34 @@ test("no variant turns on `incremental` without saying where the cache goes", ()
       `writes <config>.tsbuildinfo next to the config, which no ` +
       `\`rimraf <outDir>\` invalidates, and the next build emits nothing.`,
   );
+});
+
+test("nextjs.json declares `incremental`, so next build stops rewriting tsconfig.json", () => {
+  const { compilerOptions } = read("nextjs.json");
+
+  assert.equal(
+    compilerOptions.incremental,
+    true,
+    "next build writes its suggested `incremental: true` into the consumer's " +
+      "tsconfig.json whenever the resolved config lacks the key, reformatting " +
+      "the file as it goes. See BUILD_INFO_EXEMPT above.",
+  );
+  assert.equal(
+    compilerOptions.noEmit,
+    true,
+    "the exemption above only holds while this variant cannot emit",
+  );
+});
+
+test("the emitting bases still leave `incremental` alone", () => {
+  for (const name of ["base.json", "internal-package.json"]) {
+    const { compilerOptions = {} } = read(name);
+    assert.equal(
+      compilerOptions.incremental,
+      undefined,
+      `${name} is extended by configs that emit; build-cache state does not belong in it`,
+    );
+  }
 });
 
 test("internal-package.json still emits declarations only", () => {
