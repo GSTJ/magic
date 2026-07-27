@@ -1,0 +1,21 @@
+import { relativeThing } from "../sibling";
+import { z } from "zod";
+import "./polyfill";
+import { readFile } from "node:fs/promises";
+import type { ReactNode } from "react";
+import { helper } from "@/lib/helper";
+import type { ZodSchema } from "zod";
+import { useState } from "react";
+import "./globals.css";
+import { indexThing } from ".";
+
+export const all = [
+  relativeThing,
+  z,
+  readFile,
+  helper,
+  useState,
+  indexThing,
+] as const;
+
+export type Props = { children: ReactNode; schema: ZodSchema };

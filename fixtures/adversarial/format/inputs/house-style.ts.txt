@@ -1,0 +1,3 @@
+// House style probe: single quotes must become double, and this long line must wrap at printWidth 80, not oxfmt's default 100.
+export const message = 'single quotes here';
+export const longCall = (alpha: string, bravo: string, charlie: string, delta: string) => [alpha, bravo, charlie, delta].join(', ');

@@ -4,6 +4,10 @@ build/
 coverage/
 .turbo/
 *.tsbuildinfo
+# `pnpm pack` / `npm pack` output, left behind by publish dry-runs.
+*.tgz
+# Regenerated from format/inputs/*.txt on every adversarial run.
+fixtures/adversarial/format/work/
 .DS_Store
 .env
 .env.*

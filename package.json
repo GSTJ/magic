@@ -15,14 +15,15 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "lint": "oxlint --disable-nested-config",
-    "lint:fix": "oxlint --disable-nested-config --fix",
+    "lint": "oxlint --disable-nested-config --report-unused-disable-directives",
+    "lint:fix": "oxlint --disable-nested-config --report-unused-disable-directives --fix",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "check": "pnpm run build && pnpm run validate-rules && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run smoke",
+    "check": "pnpm run build && pnpm run validate-rules && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run smoke && pnpm run adversarial",
     "smoke": "node scripts/smoke.mjs",
+    "adversarial": "node fixtures/adversarial/run.mjs",
     "validate-rules": "node scripts/validate-rules.mjs"
   },
   "devDependencies": {

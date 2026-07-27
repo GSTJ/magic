@@ -1,0 +1,10 @@
+/**
+ * File-level doc comment, deliberately GLUED to the first import (no blank
+ * line). The README warns the sorter will carry this comment with the `zod`
+ * import when it moves. This fixture records what actually happens.
+ */
+import { z } from "zod";
+import { useState } from "react";
+
+export const schema = z.string();
+export const useThing = () => useState(schema);
