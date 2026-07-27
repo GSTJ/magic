@@ -5,8 +5,14 @@ name: ✅ Self CI
 # Renovate preset automerges devDependency and `magic-*` bumps "once CI is
 # green", which with zero checks means immediately.
 #
-# It calls the reusable workflow rather than duplicating steps, so a change that
-# breaks `ci.yml` for consumers breaks this repo's own build first.
+# Two jobs, because they check different things:
+#
+#   check     the working tree, through the composite action as it is in this
+#             commit. This is the gate. It is the only place a change to
+#             .github/actions/setup runs before it is tagged.
+#   reusable  ci.yml exactly as a consumer calls it. That file references the
+#             composite at @v1, so this job checks the *released* pair still
+#             works together — the integration a consumer actually gets.
 
 on:
   push:
@@ -17,8 +23,28 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: self-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
+  check:
+    name: 👮 Check (working tree)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v7
+
+      - name: 🏗 Setup Node + pnpm
+        uses: ./.github/actions/setup
+
+      # The same chain `pnpm run check` runs locally, in one step, so the two
+      # cannot drift. `validate-rules` needs the build; `check` orders them.
+      - name: ✅ Check
+        run: pnpm run check
+
+  reusable:
+    name: 🛠️ Reusable workflow
     uses: ./.github/workflows/ci.yml
     with:
       build-command: pnpm run build
@@ -27,4 +53,4 @@ jobs:
       # the build. `smoke` lints fixtures/smoke and asserts on what fires;
       # `adversarial` runs fixtures/adversarial — end-to-end expected-outcome
       # checks for every variant, the opt-in plugin rules and oxfmt.
-      extra-command: pnpm run validate-rules && pnpm run smoke && pnpm run adversarial
+      extra-command: pnpm run validate-rules && pnpm run validate-workflows && pnpm run smoke && pnpm run adversarial

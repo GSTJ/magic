@@ -3,6 +3,49 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-27 — CI: composite actions, and consumption by tag
+
+No npm package changed. Everything here is in `.github/` and in how consumers
+reference it. The repo tag for this round is `v1.3.0`, and `v1` moves onto it.
+
+### Change your `uses:` lines
+
+```diff
+- uses: GSTJ/magic/.github/workflows/ci.yml@main
++ uses: GSTJ/magic/.github/workflows/ci.yml@v1
+```
+
+`@v1` is a moving major tag: fixes arrive on the next run, with no PR. Pin
+`@v1.3.0` instead where a surprise is expensive; the Renovate preset groups those
+bumps with the `magic-*` packages and automerges them.
+
+### New: three composite actions
+
+| Action                                     | Replaces                                                      |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| `GSTJ/magic/.github/actions/setup@v1`      | the pnpm + setup-node + install block, 24 copies of it        |
+| `GSTJ/magic/.github/actions/setup-ios-e2e@v1` | Xcode select, Maestro install, simulator boot, pods caching |
+| `GSTJ/magic/.github/actions/approve-parked-ci@v1` | the two local copies of the parked-run approver         |
+
+`setup` keeps the pnpm store cache on by default, so every hand-rolled
+`pnpm store path` + `actions/cache` pair can go, and every `pnpm install` in a
+workflow should regain its `--frozen-lockfile`.
+
+### Fixed: `registry-url` on repos with no npm token
+
+`ci.yml` used to set `registry-url` unconditionally, which writes an `.npmrc`
+containing a literal `${NODE_AUTH_TOKEN}`. It is now written only when the
+`NPM_TOKEN` secret is actually passed. Nothing to do in consumers; the repo that
+worked around it locally can drop the workaround.
+
+### New: `job-name` input
+
+A called workflow reports as `<caller job> / <called job>`, which no ruleset
+expecting a bare context name will ever match. `job-name` sets the second half,
+so a caller job `verify` plus `job-name: verify` gives the stable
+`verify / verify` to put in the ruleset — an alternative to the no-op shim job
+two repos are carrying.
+
 ## 2026-07-27 — the 1.1.0 upgrade reports
 
 The same eleven repos upgraded onto 1.1.0. All eleven ended green, so nothing

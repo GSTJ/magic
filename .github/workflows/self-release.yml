@@ -1,0 +1,161 @@
+name: 🏷 Release (this repo)
+
+# This repo's own release. It does three things, in this order:
+#
+#   1. runs the full check chain, the same one `pnpm run check` runs locally;
+#   2. publishes every package in packages/* whose version is not on the
+#      registry yet (`pnpm -r publish` skips the rest on its own — versions are
+#      hand-bumped in the package.json, in the commit that changes the package);
+#   3. cuts `vX.Y.Z` from the conventional commits since the last tag and moves
+#      the `vX` tag onto it.
+#
+# Step 3 is the one consumers feel: `GSTJ/magic/.github/workflows/ci.yml@v1` and
+# `GSTJ/magic/.github/actions/setup@v1` both resolve through that moving tag, so
+# a fix reaches every repo on its next run with no PR anywhere.
+#
+# It deliberately does not go through the reusable ci.yml: that file references
+# the composite action at @v1, which is the tag this workflow creates. Running
+# the check chain from the working tree here is also the only place a change to
+# the composite is exercised before it is tagged.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release-as:
+        description: "Exact version to release, e.g. 1.4.0. Empty derives it from the commits."
+        type: string
+        required: false
+        default: ""
+      dry-run:
+        description: "Run everything, publish and tag nothing."
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: magic-self-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 🎉 Check, publish, tag
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip release]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v7
+        with:
+          # The plan reads every tag and every commit since the last one.
+          fetch-depth: 0
+
+      # `./` is correct here and only here: this workflow runs in this repo, so
+      # the composite under test is the one in the working tree. The reusable
+      # workflows cannot do this — see the note in ci.yml.
+      - name: 🏗 Setup Node + pnpm
+        uses: ./.github/actions/setup
+
+      - name: ✅ Check
+        run: pnpm run check
+
+      - name: 🧾 Plan the release
+        id: plan
+        env:
+          RELEASE_AS: ${{ inputs.release-as }}
+        run: node scripts/release-plan.mjs
+
+      - name: 🔎 What needs publishing
+        id: registry
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          pending=""
+          for manifest in packages/*/package.json; do
+            name=$(node -p "JSON.parse(require('node:fs').readFileSync('$manifest','utf8')).name")
+            version=$(node -p "JSON.parse(require('node:fs').readFileSync('$manifest','utf8')).version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version — already on the registry"
+            else
+              echo "$name@$version — new"
+              pending="${pending:+$pending }$name@$version"
+            fi
+          done
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$pending" ]; then
+            echo "can-publish=skip" >> "$GITHUB_OUTPUT"
+            echo "No package version changed; this release is workflows and actions only." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "${NPM_TOKEN:-}" ]; then
+            echo "can-publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::$pending would be published, but this repository has no NPM_TOKEN secret."
+          else
+            echo "can-publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 📦 Publish changed packages
+        id: publish
+        if: steps.plan.outputs.release == 'true' && steps.registry.outputs.can-publish == 'true' && !inputs.dry-run
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          # pnpm skips any package whose version is already on the registry, so
+          # this is exactly "publish what changed" with no bookkeeping, and it
+          # rewrites the workspace: protocol on the way out.
+          pnpm -r publish --access public --no-git-checks --report-summary
+          if [ -f pnpm-publish-summary.json ]; then
+            {
+              echo "### Published"
+              echo ""
+              echo '```json'
+              cat pnpm-publish-summary.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            rm -f pnpm-publish-summary.json
+          fi
+
+      - name: 🏷 Tag, and move the major
+        if: steps.plan.outputs.release == 'true' && !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          MAJOR: ${{ steps.plan.outputs.major }}
+          NOTES: ${{ steps.plan.outputs.notes }}
+        run: |
+          set -euo pipefail
+          git config user.name "Gabriel Taveira"
+          git config user.email "gabrielstaveira@gmail.com"
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::$TAG already exists. Something released this version already."
+            exit 1
+          fi
+
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "refs/tags/$TAG"
+
+          # The moving major. Force, because moving it is the whole point.
+          git tag -f -a "$MAJOR" -m "$MAJOR -> $TAG"
+          git push -f origin "refs/tags/$MAJOR"
+
+          gh release create "$TAG" --title "$TAG" --notes "$NOTES"
+          echo "$TAG released, $MAJOR now points at it." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 💤 Nothing to release
+        if: steps.plan.outputs.release != 'true'
+        run: echo "${{ steps.plan.outputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ❌ Report missing npm auth
+        if: steps.registry.outputs.can-publish == 'false' && !inputs.dry-run
+        run: |
+          echo "::error::Tagged, but ${{ steps.registry.outputs.pending }} was not published: this repository has no NPM_TOKEN secret."
+          echo "Add an npm automation token under Settings -> Secrets and variables -> Actions -> New repository secret, named NPM_TOKEN, then re-run this job. The tag is already correct; a re-run publishes whatever the registry is still missing." >&2
+          exit 1

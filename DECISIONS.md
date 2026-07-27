@@ -743,9 +743,10 @@ consumers breaks this repo's own build first.
 - **jsPlugins are alpha and outside semver.** `safe-jsx` and the magic plugin
   both depend on that API surface. Pin oxlint; don't caret-range it.
 
-- **Release automation for these packages isn't wired.** `release.yml` exists as
-  a reusable workflow, but this repo has no `.release-it.js` and no publish
-  trigger of its own. Publishing is manual for now.
+- ~~**Release automation for these packages isn't wired.**~~ Wired in §9.
+  `self-release.yml` runs the check chain, publishes whatever `pnpm -r publish`
+  finds missing from the registry, and cuts the tags consumers reference. The
+  reusable `release.yml` is still for consumers, and still has no caller.
 
 - ~~**`magic-tsconfig` has no test.**~~ It does now, and it found something the
   reasoning here had waved away. `base.json` shipped `"incremental": true` with
@@ -1608,3 +1609,87 @@ Vercel.
   msw). Neither is downstream of anything magic ships.
 - One report of `pnpm run lint` being rewritten into an `eslint` invocation by a
   local shell hook. Environment, not magic.
+
+---
+
+## 9. CI: composite actions, and tags instead of `@main`
+
+Added 2026-07-27. The CI inventory across the eleven repos found the
+`checkout → pnpm/action-setup → setup-node → pnpm install` quadruple **24 times
+in 15 workflow files across 7 repos**, outside the reusable `ci.yml`, and it had
+already drifted: three workflows hand-roll a `pnpm store path` + `actions/cache`
+pair instead of `cache: pnpm`, three run `pnpm install` with no
+`--frozen-lockfile` in a publish or deploy path, `actions/checkout` appears at
+v3, v4, v5, v6, v7 and one SHA pin, and Node is pinned `22.x` in eight places in
+a repo whose `.nvmrc` says `22.23`.
+
+### What ships
+
+Three composite actions, consumed as `GSTJ/magic/.github/actions/<name>@v1`:
+
+- **`setup`** — pnpm, Node, the store cache, turbo's cache backend, and the
+  install. Two of its defaults are deliberately not what `ci.yml` used to do.
+- **`setup-ios-e2e`** — Xcode selection, a pinned and cached Maestro, CocoaPods,
+  the pods/DerivedData caches, and a booted simulator, for the three repos that
+  each implement all six of those differently.
+- **`approve-parked-ci`** — react-native-magic-modal's version, verbatim in
+  behaviour, with the git identity and the retry count as inputs. The portfolio
+  repo's 42-line variant approves only the first parked run and exits 0 on
+  failure; a repo with two `pull_request` workflows needs all of them released,
+  and a green step on a PR nobody can merge is the failure it was written for.
+
+### `registry-url` is empty by default now
+
+`ci.yml` set `registry-url: "https://registry.npmjs.org"` on **every** caller,
+including the nine that pass no `NPM_TOKEN`. That writes an `.npmrc` holding a
+literal `${NODE_AUTH_TOKEN}`, which the package-manager probes behind `cache:`
+choke on. One consumer had already documented the failure in a comment and
+dropped the line locally. It is now derived —
+`secrets.NPM_TOKEN != '' && 'https://registry.npmjs.org' || ''` — so the file is
+written only when there is a token to put in it, and the composite warns when it
+gets a `registry-url` with no token.
+
+The pnpm store cache went the other way: on by default, because every hand-rolled
+cache block in the fleet was a worse version of what `setup-node` already does.
+The composite also falls back to the repo-root lockfile and then to no cache at
+all, rather than failing the way `setup-node` does when
+`<working-directory>/pnpm-lock.yaml` does not exist.
+
+### A local action path does not work in a reusable workflow
+
+`uses: ./.github/actions/setup` inside a `workflow_call` file resolves against
+the **caller's** checkout, not this repo's, so it looks for the action in the
+consumer's repository and fails there. Reusable workflows must write
+`GSTJ/magic/.github/actions/setup@v1` in full. `self-ci.yml` and
+`self-release.yml` are the only files here that may use `./`, because they only
+ever run in this repo. `scripts/validate-workflows.mjs` fails the build on the
+mistake, since it cannot be caught by testing in this repo.
+
+### Versioning
+
+Consumers reference tags. `@v1` moves on every release; `@v1.3.0` pins and lets
+Renovate open the bump PR. `@main` is gone from the docs and from every
+reference here, and the validator rejects it.
+
+`self-release.yml` runs on push to `main`: full check chain, then
+`pnpm -r publish` (which skips any package whose version is already on the
+registry, so package versions stay hand-bumped in the commit that changes the
+package), then `vX.Y.Z` derived from the conventional commits since the last tag,
+then `v1` force-moved onto it. With no `v*` tag at all the base is the highest
+version in `packages/*`, so the first automated release lands at 1.3.0 rather
+than 0.0.1. This supersedes "Release automation for these packages isn't wired"
+in §4.
+
+Two things it does not do, on purpose:
+
+- **No provenance.** pnpm 11.17.0 has no `--provenance` flag (verified against
+  `pnpm publish --help`), and `npm publish` would ship the literal `workspace:*`
+  devDependency specs that pnpm rewrites. Publishing correctly beats publishing
+  with an attestation.
+- **No cross-repo dispatch.** Propagation is Renovate-first: repos on `@v1` need
+  no PR at all, and repos that pin exact get one grouped, automerged PR from the
+  preset's new `GSTJ/magic` rule, which also drops the 3-day quarantine (it
+  exists because pnpm 11 enforces a release-age floor on lockfiles, which has
+  nothing to do with a workflow ref). A `repository_dispatch` fan-out would need
+  a PAT with write access to eleven repos and a receiving workflow in each, to
+  do what Renovate already does.

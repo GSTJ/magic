@@ -44,6 +44,15 @@
       "automerge": true
     },
     {
+      "description": "This repo's own reusable workflows and composite actions. Repos on the moving `@v1` tag get releases for free and Renovate has nothing to open; this rule is for the ones that pin `@v1.3.0` exactly. Tags are the contract, so never rewrite them to a digest, and land them in the same PR as the magic-* npm packages — a workflow that expects a new config option and the config that has it are one change.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["GSTJ/magic", "GSTJ/magic{/,}**"],
+      "groupName": "magic tooling",
+      "automerge": true,
+      "pinDigests": false,
+      "minimumReleaseAge": null
+    },
+    {
       "description": "TypeScript majors change emit and rule behaviour. Human review.",
       "matchPackageNames": ["typescript"],
       "matchUpdateTypes": ["major"],
