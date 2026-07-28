@@ -233,7 +233,17 @@ runs:
           echo "::warning::None of the native-cache-paths matched a tracked file, so the native caches fall back to $hash. Check app-dir and native-cache-paths."
         fi
 
-        xcode="$(xcodebuild -version | head -1 | tr -d ' ')"
+        # Never `xcodebuild -version | head -1`. head exits after the line it
+        # wanted, xcodebuild takes SIGPIPE writing the next one, and its
+        # Objective-C runtime turns that into an NSFileHandleOperationException
+        # abort — exit 134, which `set -o pipefail` then makes the step's exit
+        # code. It is intermittent (it needs head to win the race) and it killed
+        # a real master run. Read it all, then slice in the shell: the same rule
+        # applies to every `| head` in this repo, and `tail` is fine because it
+        # drains its input.
+        xcode_version="$(xcodebuild -version)"
+        xcode="${xcode_version%%$'\n'*}"
+        xcode="${xcode// /}"
         key="${IN_CACHE_EPOCH}-${xcode}-${hash}"
 
         strategy="$IN_DERIVED_DATA"
@@ -355,9 +365,14 @@ runs:
 
         workspace="$IN_WORKSPACE"
         if [ -z "$workspace" ]; then
-          # An .xcworkspace is a directory, so plain `ls` prints what is inside
-          # it rather than its name. -d is what makes this the workspace.
-          workspace=$(ls -d "$IN_APP_DIR"/ios/*.xcworkspace 2>/dev/null | head -1 || true)
+          # A glob, not `ls -d ... | head -1`: an .xcworkspace is a directory,
+          # so plain `ls` would print its contents, and the `| head` this used
+          # to end in is the SIGPIPE shape documented in the resolve step.
+          for candidate in "$IN_APP_DIR"/ios/*.xcworkspace; do
+            [ -d "$candidate" ] || continue
+            workspace="$candidate"
+            break
+          done
         fi
         if [ -z "$workspace" ] || [ ! -d "$workspace" ]; then
           echo "::error::No .xcworkspace under $IN_APP_DIR/ios. Did prebuild and pod install run?"
@@ -423,7 +438,12 @@ runs:
         echo "::endgroup::"
 
         products="$DERIVED_DATA/Build/Products/$IN_CONFIGURATION-iphonesimulator"
-        app_path=$(find "$products" -maxdepth 2 -name "*.app" | head -1 || true)
+        # `find ... | head -1` again. A file and `read`, so nothing is ever on
+        # the writing end of a pipe somebody closed early.
+        found="${RUNNER_TEMP:-/tmp}/magic-built-apps.txt"
+        find "$products" -maxdepth 2 -name "*.app" > "$found" 2>/dev/null || true
+        app_path=""
+        read -r app_path < "$found" || true
         if [ -z "$app_path" ]; then
           echo "::error::No .app under $products"
           exit 1
