@@ -25,14 +25,15 @@ slightly-wrong version.
 ESLint and Prettier no longer _run_ anywhere: oxlint replaces ESLint, oxfmt
 replaces Prettier **and** `@ianvs/prettier-plugin-sort-imports`.
 
-`eslint` itself is still in the tree, though, and it is worth saying so plainly.
-`magic-oxlint-config` depends on two ESLint plugins that oxlint loads as JS
-plugins — `eslint-plugin-safe-jsx` and `eslint-plugin-react-native` — and both
+`eslint` can still come back into the tree, though, and it is worth saying so
+plainly. `magic-oxlint-config` depends on two ESLint plugins that oxlint loads as
+JS plugins — `eslint-plugin-safe-jsx` and `eslint-plugin-react-native` — and both
 declare a **required** `eslint` peer, so pnpm's default `autoInstallPeers` drags
 eslint 9 and ~16 `@eslint`/`@typescript-eslint` directories back in. Nothing
-executes them; it is node_modules weight and a confusing lockfile. See the pnpm
-section for the `peerDependencyRules` stanza that stops it, and DECISIONS.md §4
-for why it is not fixed at the source yet.
+executes them; it is node_modules weight, a confusing lockfile, and one
+unfixable brace-expansion advisory. See the pnpm section for the
+`packageExtensions` stanza that stops it, and DECISIONS.md §4 for why it is not
+fixed at the source yet.
 
 ---
 
@@ -489,19 +490,34 @@ Vercel's pnpm. If you add one, give it `packages:`.
 
 **Stopping the ESLint tree coming back.** `magic-oxlint-config`'s two bundled JS
 plugins declare a required `eslint` peer, and pnpm's default
-`autoInstallPeers: true` honours it. Nothing runs eslint. To keep it out:
+`autoInstallPeers: true` honours it. Nothing runs eslint. To keep it out, tell
+pnpm the peer is optional:
 
 ```yaml
 # pnpm-workspace.yaml
-peerDependencyRules:
-  ignoreMissing:
-    - eslint
+packageExtensions:
+  eslint-plugin-safe-jsx:
+    peerDependenciesMeta:
+      eslint:
+        optional: true
+  eslint-plugin-react-native:
+    peerDependenciesMeta:
+      eslint:
+        optional: true
 ```
+
+This repo runs the same stanza. It takes the install from 187 resolved packages
+to 101, and with eslint 9 goes its `minimatch@3` → `brace-expansion@1` tail,
+which is where GHSA-mh99-v99m-4gvg lives with no v1 fix to upgrade to.
+
+Earlier revisions of this section recommended `peerDependencyRules.ignoreMissing`
+instead. That does not work: on pnpm 11.17.0 it silences the missing-peer warning
+and installs eslint anyway, byte-identical lockfile with and without it. Use
+`packageExtensions`.
 
 It only addresses _this_ source. A repo that also depends on something with a
 real `eslint` dependency — `expo-module-scripts` is the one in this set — gets
-the tree back anyway, and the stanza is then a line that claims to do something
-it doesn't. Check what `pnpm why eslint` says before adding it.
+the tree back anyway. Check what `pnpm why eslint` says before adding it.
 
 ---
 
