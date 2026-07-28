@@ -507,7 +507,8 @@ empty project:
 
 No `packageExtensions` stanza, no `overrides`, nothing for a consumer to add.
 
-**If you are still on 1.2.0**, the mitigations below still apply. On pnpm, mark
+**If you are still on `magic-oxlint-config@1.2.0` or earlier**, the mitigations
+below still apply, and nothing below this line is needed on 2.0.0. On pnpm, mark
 the peer optional:
 
 ```yaml

@@ -757,12 +757,15 @@ consumers breaks this repo's own build first.
   consumer install of that plugin from 59 packages to 1. Dropping the
   react-native dependency is the security fix. They are separate problems.
 
-  Consumers therefore have a working mitigation today without either publish. On
-  npm, `"overrides": { "eslint": "^10" }` (yarn: `resolutions`) takes a fresh
+  Consumers had a working mitigation without either publish, and it is now only
+  of use to a repo still pinned to 1.2.0. On npm,
+  `"overrides": { "eslint": "^10" }` (yarn: `resolutions`) takes a fresh
   `npm i magic-oxlint-config@1.2.0` from 78 packages and `brace-expansion@1.1.16`
   to 62 and `5.0.8`. On pnpm the `packageExtensions` stanza is better still: 92
   `.pnpm` directories to 6, with eslint absent and no `brace-expansion` at all.
-  Both are in the README.
+  Both are in the README, under a heading that says which versions they are for.
+  On 2.0.0 neither is needed: `npm i magic-oxlint-config` installs 3 packages,
+  no eslint, and `npm audit` reports nothing.
 
   **Vendoring the react-native rules, assessed.** The standing suggestion above
   says "vendoring the two rules actually used". Four run at `error` in the
