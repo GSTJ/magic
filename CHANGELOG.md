@@ -3,6 +3,88 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-27 — magic-observability 1.0.0
+
+New package. One PostHog layer for every product, replacing the two hand-rolled
+ones that existed (pegada's and chatmode's, with different designs) and the
+nothing that existed in the other five repos. No other package changed.
+
+```sh
+pnpm add magic-observability
+# plus the one SDK your platform needs — all five are optional peers
+```
+
+### Five entry points, and why
+
+| Import                         | For                                     | You install                    |
+| ------------------------------ | --------------------------------------- | ------------------------------ |
+| `magic-observability`          | types and helpers, no SDK               | nothing                        |
+| `magic-observability/web`      | browser: Next client bundle, Vite SPA   | `posthog-js`                   |
+| `magic-observability/react`    | provider, boundary, `usePostHog`        | `posthog-js`, `@posthog/react` |
+| `magic-observability/next`     | Next **server**: `onRequestError`, RSC  | `posthog-node`                 |
+| `magic-observability/node`     | workers, queue consumers, CLIs          | `posthog-node`                 |
+| `magic-observability/expo`     | Expo and bare React Native              | `posthog-react-native`         |
+| `magic-observability/boundary` | the error boundary on its own           | `react`                        |
+
+The split is not tidiness. `posthog-js` in a Hermes bundle is dead weight and
+`posthog-node` in a browser chunk does not build at all, and nothing in
+TypeScript stops one convenience re-export from wiring them together. So
+`pnpm run validate-observability` — new, in the `check` chain and in self-CI —
+walks the *built* module graph from every entry point and fails the build if one
+of them can reach an SDK it has no business reaching.
+
+### What it does that a `posthog.init` call does not
+
+- **Error tracking is on by default, in code, on all three platforms.** On the
+  web PostHog makes exception autocapture a project setting; `initWebAnalytics`
+  sets `capture_exceptions: true` so a fresh project reports from the first
+  deploy instead of waiting for someone to find a toggle. It is the first signal
+  source self-driving reads.
+- **`captureError(error, context)` normalises whatever was thrown.** `throw
+  "nope"` and `throw { code: 500 }` are legal and produce an exception with no
+  stack; error-shaped objects are rebuilt, everything else becomes a searchable
+  `NonError`. chatmode's `Logger.error` did this by hand and pegada's `sendError`
+  did not.
+- **Nested context is flattened to dotted keys**, three deep, with `undefined`
+  dropped. PostHog's property filters work on scalars.
+- **One error boundary for web and React Native.** A plain class component built
+  with `createElement`, so it needs neither a JSX runtime nor `react-native`'s
+  types, and it takes a client rather than an SDK.
+- **Serverless flush timings are a named option**, not a thing each repo
+  rediscovers: `runtime: "serverless"` is `flushAt: 1, flushInterval: 0`.
+- **`onRequestError` for Next** skips the edge runtime, reads `distinct_id` off
+  the `ph_phc_*_posthog` cookie so server exceptions join the right person, and
+  flushes before the function freezes.
+
+### No key, no noise
+
+With no key resolved, every `init*` returns a no-op client and **nothing is
+written to the console**, in any code path. A repo cloned without a `.env`
+boots; a dev who never set a token is not nagged. If you want to know, pass
+`onDisabled` / `onInternalError`.
+
+### Env var convention
+
+`NEXT_PUBLIC_POSTHOG_KEY`, `EXPO_PUBLIC_POSTHOG_KEY`, `POSTHOG_KEY`, each with a
+matching `_HOST`. Host defaults to `https://us.i.posthog.com`.
+
+Vite is the exception and the README says so: Vite does not populate
+`process.env` in the browser, so a Vite app passes
+`key: import.meta.env.VITE_POSTHOG_KEY` explicitly. `import.meta.env.VITE_*` is
+only substituted where it is written literally, and a library cannot write it on
+your behalf.
+
+### Still manual, in PostHog's UI
+
+Project creation and the token, putting that token in Vercel/EAS/Actions,
+turning on session replay, the project-level exception-autocapture setting that
+gates native crash capture, and a personal API key for source map upload. And
+self-driving itself: it is open beta, a closed loop rather than an SDK feature,
+enabled with `npx @posthog/wizard self-driving`, and it needs AI data processing
+turned on at the organisation level. The two things it wants from the app —
+events flowing and error tracking on — are what this package defaults to. See
+the [package README](packages/observability#what-still-has-to-be-done-by-hand-in-posthog).
+
 ## 2026-07-27 — `magic/no-manual-classname` in magic-oxlint-plugin 1.1.0
 
 One new opt-in rule. No other package changed, and no preset turns it on.

@@ -49,8 +49,10 @@ jobs:
     with:
       build-command: pnpm run build
       test-command: pnpm run test
-      # `validate-rules` reads the emitted variant JSON, so it has to come after
-      # the build. `smoke` lints fixtures/smoke and asserts on what fires;
+      # `validate-rules` reads the emitted variant JSON and
+      # `validate-observability` walks magic-observability's built module graph,
+      # so both have to come after the build. `smoke` lints fixtures/smoke and
+      # asserts on what fires;
       # `adversarial` runs fixtures/adversarial — end-to-end expected-outcome
       # checks for every variant, the opt-in plugin rules and oxfmt.
-      extra-command: pnpm run validate-rules && pnpm run validate-workflows && pnpm run smoke && pnpm run adversarial
+      extra-command: pnpm run validate-rules && pnpm run validate-observability && pnpm run validate-workflows && pnpm run smoke && pnpm run adversarial

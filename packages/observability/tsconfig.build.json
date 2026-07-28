@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Same shape as the other publishable packages here: extend the shared base,
+  // then say what a build needs on top of it. See DECISIONS.md §4.
+  "extends": "magic-tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    // Published Node ESM. Consumers' bundlers (Metro, webpack, Vite) all read
+    // the `exports` map, so nodenext resolution here is the strictest option
+    // that still produces something they can consume.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": false,
+    "types": ["node"],
+    // The React entry points build elements with `createElement`, never JSX, so
+    // that neither `react-native` nor a JSX runtime is needed to compile this
+    // package. `jsx` is set anyway so the .d.ts files stay honest for consumers.
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}

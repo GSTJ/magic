@@ -21,10 +21,11 @@
     "format:fix": "oxfmt .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "check": "pnpm run build && pnpm run validate-rules && pnpm run validate-workflows && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run test:scripts && pnpm run smoke && pnpm run adversarial",
+    "check": "pnpm run build && pnpm run validate-rules && pnpm run validate-observability && pnpm run validate-workflows && pnpm run lint && pnpm run format && pnpm run typecheck && pnpm run test && pnpm run test:scripts && pnpm run smoke && pnpm run adversarial",
     "smoke": "node scripts/smoke.mjs",
     "adversarial": "node fixtures/adversarial/run.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
+    "validate-observability": "node scripts/validate-observability.mjs",
     "validate-rules": "node scripts/validate-rules.mjs",
     "validate-workflows": "node scripts/validate-workflows.mjs"
   },

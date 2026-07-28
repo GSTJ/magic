@@ -11,6 +11,7 @@ slightly-wrong version.
 | [`magic-oxlint-plugin`](packages/oxlint-plugin) | Eight opt-in lint rules with no oxlint equivalent               |
 | [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases   |
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                |
+| [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform      |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck  |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm          |
 | `.github/actions/setup`                         | Composite: Node + pnpm, store cache on, frozen install          |
@@ -1144,6 +1145,13 @@ asserts on exactly which rules fire. If a config change stops catching leaked
 
 `pnpm run validate-rules` checks every rule name in every preset against
 oxlint's own shipped JSON schema. Run it after any oxlint bump.
+
+`pnpm run validate-observability` walks `magic-observability`'s built module
+graph from each entry point and fails if one of them can reach an SDK it has no
+business reaching — `posthog-js` from `/expo`, `posthog-node` from `/web`. That
+split is the package's whole reason for having five entry points, nothing in
+TypeScript enforces it, and it would otherwise break in a consumer's bundler
+weeks later.
 
 `pnpm run adversarial` runs `fixtures/adversarial` — end-to-end
 expected-outcome checks against the real binaries: every emitted variant on a

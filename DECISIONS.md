@@ -1830,3 +1830,127 @@ reasoning as `prefer-suspense-query` and `prefer-early-return`.
 `no-manual-classname` describes what is banned. `prefer-cn` would have been
 wrong, because `cn` is one of two right answers and a variant axis wants the
 other. `no-classname-concat` covers `+` alone.
+
+## 11. `magic-observability`
+
+Added 2026-07-27. Every product repo needed PostHog wired up; only two had it,
+and those two disagreed with each other. pegada ran a standalone `new PostHog()`
+per runtime with `sendError` and an `analytics.track` shim; chatmode ran Sentry
+for errors and PostHog for analytics, glued with `posthog.sentryIntegration`,
+both no-oping outside production. The other five repos had nothing, and
+would-you-rather had a `console.error` boundary that was never mounted plus
+Bugsnag and Amplitude in `package.json` that nothing imported.
+
+The package is pegada's shape, generalised, with chatmode's error normalisation
+and typed-context discipline folded in. Sentry is not carried forward: PostHog's
+error tracking is a self-driving signal source, and a split-brain where errors
+live in one product and everything else in another is exactly the thing a
+shared package should stop happening twice.
+
+### One package, seven entry points, not seven packages
+
+The obvious alternative was `magic-observability-web`, `-node`, `-expo`. One
+package won because the interesting parts — `normalizeError`, `flattenContext`,
+the facade, the boundary — are shared and would otherwise need a core package
+that all three depend on, which is four packages to version instead of one.
+
+The isolation the split packages would have given for free is bought back with
+`scripts/validate-observability.mjs`. It walks the **built** module graph from
+each entry point and asserts on the bare specifiers reachable from it:
+
+```
+.           → (no SDK)
+./boundary  → react
+./web       → posthog-js
+./react     → @posthog/react, posthog-js, react
+./next      → posthog-node
+./node      → posthog-node
+./expo      → posthog-react-native, react
+```
+
+`dist`, not `src`, because that is the difference that matters:
+`import type { PostHogOptions } from "posthog-react-native"` is erased at build
+and `import { PostHog }` is not, and it is the second one that would put a
+browser SDK into a Hermes bundle. The check is in `pnpm run check` and in
+self-CI, and it was verified to fail by adding one `import "posthog-js"` to
+`dist/expo/index.js`.
+
+Same reasoning as `validate-rules.mjs`: the failure is invisible here and
+expensive there. A `/expo` that reaches `posthog-js` does not break this repo's
+build, or its tests, or its types. It breaks a consumer's Metro bundle, weeks
+later, and the person debugging it has no reason to look at this package.
+
+### Why `/next` is server-only
+
+Next is the one platform that is two platforms. `instrumentation-client.ts` is a
+browser bundle and `instrumentation.ts` is Node, and a single `/next` entry
+point serving both would put `posthog-node` in the browser chunk. So `/next`
+means "the Next **server**", and the Next client uses `/web` and `/react` like
+any other browser app. The README says so in the first table.
+
+### No console output, anywhere
+
+The requirement was that a product without a key must not crash _or spam
+warnings in dev_. The strong version of that is easier to keep than the weak
+one: this package writes to the console in no code path at all. `onDisabled`
+and `onInternalError` are how you find out, and `test/no-op.test.mjs` asserts
+silence by replacing all six console methods and demanding an empty log.
+
+It also means there is no "debug mode" of our own. `debug: true` is forwarded to
+the SDK, which has one.
+
+### Error tracking on by default, in code
+
+For the browser, PostHog treats exception autocapture as a _project setting_,
+defaulting to remote config. `initWebAnalytics` sets `capture_exceptions: true`
+anyway. The reasoning is the same one behind every other default in this repo: a
+setting that has to be found in a UI, per project, is a setting that is missing
+from most projects, and here "missing" means a product that reports nothing and
+nobody notices. Passing `captureExceptions: false` opts back out.
+
+Mobile console capture goes the other way — it is documented as
+`console: ['error', 'warn']` and is defaulted here to `[]`. PostHog's own docs
+say a `PostHogErrorBoundary` plus console capture double-reports every render
+error, because React logs caught errors to the console itself. This package
+ships a boundary and the README tells you to mount it, so the default is the
+deduplicated one.
+
+### Deviations from the research brief
+
+- **`/web` rather than a Next client entry.** The brief listed `/next, /expo,
+/node, /react`. A browser SPA (invest-radar's popup, e-card) needs
+  `posthog-js` with no React provider at all, and Next's client half needs
+  exactly the same thing, so the browser SDK got its own entry and `/react`
+  became the bindings layer on top of it. `/boundary` split off for the same
+  reason: it is React-only, and `/expo` needs it without `posthog-js`.
+- **No wizard, no self-driving code.** Self-driving is a closed loop configured
+  by `npx @posthog/wizard self-driving`, not an SDK feature; there is nothing to
+  import. What it wants from an application — events flowing, error tracking on
+  — is encoded as defaults. The rest is documented as manual.
+- **`register` is not used on the server.** `posthog-node` has no super
+  properties, being multi-tenant by design. `environment` and `release` are
+  folded into the facade's default context instead, which reaches the same
+  events by a different route.
+- **Vite reads no environment variable.** `import.meta.env.VITE_*` is only
+  substituted where it is written literally, and a library cannot write it on a
+  consumer's behalf; `process.env` does not exist in a Vite browser bundle at
+  all. Next and Expo _are_ read directly, because DefinePlugin and
+  `babel-preset-expo` both substitute inside `node_modules`. The asymmetry is
+  documented rather than papered over with a lookup that would silently resolve
+  to `undefined`.
+
+### Known gaps
+
+- No `/vite` entry that reads `import.meta.env` for you. See above.
+- Source maps are out of scope: `@posthog/nextjs-config` and `@posthog/cli` are
+  build-time tools, and wrapping them would mean this package owning a build
+  step. The READMEs carry the recipes.
+- The boundary is tested by driving its lifecycle methods directly rather than
+  through a renderer. `react-test-renderer` is gone in React 19 and a DOM shim
+  for one `createElement` assertion is a lot of machinery; the logic under test
+  is which client is called and which fallback is chosen, and React owns the
+  rest.
+- `/expo` cannot be imported in a Node test at all — `posthog-react-native`
+  pulls in `react-native`. Its defaults are tested through `expo/options.ts`,
+  which imports the SDK for types only and therefore compiles to a module with
+  no runtime import. Same trick as `node/adapter.ts`.

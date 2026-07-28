@@ -38,6 +38,17 @@
       "automerge": true
     },
     {
+      "description": "The PostHog SDKs share @posthog/core and are released in lockstep several times a week. Group them so a repo gets one PR instead of four, and so posthog-js never lands a version ahead of the @posthog/react that peers on it.",
+      "matchPackageNames": [
+        "posthog-js",
+        "posthog-node",
+        "posthog-react-native",
+        "@posthog/{/,}**"
+      ],
+      "groupName": "posthog sdks",
+      "automerge": true
+    },
+    {
       "description": "GitHub Actions pinned by tag; group so a PR isn't opened per action.",
       "matchManagers": ["github-actions"],
       "groupName": "github actions",

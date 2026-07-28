@@ -1,0 +1,112 @@
+{
+  "name": "magic-observability",
+  "version": "1.0.0",
+  "description": "Shared PostHog layer for GSTJ projects: per-platform init with error tracking on, one captureError shape, a React/RN error boundary, and a no-op client when the key is absent.",
+  "keywords": [
+    "analytics",
+    "error-tracking",
+    "expo",
+    "nextjs",
+    "observability",
+    "posthog",
+    "react-native"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/observability#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/observability"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./boundary": {
+      "types": "./dist/boundary.d.ts",
+      "default": "./dist/boundary.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "default": "./dist/web/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./next": {
+      "types": "./dist/next/index.d.ts",
+      "default": "./dist/next/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    },
+    "./expo": {
+      "types": "./dist/expo/index.d.ts",
+      "default": "./dist/expo/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
+    "clean": "rm -rf dist .turbo",
+    "lint": "oxlint",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "devDependencies": {
+    "@posthog/react": "^1.10.0",
+    "@types/react": "^19.0.0",
+    "magic-tsconfig": "workspace:*",
+    "oxlint": "1.75.0",
+    "posthog-js": "^1.257.2",
+    "posthog-node": "^5.0.0",
+    "posthog-react-native": "^4.35.0",
+    "react": "^19.0.0",
+    "typescript": "^7.0.2"
+  },
+  "peerDependencies": {
+    "@posthog/react": ">=1.10.0",
+    "posthog-js": ">=1.257.2",
+    "posthog-node": ">=5.0.0",
+    "posthog-react-native": ">=4.35.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@posthog/react": {
+      "optional": true
+    },
+    "posthog-js": {
+      "optional": true
+    },
+    "posthog-node": {
+      "optional": true
+    },
+    "posthog-react-native": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
