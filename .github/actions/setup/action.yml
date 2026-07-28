@@ -65,6 +65,27 @@ inputs:
       pass the secret here rather than in the job env.
     required: false
     default: ""
+  package-import-method:
+    description: >
+      pnpm's package-import-method, set for the install step and nowhere else.
+      Environment only — nothing writes an .npmrc, so no developer's checkout
+      changes and no later command inherits it.
+
+      auto (the default) means `hardlink` off a GitHub-hosted runner and pnpm's
+      own `auto` on one. The reason is warm DerivedData. pnpm's `auto` clones
+      (APFS copy-on-write) when it can, and a clone is a *new inode with a new
+      mtime* for every file it materialises — so a repeat install that changed
+      no dependency still hands Xcode a node_modules where everything looks
+      newer than the object files built from it, and the next build recompiles
+      the world. Hardlinking reuses the store's inodes, mtimes included, and the
+      warm build stays warm. On a hosted runner there is no warm anything to
+      protect, and nothing to gain by leaving pnpm's default.
+
+      hardlink, clone, copy or clone-or-copy pin one. pnpm falls back on its own
+      when the store and the workspace are on different volumes, which is where
+      hardlinking cannot work at all.
+    required: false
+    default: auto
   turbo-cache:
     description: >
       GitHub Actions cache backend for turbo. auto enables it when the working
@@ -103,6 +124,7 @@ runs:
         IN_REGISTRY_URL: ${{ inputs.registry-url }}
         IN_NODE_AUTH_TOKEN: ${{ inputs.node-auth-token }}
         IN_TURBO_CACHE: ${{ inputs.turbo-cache }}
+        IN_PACKAGE_IMPORT_METHOD: ${{ inputs.package-import-method }}
       run: |
         set -euo pipefail
 
@@ -161,6 +183,26 @@ runs:
           *) echo "::error::turbo-cache must be auto, true or false (got '$IN_TURBO_CACHE')"; exit 1 ;;
         esac
 
+        # `auto` is both our name for "decide by runner kind" and pnpm's name
+        # for "clone, then hardlink, then copy", so resolving ours to pnpm's
+        # leaves a value that is always valid to export — no empty variable to
+        # special-case, and no branch that has to know pnpm's default.
+        import_method="$IN_PACKAGE_IMPORT_METHOD"
+        if [ "$import_method" = "auto" ]; then
+          if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]; then
+            import_method="auto"
+          else
+            import_method="hardlink"
+          fi
+        fi
+        case "$import_method" in
+          auto | hardlink | clone | copy | clone-or-copy) ;;
+          *)
+            echo "::error::package-import-method must be auto, hardlink, clone, copy or clone-or-copy (got '$IN_PACKAGE_IMPORT_METHOD')."
+            exit 1
+            ;;
+        esac
+
         {
           echo "working-directory=$wd"
           echo "node-version=$node_version"
@@ -168,6 +210,7 @@ runs:
           echo "cache=$cache"
           echo "cache-dependency-path=$cache_dependency_path"
           echo "turbo-cache=$turbo_cache"
+          echo "package-import-method=$import_method"
         } >> "$GITHUB_OUTPUT"
 
     - name: 🏗 Setup Node
@@ -196,4 +239,16 @@ runs:
       working-directory: ${{ steps.resolve.outputs.working-directory }}
       env:
         NODE_AUTH_TOKEN: ${{ inputs.node-auth-token }}
+        # Both spellings, because pnpm changed which one it reads and this
+        # action has to work on the versions the fleet is actually on. Measured
+        # against a real store, counting hard links on the installed file:
+        #
+        #   pnpm 9, 10   npm_config_package_import_method  ✅   PNPM_CONFIG_…  ❌
+        #   pnpm 11      npm_config_package_import_method  ❌   PNPM_CONFIG_…  ✅
+        #
+        # pnpm 11 stopped reading npm_config_* entirely — `npm_config_store_dir`
+        # does not move the store either. Whichever one the runner's pnpm
+        # ignores is inert, so setting both costs nothing and neither is a file.
+        npm_config_package_import_method: ${{ steps.resolve.outputs.package-import-method }}
+        PNPM_CONFIG_PACKAGE_IMPORT_METHOD: ${{ steps.resolve.outputs.package-import-method }}
       run: ${{ inputs.install-command }}
