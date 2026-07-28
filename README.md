@@ -590,6 +590,91 @@ be satisfied by a reusable workflow alone. Two ways out:
   counts as satisfied, so the shim needs `if: always()` and an explicit
   comparison against `success`.
 
+### Sending the checks to your own runner
+
+`ci.yml` runs on `ubuntu-latest` and should keep doing so in most repos — Ubuntu
+minutes are the cheap ones, and a lint job is not what makes an Actions bill.
+The case for moving it is the repo that already has a self-hosted Mac for
+something else (iOS E2E, usually) and whose hosted minutes have run out or are
+billed privately: then the choice is not "Mac or Ubuntu", it is "Mac or nothing".
+
+Four inputs, the same four `e2e-ios.yml` takes, with the same meanings:
+
+| Input                       | Default         | What it is                                                                    |
+| --------------------------- | --------------- | ----------------------------------------------------------------------------- |
+| `runner-labels`             | `ubuntu-latest` | Where the job goes. A bare label, or a JSON array of them.                    |
+| `hosted-fallback-labels`    | `""`            | Where it goes instead when the Mac is not answering. Empty turns routing off. |
+| `runner-heartbeat`          | `""`            | The Mac's liveness beacon, as a Unix timestamp.                               |
+| `heartbeat-max-age-seconds` | `600`           | How old that timestamp may be before the run goes hosted.                     |
+
+**Private repo with a Mac runner and a hosted fallback.** Paste this:
+
+```yaml
+jobs:
+  ci:
+    uses: GSTJ/magic/.github/workflows/ci.yml@v1
+    with:
+      runner-labels: '["self-hosted","macos-local"]'
+      hosted-fallback-labels: '["ubuntu-latest"]'
+      runner-heartbeat: ${{ vars.MAC_RUNNER_HEARTBEAT }}
+```
+
+`runner-heartbeat` has to be passed in, and it has to exist. A called workflow
+cannot read the caller's variables for you, and the router cannot ask GitHub
+whether the runner is up either: `gh api repos/{repo}/actions/runners` needs the
+`administration` permission, which `GITHUB_TOKEN` cannot hold under any
+`permissions:` block — 403, always. So the privileged half runs on the Mac. A
+timer there confirms its own listener is up, confirms GitHub agrees the runner is
+online, and writes `date -u +%s` into the repo variable `MAC_RUNNER_HEARTBEAT`,
+which any workflow reads for free as `vars.MAC_RUNNER_HEARTBEAT`. Publish it
+often enough that a healthy machine is never stale — 120s against a 600s window
+is what the fleet runs. No token is ever stored in the consuming repo.
+
+With no `MAC_RUNNER_HEARTBEAT` variable at all, `vars.MAC_RUNNER_HEARTBEAT` is
+the empty string and every run goes to `hosted-fallback-labels`. That is the
+intended failure direction, and it is also what an unadopted repo looks like.
+
+**Nothing here can stop the checks from running.** `🧭 Route` is its own
+`ubuntu-latest` job with `continue-on-error`, and the check job reads
+`needs.route.outputs.labels || inputs.runner-labels`. If the router is killed on
+arrival — which is exactly what happens on a repo whose Actions billing has
+lapsed, the situation this exists for — its output is empty, the job falls back
+to `runner-labels`, and it runs. It appears in the PR checks as a skipped context
+when routing is off; a skipped conclusion is neutral, so it satisfies nothing and
+blocks nothing. The gating context is still `<caller job> / <job-name>`, spelled
+exactly as before.
+
+`runs-on` still works and now defaults to empty rather than `ubuntu-latest`; it
+overrides `runner-labels` as the base the router starts from. A repo that passes
+neither gets `ubuntu-latest` on the same job with the same name, which is what it
+got before this existed.
+
+#### What the job does differently off a hosted runner
+
+A self-hosted runner is persistent, shares one directory with every other
+workflow in the repo, and is somebody's machine. Three things follow, and each
+is a default you can override:
+
+- **`checkout-clean: auto`** — `clean: false` off a hosted runner.
+  `git clean -ffdx` here would delete the `node_modules` and `ios/` that the E2E
+  workflow on the same machine keeps in order to build incrementally. A lint job
+  has no use for a scrubbed tree anyway.
+- **`pnpm-store-cache: auto`** — the pnpm store is round-tripped through the
+  Actions cache service on a hosted runner and left alone anywhere else. On a
+  machine that keeps its disk the store is already there, already shared with
+  every other workflow on it, and `hardlink` (what `setup` picks off-hosted) is
+  what makes installing from it nearly free. Restoring a copy over it buys a
+  download and a repack.
+- **`turbo-cache: true`, unconditionally.** This one is kept on deliberately:
+  turbo reads its own local cache first and only reaches the Actions backend on
+  a miss, so a warm machine never pays for it, and a workspace some other
+  workflow cleaned still gets its outputs back rather than rebuilding them.
+
+`~/.maestro`-style user-directory caches are the fourth of these and live in
+[`e2e-ios.yml`](#ios-e2e) — `cache-maestro: auto`, off on a self-hosted Mac,
+because on a machine somebody uses that is their install and their run history,
+not CI's. `ci.yml` touches no user directory and needs no equivalent.
+
 ### Composite actions
 
 The reusable workflow only fits jobs whose shape is "install, then run some

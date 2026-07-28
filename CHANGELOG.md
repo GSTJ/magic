@@ -3,6 +3,77 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — CI: the check job can go to the Mac too
+
+No npm package changed. Everything here is in `.github/workflows/ci.yml` and the
+README. The round ships as `v1.8.0`; `v1` moves onto it.
+
+### Added: runner routing in `ci.yml`, in `e2e-ios.yml`'s dialect
+
+`ci.yml` was `runs-on: ubuntu-latest` and nothing else. On a repo whose hosted
+Actions billing has lapsed that is a workflow that cannot run at all — the job is
+dispatched, dies in about three seconds with zero steps, and the repo has no CI.
+The four inputs `e2e-ios.yml` already had now exist here too, spelled and
+behaving identically, because one decision with two dialects is two bugs:
+
+```yaml
+with:
+  runner-labels: '["self-hosted","macos-local"]'
+  hosted-fallback-labels: '["ubuntu-latest"]'
+  runner-heartbeat: ${{ vars.MAC_RUNNER_HEARTBEAT }}
+  heartbeat-max-age-seconds: 600 # the default
+```
+
+A `🧭 Route` job — `ubuntu-latest`, `continue-on-error`, only present when
+`hosted-fallback-labels` is set — compares the beacon against the window and
+picks. The check job carries `needs: [route]` with `if: ${{ !cancelled() }}` and
+reads `needs.route.outputs.labels || inputs.runs-on || inputs.runner-labels`, so
+a router that was killed on arrival costs nothing: the output is empty, the chain
+falls through to `runner-labels`, and the checks run. Routing that can stop the
+work it is routing is worse than no routing, which is the lesson from the round
+before this one.
+
+The beacon is not a live lookup, for the reason it never can be:
+`gh api repos/{repo}/actions/runners` needs the `administration` permission,
+which `GITHUB_TOKEN` cannot hold under any `permissions:` block. A timer on the
+Mac publishes `MAC_RUNNER_HEARTBEAT` as a repo variable instead, and
+`vars.MAC_RUNNER_HEARTBEAT` is readable from any workflow for free.
+
+### Unchanged: everything a consumer already depends on
+
+Ten repos call this workflow and several require its context by name
+(`ci / 👮 Lint, Format, Typecheck`, `checks / 👮 Lint, Format, Typecheck`). A
+renamed context does not fail, it silently wedges every merge in that repo, so
+the no-input path is byte-identical on purpose:
+
+- the job is still `checkup`, still named `${{ inputs.job-name }}`, still
+  defaulting to `👮 Lint, Format, Typecheck`. No `name:` gained an expression
+  that could render literally when something upstream is skipped;
+- `runs-on` resolves to the string `ubuntu-latest` — `fromJSON('"ubuntu-latest"')`,
+  not a one-element array — so it is the same value the job had before;
+- the `runs-on` **input** still works. Its default changed from `ubuntu-latest`
+  to empty, which changes nothing: with neither input set the base is
+  `runner-labels`, whose default is `ubuntu-latest`. Setting it still wins, and
+  it is now the base the router starts from rather than a second way to say the
+  same thing;
+- `🧭 Route` is skipped when `hosted-fallback-labels` is unset. It shows up in
+  the PR checks with a neutral conclusion, which satisfies nothing and blocks
+  nothing.
+
+### Changed: the pnpm store cache is hosted-only
+
+New input `pnpm-store-cache: auto | true | false`, `auto` meaning "true on a
+GitHub-hosted runner". On a persistent machine the store is already on disk and
+shared with every other workflow there, and `hardlink` — what `setup` picks
+off-hosted — is what makes installing from it nearly free. Restoring a cached
+copy over it buys a download and a repack at the end. Hosted runners keep the
+cache, where the disk is new every time.
+
+`turbo-cache` stays on everywhere, deliberately: turbo reads its local cache
+first and only reaches the Actions backend on a miss, so a warm machine never
+pays for it, and a workspace some other workflow cleaned still gets its outputs
+back instead of rebuilding them.
+
 ## 2026-07-28 — CI: what the first iOS E2E adoption found
 
 No npm package changed. Everything here is in `.github/`. The round shipped as
