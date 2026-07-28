@@ -1,0 +1,37 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "magic",
+  "homepage": "https://github.com/GSTJ/magic",
+  "items": [
+    {
+      "name": "docs-landing",
+      "type": "registry:block",
+      "title": "Docs Landing",
+      "description": "A dark React shell for package docs with scoped GSAP reveals that respect reduced motion.",
+      "author": "Gabriel Taveira <https://github.com/GSTJ>",
+      "dependencies": ["gsap@3.15.0"],
+      "files": [
+        {
+          "path": "registry/default/docs-landing/docs-landing.tsx",
+          "type": "registry:component",
+          "target": "@components/docs-landing/docs-landing.tsx"
+        },
+        {
+          "path": "registry/default/docs-landing/docs-landing-effects.tsx",
+          "type": "registry:component",
+          "target": "@components/docs-landing/docs-landing-effects.tsx"
+        },
+        {
+          "path": "registry/default/docs-landing/install-command.tsx",
+          "type": "registry:component",
+          "target": "@components/docs-landing/install-command.tsx"
+        },
+        {
+          "path": "registry/default/docs-landing/docs-landing.module.css",
+          "type": "registry:component",
+          "target": "@components/docs-landing/docs-landing.module.css"
+        }
+      ]
+    }
+  ]
+}

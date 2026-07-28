@@ -13,6 +13,7 @@ slightly-wrong version.
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                  |
 | [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform        |
 | [`magic-docs`](packages/docs)                   | Fumadocs theme, layout/MDX presets, TypeScript reference, Pages   |
+| `GSTJ/magic/docs-landing`                       | Editable shadcn block for dark package landing pages              |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck    |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm            |
 | `.github/workflows/e2e-ios.yml`                 | Reusable `workflow_call` job: Maestro iOS E2E, optionally sharded |
@@ -37,6 +38,97 @@ four `react-native` rules are now ported into `magic-oxlint-plugin`, and
 audit` reports nothing where it used to report 5 highs. See DECISIONS.md §4.
 
 ---
+
+## Docs landing block
+
+`docs-landing` is the editable landing layer for `magic-docs`. It installs the
+shell, section primitives, clipboard button, scoped CSS, and GSAP effects into
+the consumer repo. Each package supplies its product demo, examples, history,
+and copy.
+
+```sh
+pnpm dlx shadcn@latest add GSTJ/magic/docs-landing
+```
+
+Add `--dry-run` to see the file list without writing anything, and
+`#some-branch` to install from a branch instead of `main`.
+
+```text
+components/docs-landing/
+|-- docs-landing.tsx
+|-- docs-landing-effects.tsx
+|-- docs-landing.module.css
+`-- install-command.tsx
+```
+
+The CLI resolves `@components` from `components.json` and installs
+`gsap@3.15.0`.
+
+The GitHub address reads `registry.json` and the source files straight from the
+repo. `public/r/registry.json` and `public/r/docs-landing.json` are the flat
+payloads built by shadcn, for the HTTPS address the Registry Directory will
+need. `pnpm run validate-registry` checks their metadata, file list, and
+embedded source against `registry.json` and the four files above.
+
+Nothing here is a package, so nothing compiles it as a side effect of a build.
+`registry/tsconfig.json` extends `magic-tsconfig/nextjs` and `pnpm run
+typecheck` runs it, which is what stops these four files rotting between
+releases.
+
+### Registry Directory status
+
+`@magic/docs-landing` is reserved for the shadcn Registry Directory. It becomes
+eligible after this work merges, the files under `public/r` have a stable public
+HTTPS URL, and the namespace is accepted upstream. Use the GitHub addresses
+above during PR review and until that directory entry ships.
+
+Compose the page around repository-owned content:
+
+```tsx
+import {
+  DocsDemoFrame,
+  DocsHero,
+  DocsLanding,
+  DocsSection,
+  DocsStatStrip,
+} from "@/components/docs-landing/docs-landing";
+
+export default function LandingPage() {
+  return (
+    <DocsLanding
+      name={site.name}
+      navigation={site.navigation}
+      repository={{ href: site.repository, label: "GitHub" }}
+      version={site.version}
+    >
+      <DocsHero
+        actions={hero.actions}
+        description={hero.description}
+        eyebrow={hero.eyebrow}
+        installCommand={site.installCommand}
+        title={hero.title}
+        visual={<ProductDemo />}
+      />
+      <DocsStatStrip items={projectStats} />
+      <DocsSection
+        description={example.description}
+        eyebrow={example.eyebrow}
+        index="01"
+        title={example.title}
+        tone="blue"
+      >
+        <DocsDemoFrame label={example.label}>
+          <ProductExample />
+        </DocsDemoFrame>
+      </DocsSection>
+    </DocsLanding>
+  );
+}
+```
+
+The shell defaults to dark. Set its `--docs-*` variables with the `style` prop
+or a wrapper class. Motion is scoped to the landing root, cleans up on unmount,
+and stays off when the visitor requests reduced motion.
 
 ## Setup, by project type
 

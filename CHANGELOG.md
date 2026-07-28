@@ -3,6 +3,45 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — The docs landing ships as a shadcn item
+
+No npm package changed. The round ships as `v1.11.0`; `v1` moves onto it. New:
+`registry.json` at the repo root, and four files under
+`registry/default/docs-landing`.
+
+### New: `pnpm dlx shadcn@latest add GSTJ/magic/docs-landing`
+
+The block is the shell of a package landing page: header, hero, stat strip,
+sections with three layouts and five tones, a demo frame, a release timeline, a
+final CTA, a footer, and a clipboard button for the install command. Demos,
+examples, palette overrides and copy stay in the repo that installs it.
+
+It writes four editable files into `components/docs-landing/`, imported as
+`@/components/docs-landing/*`, and installs `gsap@3.15.0`. The CLI reads
+`registry.json` and the source files straight from raw.githubusercontent, so the
+GitHub address works with nothing hosting the repo. `public/r` holds the flat
+payloads for the HTTPS address the shadcn Registry Directory will want later.
+Nothing serves them yet, and the README says so.
+
+Motion is scoped to the landing root through `gsap.context` and
+`gsap.matchMedia`, and reverts on unmount. Under
+`prefers-reduced-motion: reduce` the reveal ScrollTriggers are never created, so
+every element renders at full opacity with no scrolling and no JavaScript needed
+to make text appear.
+
+### New: `validate-registry`, and a typecheck for files that are not a package
+
+`pnpm run validate-registry` checks catalog metadata, item names and types, the
+declared file list, the embedded source, missing and extra output under
+`public/r`, and whether the generated payloads have gone stale against the
+sources. It runs in `check` and in the reusable CI job.
+
+Nothing under `registry/` is a package, so no build compiles it and `turbo run
+typecheck` never saw it. `registry/tsconfig.json` extends
+`magic-tsconfig/nextjs` and `pnpm run typecheck` now runs it too. Without that,
+a TypeScript or React bump breaks these four files in a consumer's repo and
+this one stays green.
+
 ## 2026-07-28 — The react-native rules are ours now, and eslint is gone
 
 `magic-oxlint-config@2.0.0` (**breaking**), `magic-oxlint-plugin@1.2.0`.
