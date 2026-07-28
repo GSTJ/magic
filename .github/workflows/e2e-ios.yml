@@ -37,6 +37,18 @@ name: 📱 E2E iOS (Maestro)
 # Requires: an Apple Silicon macOS runner. The single-architecture build below
 # is only correct because the runner is arm64 — macos-26 and any modern Mac
 # are, an Intel image is not.
+#
+# The check contexts a consumer gets, and which of them can stop a merge:
+#
+#   🧭 Route          only with hosted-fallback-labels. Advice, never a gate.
+#   🚧 Quarantine…    only with quarantine-file. A hard gate, on purpose.
+#   <job-name>        the suite, in the unsharded shape.
+#   🏗 Build (sharded) + shard (<name>)   the sharded one.
+#
+# Nothing but the quarantine lint can skip the suite. That is the lesson from
+# the round before this one, where routing was a step inside a hard-gating
+# preflight job: the repo's Actions billing lapsed, every ubuntu-latest job
+# failed on arrival, and the E2E suite stopped running without anyone noticing.
 
 on:
   workflow_call:
@@ -131,10 +143,18 @@ on:
         required: false
         default: latest
       maestro-version:
-        description: "Maestro version, pinned and cached at ~/.maestro."
+        description: "Maestro version, pinned and installed at ~/.maestro."
         type: string
         required: false
         default: "2.7.0"
+      cache-maestro:
+        description: >
+          auto | true | false. Cache ~/.maestro. auto is true on a GitHub-hosted
+          runner and false anywhere else — 332 MB and 3m51 to upload cold, over
+          what on a self-hosted Mac is the login user's own install.
+        type: string
+        required: false
+        default: auto
       simulator-device:
         description: "Device name. Empty takes the newest iPhone the chosen runtime supports."
         type: string
@@ -155,6 +175,15 @@ on:
         type: string
         required: false
         default: "pnpm install --frozen-lockfile"
+      package-import-method:
+        description: >
+          pnpm's package-import-method for the install step only, never written
+          to an .npmrc. auto is `hardlink` off a GitHub-hosted runner and pnpm's
+          own `auto` on one, because cloning gives every file a fresh inode and
+          mtime and that is what makes a warm DerivedData recompile everything.
+        type: string
+        required: false
+        default: auto
       prebuild-command:
         description: "Empty for bare React Native repos that commit ios/."
         type: string
@@ -181,10 +210,30 @@ on:
         required: false
         default: false
       maestro-env:
-        description: "`KEY=value` lines passed to Maestro as -e."
+        description: >
+          `KEY=value` lines passed to Maestro as -e. APP_ID is passed for you —
+          see app-id — and a line here that sets it wins.
         type: string
         required: false
         default: ""
+      app-id:
+        description: >
+          auto | a bundle id | off. auto passes `-e APP_ID=<the bundle id the
+          build produced>`, which is what the Expo templates' flows read as
+          `appId: ${APP_ID}`.
+        type: string
+        required: false
+        default: auto
+      upload-artifacts:
+        description: >
+          always | on-failure | never — whether the JUnit report and Maestro's
+          debug output are uploaded. on-failure is the default because a green
+          run's screenshots are nobody's evidence. Flake statistics need
+          `always`: a flaky flow passes some of the time by definition, so a
+          history that only keeps the red runs cannot compute a pass rate.
+        type: string
+        required: false
+        default: on-failure
       deep-link:
         description: >
           URL opened on the device after install and before the flows. The
@@ -239,17 +288,73 @@ env:
   MAESTRO_CLI_NO_ANALYTICS: "1"
 
 jobs:
-  # Ubuntu, seconds, and the only job that can hard-gate the expensive ones.
-  # Skipped entirely in the simple shape — one job with no quarantine file and
-  # no routing needs no plan, and a check context nobody reads is a cost too.
-  preflight:
-    name: 🧭 Preflight
-    if: inputs.shards != '0' || inputs.quarantine-file != '' || inputs.hosted-fallback-labels != ''
+  # Two Ubuntu jobs where there used to be one, because they answer to different
+  # authorities and one of them was taking the suite down with it.
+  #
+  # Routing is advice. If it cannot run — and on a repo whose Actions billing has
+  # lapsed, no ubuntu-latest job can — the right answer is "use runner-labels",
+  # not "skip the E2E suite". As one job with a hard gate it was the second:
+  # `route` failed on arrival, `e2e` refused to start, and the suite silently
+  # stopped running (measured, would-you-rather run 30324571838). It is now its
+  # own job with continue-on-error, and every consumer reads its output as
+  # `needs.route.outputs.labels || inputs.runner-labels`, so a router that never
+  # ran costs nothing.
+  #
+  # The quarantine lint is a gate. A stale quarantine entry has to stop the
+  # merge, so it stays hard — and it only exists when quarantine-file is set,
+  # which is the repo saying it wants one.
+  #
+  # The shard plan left Ubuntu entirely: it reads one input string, it belongs
+  # to the sharded shape alone, and running it as the first step of the build
+  # job puts it on the runner that was going to be used anyway. A bad `shards`
+  # input still fails in seconds, before the checkout.
+  route:
+    name: 🧭 Route
+    if: inputs.hosted-fallback-labels != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Advice, not a gate. Downstream jobs carry `!cancelled()` so a failure here
+    # cannot skip them, and fall back to runner-labels when the output is empty.
+    continue-on-error: true
     outputs:
       labels: ${{ steps.route.outputs.labels }}
-      matrix: ${{ steps.shards.outputs.matrix }}
+    steps:
+      # The beacon, not a live lookup. A self-hosted Mac publishes a timestamp
+      # to a repo variable from a timer that has already confirmed the runner is
+      # listening; a stale one means asleep, offline or dead, and the run goes
+      # hosted. Repo variables are readable for free and hold nothing secret.
+      - name: 🧭 Route
+        id: route
+        env:
+          IN_LABELS: ${{ inputs.runner-labels }}
+          IN_FALLBACK: ${{ inputs.hosted-fallback-labels }}
+          IN_HEARTBEAT: ${{ inputs.runner-heartbeat }}
+          IN_MAX_AGE: ${{ inputs.heartbeat-max-age-seconds }}
+        run: |
+          set -euo pipefail
+          labels="$IN_LABELS"
+          verdict="🏷 $labels"
+          if [ -z "$IN_HEARTBEAT" ]; then
+            labels="$IN_FALLBACK"
+            verdict="☁️ $labels — no heartbeat published"
+          else
+            age=$(( $(date -u +%s) - IN_HEARTBEAT ))
+            if [ "$age" -ge 0 ] && [ "$age" -lt "$IN_MAX_AGE" ]; then
+              verdict="🖥️ $labels — heartbeat ${age}s old"
+            else
+              labels="$IN_FALLBACK"
+              verdict="☁️ $labels — heartbeat stale (${age}s)"
+            fi
+          fi
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          echo "$verdict"
+          echo "$verdict" >> "$GITHUB_STEP_SUMMARY"
+
+  quarantine:
+    name: 🚧 Quarantine lint
+    if: inputs.quarantine-file != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: 🏗 Checkout
         uses: actions/checkout@v7
@@ -260,7 +365,6 @@ jobs:
       # a soft-gated shard. Without the decay rule a quarantine file is just a
       # list of tests that stopped mattering.
       - name: 🚧 Lint the quarantine file
-        if: inputs.quarantine-file != ''
         env:
           IN_APP_DIR: ${{ inputs.app-dir }}
           IN_QUARANTINE_FILE: ${{ inputs.quarantine-file }}
@@ -321,107 +425,17 @@ jobs:
           echo "$entries quarantined flow(s), $failures problem(s)."
           [ "$failures" -eq 0 ]
 
-      # The beacon, not a live lookup. A self-hosted Mac publishes a timestamp
-      # to a repo variable from a timer that has already confirmed the runner is
-      # listening; a stale one means asleep, offline or dead, and the run goes
-      # hosted. Repo variables are readable for free and hold nothing secret.
-      - name: 🧭 Route
-        id: route
-        env:
-          IN_LABELS: ${{ inputs.runner-labels }}
-          IN_FALLBACK: ${{ inputs.hosted-fallback-labels }}
-          IN_HEARTBEAT: ${{ inputs.runner-heartbeat }}
-          IN_MAX_AGE: ${{ inputs.heartbeat-max-age-seconds }}
-        run: |
-          set -euo pipefail
-          labels="$IN_LABELS"
-          verdict="🏷 $labels"
-          if [ -n "$IN_FALLBACK" ]; then
-            if [ -z "$IN_HEARTBEAT" ]; then
-              labels="$IN_FALLBACK"
-              verdict="☁️ $labels — no heartbeat published"
-            else
-              age=$(( $(date -u +%s) - IN_HEARTBEAT ))
-              if [ "$age" -ge 0 ] && [ "$age" -lt "$IN_MAX_AGE" ]; then
-                verdict="🖥️ $labels — heartbeat ${age}s old"
-              else
-                labels="$IN_FALLBACK"
-                verdict="☁️ $labels — heartbeat stale (${age}s)"
-              fi
-            fi
-          fi
-          echo "labels=$labels" >> "$GITHUB_OUTPUT"
-          echo "$verdict"
-          echo "$verdict" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 🧮 Plan the shards
-        id: shards
-        if: inputs.shards != '0'
-        env:
-          IN_SHARDS: ${{ inputs.shards }}
-          IN_SOFT: ${{ inputs.soft-gate-shards }}
-        run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/plan-shards.mjs" <<'JS'
-          const raw = (process.env.IN_SHARDS ?? "").trim();
-          const soft = process.env.IN_SOFT === "true";
-          let entries;
-          if (/^\d+$/.test(raw)) {
-            const total = Number(raw);
-            if (total < 1) throw new Error(`shards must be "0" or >= 1, got ${raw}`);
-            entries = Array.from({ length: total }, (_, index) => ({
-              name: `shard-${index + 1}-of-${total}`,
-              flows: "",
-              index: String(index),
-              total: String(total),
-              soft: String(soft),
-            }));
-          } else {
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed) || parsed.length === 0) {
-              throw new Error("shards must be a count or a non-empty JSON array");
-            }
-            entries = parsed.map((shard, index) => {
-              if (!shard || typeof shard !== "object") {
-                throw new Error(`shard ${index} is not an object`);
-              }
-              if (!shard.flows) throw new Error(`shard ${index} has no flows`);
-              return {
-                name: String(shard.name ?? `shard-${index + 1}`),
-                // Commas are what a YAML author reaches for; the action takes
-                // one path per line.
-                flows: String(shard.flows)
-                  .split(",")
-                  .map((flow) => flow.trim())
-                  .filter(Boolean)
-                  .join("\n"),
-                index: "",
-                total: "",
-                soft: String(shard.soft ?? soft),
-              };
-            });
-          }
-          const names = new Set(entries.map((entry) => entry.name));
-          if (names.size !== entries.length) throw new Error("shard names must be unique");
-          process.stdout.write(JSON.stringify(entries));
-          JS
-          matrix=$(node "$RUNNER_TEMP/plan-shards.mjs")
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          {
-            echo "### Shards"
-            echo ""
-            echo '```json'
-            printf '%s\n' "$matrix"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
   # The default shape. Build and flows in one job, because the .app never leaves
   # the runner and the simulator boots once.
   e2e:
     name: ${{ inputs.job-name }}
-    needs: preflight
-    if: ${{ !cancelled() && needs.preflight.result != 'failure' && inputs.shards == '0' }}
-    runs-on: ${{ fromJSON(needs.preflight.outputs.labels || inputs.runner-labels) }}
+    needs: [route, quarantine]
+    # `!cancelled()` first, so a skipped or failed `route` cannot skip this job —
+    # that is the whole point of moving routing out. `quarantine` is the gate,
+    # and `!= 'failure'` lets it be skipped (no quarantine-file) without taking
+    # the suite with it.
+    if: ${{ !cancelled() && needs.quarantine.result != 'failure' && inputs.shards == '0' }}
+    runs-on: ${{ fromJSON(needs.route.outputs.labels || inputs.runner-labels) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     concurrency:
       group: magic-e2e-ios-${{ github.workflow }}-${{ github.ref }}
@@ -440,6 +454,7 @@ jobs:
           working-directory: ${{ inputs.app-dir }}
           node-version-file: ${{ inputs.node-version-file }}
           install-command: ${{ inputs.install-command }}
+          package-import-method: ${{ inputs.package-import-method }}
           registry-url: ${{ secrets.NPM_TOKEN != '' && 'https://registry.npmjs.org' || '' }}
           node-auth-token: ${{ secrets.NPM_TOKEN }}
 
@@ -458,6 +473,7 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
+          cache-maestro: ${{ inputs.cache-maestro }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
           working-directory: ${{ inputs.app-dir }}
@@ -495,6 +511,8 @@ jobs:
           retries: ${{ inputs.retries }}
           deep-link: ${{ inputs.deep-link }}
           maestro-env: ${{ inputs.maestro-env }}
+          app-id: ${{ inputs.app-id }}
+          upload-artifacts: ${{ inputs.upload-artifacts }}
           name: maestro-ios
 
       - name: 🧹 Remove the created simulator
@@ -511,16 +529,100 @@ jobs:
   # The sharded shape. One build, published once, consumed by every shard.
   build:
     name: 🏗 Build (sharded)
-    needs: preflight
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && inputs.shards != '0' }}
-    runs-on: ${{ fromJSON(needs.preflight.outputs.labels || inputs.runner-labels) }}
+    needs: [route, quarantine]
+    if: ${{ !cancelled() && needs.quarantine.result != 'failure' && inputs.shards != '0' }}
+    runs-on: ${{ fromJSON(needs.route.outputs.labels || inputs.runner-labels) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     concurrency:
       group: magic-e2e-ios-build-${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
     outputs:
       bundle-id: ${{ steps.build.outputs.bundle-id }}
+      shard-plan: ${{ steps.shards.outputs.plan }}
+      shard-names: ${{ steps.shards.outputs.names }}
     steps:
+      # First, before the checkout: it reads one input string and nothing else,
+      # so a malformed `shards` fails in seconds rather than after a build. It
+      # runs here rather than on Ubuntu because this job's runner is the one the
+      # matrix will use anyway, and a plan step that cannot run when hosted
+      # billing is broken is a suite that cannot run either.
+      - name: 🧮 Plan the shards
+        id: shards
+        env:
+          IN_SHARDS: ${{ inputs.shards }}
+          IN_SOFT: ${{ inputs.soft-gate-shards }}
+        run: |
+          set -euo pipefail
+          # python3, not node: this step runs before Setup Node so that a
+          # malformed input costs nothing, and every macOS runner has python3
+          # while a self-hosted one may not have a node on PATH yet.
+          python3 - > "$RUNNER_TEMP/shard-plan.txt" <<'PY'
+          import json, os, re
+
+          raw = (os.environ.get("IN_SHARDS") or "").strip()
+          soft = os.environ.get("IN_SOFT") == "true"
+
+          if re.fullmatch(r"\d+", raw):
+              total = int(raw)
+              if total < 1:
+                  raise SystemExit(f'shards must be "0" or >= 1, got {raw}')
+              entries = [
+                  {
+                      "name": f"shard-{index + 1}-of-{total}",
+                      "flows": "",
+                      "index": str(index),
+                      "total": str(total),
+                      "soft": str(soft).lower(),
+                  }
+                  for index in range(total)
+              ]
+          else:
+              parsed = json.loads(raw)
+              if not isinstance(parsed, list) or not parsed:
+                  raise SystemExit("shards must be a count or a non-empty JSON array")
+              entries = []
+              for index, shard in enumerate(parsed):
+                  if not isinstance(shard, dict):
+                      raise SystemExit(f"shard {index} is not an object")
+                  if not shard.get("flows"):
+                      raise SystemExit(f"shard {index} has no flows")
+                  entries.append(
+                      {
+                          "name": str(shard.get("name") or f"shard-{index + 1}"),
+                          # Commas are what a YAML author reaches for; the
+                          # action takes one path per line.
+                          "flows": "\n".join(
+                              part.strip()
+                              for part in str(shard["flows"]).split(",")
+                              if part.strip()
+                          ),
+                          "index": "",
+                          "total": "",
+                          "soft": str(shard.get("soft", soft)).lower(),
+                      }
+                  )
+
+          names = [entry["name"] for entry in entries]
+          if len(set(names)) != len(names):
+              raise SystemExit("shard names must be unique")
+          # The matrix carries the names alone, so GitHub's own job naming
+          # renders `shard (core)` — see the note on the shard job.
+          print(json.dumps(entries))
+          print(json.dumps(names))
+          PY
+          { read -r plan; read -r names; } < "$RUNNER_TEMP/shard-plan.txt"
+          # printf, not echo: a named shard's flows are a JSON string holding
+          # \n, and there are shells whose echo would turn that into a newline
+          # and split the output line in half.
+          printf 'plan=%s\nnames=%s\n' "$plan" "$names" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Shards"
+            echo ""
+            echo '```json'
+            printf '%s\n' "$plan"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: 🏗 Checkout
         uses: actions/checkout@v7
 
@@ -530,6 +632,7 @@ jobs:
           working-directory: ${{ inputs.app-dir }}
           node-version-file: ${{ inputs.node-version-file }}
           install-command: ${{ inputs.install-command }}
+          package-import-method: ${{ inputs.package-import-method }}
           registry-url: ${{ secrets.NPM_TOKEN != '' && 'https://registry.npmjs.org' || '' }}
           node-auth-token: ${{ secrets.NPM_TOKEN }}
 
@@ -587,22 +690,53 @@ jobs:
           path: ${{ runner.temp }}/magic-app/app.tgz
           retention-days: 1
 
+  # Deliberately unnamed. A `name:` holding a matrix expression is rendered
+  # *literally* when the job is skipped — the unsharded shape, i.e. the default —
+  # so every consumer of this workflow carried a check called
+  # `🧪 ${{ matrix.shard.name }}` in its PR list. GitHub's own naming has no such
+  # problem: with no `name:` the job is `shard (core)` when the matrix expands
+  # and plain `shard` when it does not. That is also why the matrix vector is the
+  # bare shard *name* and the rest of the plan is looked up in a step below —
+  # an object in the vector would be serialised into the job name whole.
   shard:
-    name: 🧪 ${{ matrix.shard.name }}
-    needs: [preflight, build]
+    needs: [route, build]
     if: ${{ !cancelled() && needs.build.result == 'success' }}
-    runs-on: ${{ fromJSON(needs.preflight.outputs.labels || inputs.runner-labels) }}
+    runs-on: ${{ fromJSON(needs.route.outputs.labels || inputs.runner-labels) }}
     timeout-minutes: ${{ inputs.flow-timeout-minutes }}
     strategy:
       # One shard's failure must not cancel its siblings: the point of the run
       # is the whole picture, and a cancelled sibling reports as neither.
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+        shard: ${{ fromJSON(needs.build.outputs.shard-names) }}
     concurrency:
-      group: magic-e2e-ios-${{ github.workflow }}-${{ github.ref }}-${{ matrix.shard.name }}
+      group: magic-e2e-ios-${{ github.workflow }}-${{ github.ref }}-${{ matrix.shard }}
       cancel-in-progress: true
     steps:
+      - name: 🧮 Resolve this shard
+        id: plan
+        env:
+          PLAN: ${{ needs.build.outputs.shard-plan }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os
+
+          want = os.environ["SHARD"]
+          plan = json.loads(os.environ["PLAN"])
+          entry = next((shard for shard in plan if shard["name"] == want), None)
+          if entry is None:
+              raise SystemExit(f"no shard named {want!r} in the plan")
+
+          # flows is a list, so it goes out as a heredoc. The delimiter cannot
+          # occur in a flow path, which is all GITHUB_OUTPUT asks of it.
+          print(f"flows<<MAGIC_SHARD_FLOWS\n{entry['flows']}\nMAGIC_SHARD_FLOWS")
+          print(f"index={entry['index']}")
+          print(f"total={entry['total']}")
+          print(f"soft={entry['soft']}")
+          PY
+
       - name: 🏗 Checkout
         uses: actions/checkout@v7
 
@@ -619,7 +753,12 @@ jobs:
           dest="$RUNNER_TEMP/magic-app/unpacked"
           mkdir -p "$dest"
           tar -C "$dest" -xzf "$RUNNER_TEMP/magic-app/app.tgz"
-          app_path=$(find "$dest" -maxdepth 1 -name "*.app" | head -1 || true)
+          # A file and `read`, never `find | head -1`: head closes the pipe on
+          # the line it wanted and pipefail turns the writer's SIGPIPE into this
+          # step's exit code. See the note in build-ios-app.
+          find "$dest" -maxdepth 1 -name "*.app" > "$RUNNER_TEMP/unpacked-apps.txt" 2>/dev/null || true
+          app_path=""
+          read -r app_path < "$RUNNER_TEMP/unpacked-apps.txt" || true
           if [ -z "$app_path" ]; then
             echo "::error::No .app in the published artifact."
             exit 1
@@ -634,6 +773,7 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
+          cache-maestro: ${{ inputs.cache-maestro }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
           working-directory: ${{ inputs.app-dir }}
@@ -652,20 +792,22 @@ jobs:
           working-directory: ${{ inputs.app-dir }}
           # A named shard brings its own list. A counted one brings none, and
           # then the workflow-level list (or flows-dir) is what gets sliced.
-          flows: ${{ matrix.shard.flows != '' && matrix.shard.flows || inputs.flows }}
+          flows: ${{ steps.plan.outputs.flows != '' && steps.plan.outputs.flows || inputs.flows }}
           flows-dir: ${{ inputs.flows-dir }}
-          shard-index: ${{ matrix.shard.index }}
-          shard-total: ${{ matrix.shard.total }}
+          shard-index: ${{ steps.plan.outputs.index }}
+          shard-total: ${{ steps.plan.outputs.total }}
           quarantine-file: ${{ inputs.quarantine-file }}
           per-flow: ${{ inputs.per-flow }}
           retries: ${{ inputs.retries }}
           deep-link: ${{ inputs.deep-link }}
           maestro-env: ${{ inputs.maestro-env }}
+          app-id: ${{ inputs.app-id }}
+          upload-artifacts: ${{ inputs.upload-artifacts }}
           # Soft-gating lives here rather than in a job-level
           # continue-on-error, which reports a red run as green to PR checks —
           # one repo shipped three failing runs as successes that way.
-          soft-fail: ${{ matrix.shard.soft }}
-          name: ${{ matrix.shard.name }}
+          soft-fail: ${{ steps.plan.outputs.soft }}
+          name: ${{ matrix.shard }}
 
       - name: 🧹 Remove the created simulator
         if: always() && steps.ios.outputs.created == 'true'
