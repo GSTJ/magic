@@ -757,12 +757,26 @@ consumers breaks this repo's own build first.
   consumer install of that plugin from 59 packages to 1. Dropping the
   react-native dependency is the security fix. They are separate problems.
 
-  Consumers therefore have a working mitigation today without either publish. On
-  npm, `"overrides": { "eslint": "^10" }` (yarn: `resolutions`) takes a fresh
-  `npm i magic-oxlint-config@1.2.0` from 78 packages and `brace-expansion@1.1.16`
-  to 62 and `5.0.8`. On pnpm the `packageExtensions` stanza is better still: 92
-  `.pnpm` directories to 6, with eslint absent and no `brace-expansion` at all.
-  Both are in the README.
+  Consumers therefore have a working mitigation today without either publish, and
+  it is package-manager-specific in a way the first draft of this got wrong.
+
+  On **npm**, `"overrides": { "eslint": "^10" }` takes a fresh
+  `npm i magic-oxlint-config@1.2.0` from 78 packages, `eslint@9.39.5`,
+  `brace-expansion@1.1.16` and 5 high `npm audit` findings to 62 packages,
+  `eslint@10.8.0`, `brace-expansion@5.0.8` and 0 findings. On **pnpm** the
+  `packageExtensions` stanza is better still: 90 `.pnpm` directories to 4, eslint
+  absent, no `brace-expansion` at all.
+
+  On **yarn there is nothing to do**, and the advice to mirror the npm fix with
+  `resolutions` was wrong. Yarn does not auto-install a missing peer on either
+  generation, it warns and carries on. A fresh
+  `yarn add -D magic-oxlint-config@1.2.0` installs `eslint-plugin-react-native`
+  and `eslint-plugin-safe-jsx` and stops there: no `eslint`, no `minimatch`, no
+  `brace-expansion`, and no `eslint@` entry in `yarn.lock`. Verified on 1.22.22
+  and on 4.10.3, where `yarn explain peer-requirements` reports that
+  `magic-oxlint-config@npm:1.2.0` "doesn't provide eslint to
+  eslint-plugin-react-native@npm:5.0.0" and the install succeeds regardless. A
+  `resolutions` entry pins a package nothing installs. Corrected in the README.
 
   **Vendoring the react-native rules, assessed.** The standing suggestion above
   says "vendoring the two rules actually used". Four run at `error` in the
@@ -879,13 +893,15 @@ properties of null (reading 'expression')`). Guarded.
   the whole corpus and the `settings["react-native/style-sheet-object-names"]`
   path.
 
-  That corpus also caught the one thing the port got wrong. `no-unused-styles`
-  built its message with `String(node.key.name)`, so a string-literal or
-  template-literal StyleSheet key reported as `Unused style detected:
-styles.undefined` where upstream's `Array#join` renders the missing name as the
-  empty string and reports `styles.` with nothing after the dot. A computed
-  _identifier_ key does have a `.name` and reports it, so the three shapes differ
-  and all three are now pinned in `fixtures/adversarial/react-native`.
+  That corpus also caught the one thing the port got wrong: 52 of the 55
+  `react-native/*` diagnostics matched on the first run. `no-unused-styles` built
+  its message with `String(node.key.name)`, so the other 3 reported as
+  `Unused style detected: styles.undefined`, where upstream's `Array#join`
+  renders the missing name as the empty string and reports `styles.` with nothing
+  after the dot. Those 3 are the StyleSheet entries with a string-literal or
+  template-literal key. A computed _identifier_ key does have a `.name` and
+  upstream reports it, so the three key shapes produce three different messages
+  and all three are pinned in `fixtures/adversarial/react-native`.
 
   **There is no native shortcut either, as of oxlint 1.76.0.** Checked against
   oxlint's own `configuration_schema.json`, the same source `validate-rules.mjs`

@@ -535,21 +535,28 @@ packageExtensions:
 silences the missing-peer warning and installs eslint anyway, byte-identical
 lockfile with and without it.
 
-On npm or yarn there is no `packageExtensions`, and a required peer is installed
+On npm there is no `packageExtensions`, and npm 7+ installs a required peer
 whatever you do, so pin the major instead:
 
 ```jsonc
-// package.json — npm
+// package.json
 { "overrides": { "eslint": "^10" } }
-// package.json — yarn
-{ "resolutions": { "eslint": "^10" } }
 ```
 
-That took a fresh `npm i magic-oxlint-config@1.2.0` from 78 packages and
-`brace-expansion@1.1.16` to 62 and `5.0.8`. It worked because
+That took a fresh `npm i magic-oxlint-config@1.2.0` from 78 packages,
+`eslint@9.39.5`, `brace-expansion@1.1.16` and 5 high `npm audit` findings to 62
+packages, `eslint@10.8.0`, `brace-expansion@5.0.8` and 0 findings.
 `eslint-plugin-react-native@5.0.0` capped its peer at `^9`, and eslint 9 is the
 last major carrying `@eslint/eslintrc` and a `@eslint/config-array` on
 `minimatch@3`, which is the `brace-expansion@1` tail with no v1 fix.
+
+**Yarn needs nothing.** It does not auto-install missing peers on either
+generation, it warns. A fresh `yarn add -D magic-oxlint-config@1.2.0` installs
+`eslint-plugin-react-native` and `eslint-plugin-safe-jsx` and stops there: no
+`eslint`, no `minimatch`, no `brace-expansion`, and no `eslint@` entry in
+`yarn.lock` at all. Measured on 1.22.22 and 4.10.3; 4.x prints
+`✘ … doesn't provide eslint to eslint-plugin-react-native@npm:5.0.0` and carries
+on. A `resolutions` entry there pins a package nothing installs.
 
 None of it addresses a repo that depends on something with a real `eslint`
 dependency — `expo-module-scripts` is the one in this set. Check `pnpm why
