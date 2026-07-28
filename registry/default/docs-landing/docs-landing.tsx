@@ -182,7 +182,6 @@ export const DocsHero = ({
   >
     <div className={styles.heroCopy}>
       <p className={styles.eyebrow} data-docs-hero-reveal>
-        <span aria-hidden="true" />
         {eyebrow}
       </p>
       <h1 data-docs-hero-reveal>{title}</h1>

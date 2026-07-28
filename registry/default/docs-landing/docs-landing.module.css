@@ -194,23 +194,12 @@
 }
 
 .eyebrow {
-  align-items: center;
   color: var(--docs-muted);
-  display: flex;
   font-size: 0.73rem;
   font-weight: 680;
-  gap: 0.68rem;
   letter-spacing: 0.045em;
   margin-bottom: clamp(1.5rem, 3vh, 2.4rem) !important;
   text-transform: uppercase;
-}
-
-.eyebrow > span {
-  background: var(--docs-accent);
-  border-radius: 50%;
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--docs-accent) 18%, transparent);
-  height: 7px;
-  width: 7px;
 }
 
 .hero h1 {
