@@ -485,11 +485,124 @@ process.stdout.write(
     "View is not flagged",
     !restricted.some((d) => d.message.includes("'View'")),
   );
-  const inline = codes(r, "inline-style.tsx");
+  // The four react-native/* rules are magic-oxlint-plugin's ports, wired under
+  // the same `react-native` namespace so rule ids and disable comments did not
+  // move. These assertions are the parity contract: counts, and the line the
+  // silence starts on.
+  const inline = diag(r, "inline-style.tsx", "react-native(no-inline-styles)");
   check(
-    "eslint-plugin-react-native jsPlugin loads and fires",
-    inline.includes("react-native(no-inline-styles)") &&
-      inline.includes("react-native(no-color-literals)"),
+    "the react-native jsPlugin loads and no-inline-styles fires 8 times",
+    inline.length === 8,
+    `got ${inline.length}`,
+  );
+  const inlineSilent = lineOf(
+    "react-native",
+    "inline-style.tsx",
+    "SILENT FROM",
+  );
+  check(
+    "…and every near-miss below it is silent (empty object, reference, array of\n        references, identifier value, spread, non-literal conditional, nested\n        object, string attribute, valueless attribute)",
+    inline.every((d) => line(d) < inlineSilent),
+    inline.map(line).join(", "),
+  );
+  check(
+    "a valueless `style` attribute does not take the plugin host down with it",
+    !r.diagnostics.some((d) => d.message.includes("Error running JS plugin")),
+  );
+  check(
+    "no-color-literals fires on the inline hex too",
+    diag(r, "inline-style.tsx", "react-native(no-color-literals)").length === 1,
+  );
+
+  const colors = diag(
+    r,
+    "color-literals.tsx",
+    "react-native(no-color-literals)",
+  );
+  check(
+    "no-color-literals fires 6 times: 3 inline, 3 inside StyleSheet.create",
+    colors.length === 6,
+    `got ${colors.length}`,
+  );
+  const decoy = lineOf(
+    "react-native",
+    "color-literals.tsx",
+    "NotAStyleSheet =",
+  );
+  check(
+    "`colour`, a token value, a non-literal conditional, a fake StyleSheet and\n        StyleSheet.compose are all silent",
+    !colors.some((d) => line(d) >= decoy) &&
+      !colors.some((d) => d.message.includes("colour")),
+    colors.map(line).join(", "),
+  );
+
+  const arrays = diag(
+    r,
+    "single-element-arrays.tsx",
+    "react-native(no-single-element-style-arrays)",
+  );
+  check(
+    "no-single-element-style-arrays fires twice",
+    arrays.length === 2,
+    `got ${arrays.length}`,
+  );
+  const exact = lineOf("react-native", "single-element-arrays.tsx", "SILENT");
+  check(
+    "a 2-element array, an empty array, `contentContainerStyle` and a bare\n        reference are silent — this rule matches `style` exactly, unlike\n        no-inline-styles",
+    arrays.every((d) => line(d) < exact),
+    arrays.map(line).join(", "),
+  );
+
+  // The rule is `fixable: "code"` upstream and here. The fix is what a repo
+  // actually runs, so it is checked rather than assumed.
+  const rnDir = join(here, "react-native");
+  const rnWork = join(rnDir, "work");
+  mkdirSync(rnWork, { recursive: true });
+  const arrayCopy = join(rnWork, "single-element-arrays.tsx");
+  copyFileSync(join(rnDir, "src", "single-element-arrays.tsx"), arrayCopy);
+  try {
+    execFileSync(oxlintBin, ["--fix", "work/single-element-arrays.tsx"], {
+      cwd: rnDir,
+    });
+  } catch {
+    /* non-zero exit is fine — no-inline-styles has no fixer and remains */
+  }
+  const fixed = readFileSync(arrayCopy, "utf8");
+  check(
+    "--fix unwraps both single-element arrays in one pass",
+    fixed.includes("style={sheet.row} />") &&
+      fixed.includes("style={{ padding: 9 }} />") &&
+      !fixed.includes("style={[sheet.row]}"),
+  );
+  const rArrays = lint(rnDir, ["work/single-element-arrays.tsx"]);
+  check(
+    "…and the rule no longer fires on the fixed file",
+    diag(
+      rArrays,
+      "single-element-arrays.tsx",
+      "react-native(no-single-element-style-arrays)",
+    ).length === 0,
+  );
+  rmSync(rnWork, { recursive: true, force: true });
+
+  const unused = diag(r, "unused-styles.tsx", "react-native(no-unused-styles)");
+  check(
+    "no-unused-styles fires 3 times and leaves `used` alone",
+    unused.length === 3 && !unused.some((d) => d.message.endsWith(".used")),
+    unused.map((d) => d.message).join(", "),
+  );
+  check(
+    "a deep access, a computed access and a same-named property on another\n        object all fail to mark an entry as used",
+    ["neverReferenced", "deepAccessOnly", "computedAccessOnly"].every((entry) =>
+      unused.some((d) => d.message.endsWith(`.${entry}`)),
+    ),
+    unused.map((d) => d.message).join(", "),
+  );
+  check(
+    "the component gate holds: a sheet in a file with no component is silent",
+    diag(r, "unused-styles-no-component.tsx", "react-native(no-unused-styles)")
+      .length === 0,
+    codes(r, "unused-styles-no-component.tsx").join(", ") || "none",
   );
 }
 
