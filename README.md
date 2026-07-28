@@ -46,7 +46,13 @@ shell, section primitives, clipboard button, scoped CSS, and GSAP effects into
 the consumer repo. Each package supplies its product demo, examples, history,
 and copy.
 
-Install it from the public GitHub registry:
+Review the PR branch without writing files:
+
+```sh
+pnpm dlx shadcn@latest add GSTJ/magic/docs-landing#agent/docs-landing-registry --dry-run
+```
+
+The default-branch address becomes the regular install command after merge:
 
 ```sh
 pnpm dlx shadcn@latest add GSTJ/magic/docs-landing
@@ -62,6 +68,17 @@ components/docs-landing/
 
 The CLI resolves `@components` from `components.json` and installs
 `gsap@3.15.0`.
+
+`public/r/registry.json` and `public/r/docs-landing.json` are the flat payloads
+built by shadcn. `pnpm run validate-registry` checks their metadata, file list,
+and embedded source against `registry.json` and the four files above.
+
+### Registry Directory status
+
+`@magic/docs-landing` is reserved for the shadcn Registry Directory. It becomes
+eligible after this work merges, the files under `public/r` have a stable public
+HTTPS URL, and the namespace is accepted upstream. Use the GitHub addresses
+above during PR review and until that directory entry ships.
 
 Compose the page around repository-owned content:
 
