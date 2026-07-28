@@ -519,6 +519,28 @@ It only addresses _this_ source. A repo that also depends on something with a
 real `eslint` dependency — `expo-module-scripts` is the one in this set — gets
 the tree back anyway. Check what `pnpm why eslint` says before adding it.
 
+**On npm or yarn**, there is no `packageExtensions`, and a required peer is
+installed whatever you do. Pin the major instead:
+
+```jsonc
+// package.json — npm
+{ "overrides": { "eslint": "^10" } }
+// package.json — yarn
+{ "resolutions": { "eslint": "^10" } }
+```
+
+Measured on a fresh `npm i magic-oxlint-config@1.2.0` into an empty project: 78
+packages and `brace-expansion@1.1.16` without it, 62 packages and
+`brace-expansion@5.0.8` with it. Nothing executes eslint either way, so the
+major it resolves to only decides which transitive tail comes along.
+
+Which is the whole reason the pin works. `eslint-plugin-react-native@5.0.0` caps
+its peer at `^9`, and eslint 9 is the last major carrying `@eslint/eslintrc` and
+a `@eslint/config-array` on `minimatch@3` — the `brace-expansion@1` tail with no
+v1 fix. `eslint-plugin-safe-jsx@1.3.1` allows `^10`, so on its own it
+resolves to eslint 10, `minimatch@10` and the patched `brace-expansion@5.0.8`.
+The react-native plugin is what holds the tree on 9.
+
 ---
 
 ## CI

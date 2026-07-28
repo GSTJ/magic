@@ -3,6 +3,42 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — Which plugin pins eslint to 9, and what consumers can do
+
+No npm package changed. The round ships as `v1.8.2`; `v1` moves onto it.
+
+### Documented: pinning eslint on npm and yarn
+
+The previous round took GHSA-mh99-v99m-4gvg out of this repo's lockfile.
+`packageExtensions` is per-repo, so a consumer running
+`npm i magic-oxlint-config@1.2.0` still resolves the vulnerable copy.
+
+Measured per plugin, installed alone into an empty npm project.
+`eslint-plugin-safe-jsx@1.3.1` allows an eslint `^10` peer and resolves to
+10.8.0, `minimatch@10.2.6` and the patched `brace-expansion@5.0.8`.
+`eslint-plugin-react-native@5.0.0` caps at `^9`, and eslint 9 is the last major
+that still depends on `@eslint/eslintrc` and resolves `@eslint/config-array`
+onto `minimatch@3`. Together the cap wins, so the react-native plugin is what
+holds a consumer install on `brace-expansion@1.1.16`.
+
+The README now carries the npm and yarn form beside the pnpm stanza:
+`"overrides": { "eslint": "^10" }` and `"resolutions": { "eslint": "^10" }`.
+Either takes a fresh install from 78 packages and `brace-expansion@1.1.16` to 62
+and `5.0.8`, with all four react-native rules and `safe-jsx/jsx-explicit-boolean`
+still loading. The pnpm `packageExtensions` stanza does better, 92 `.pnpm`
+directories to 6 with no `brace-expansion` at all.
+
+### Assessed: vendoring the react-native rules into `magic-oxlint-plugin`
+
+Not done. It is four rules rather than the two DECISIONS.md section 4 assumed,
+and about 1230 lines once `lib/util/Components` and `lib/util/stylesheet` come
+along, because `no-unused-styles` gates its `Program:exit` on
+`components.all()`. The blocker is the `jsPlugins` specifier, which oxlint
+resolves from the consumer's config directory: a wrong vendored specifier does
+not throw, it silently stops the four rules reporting. Section 4 records what a
+revisit needs, starting with fixtures asserting identical diagnostics on real
+consumer code.
+
 ## 2026-07-28 — Dropping the unused eslint tree
 
 No npm package changed. The round ships as `v1.8.1`; `v1` moves onto it.
