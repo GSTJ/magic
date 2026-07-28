@@ -29,23 +29,54 @@ inputs:
     required: false
     default: 2.6.0
   simulator-device:
-    description: Simulator device name to boot.
+    description: >
+      Simulator device name. Empty takes the newest iPhone the chosen runtime
+      supports, ranked by generation and then Pro Max > Pro > Plus > plain >
+      mini — a runtime lists its device types in Apple order, and taking the
+      last one lands on an iPhone 11. Pin a name only when a flow depends on a
+      particular screen size.
     required: false
-    default: iPhone 17 Pro Max
+    default: ""
   simulator-runtime:
-    description: Runtime prefix the device must be on, e.g. "iOS 26".
+    description: 'Runtime prefix, e.g. "iOS 26". Empty takes the newest installed.'
     required: false
-    default: iOS 26
+    default: ""
   simulator-fallback:
     description: >
-      When the pinned device/runtime pair is not on the runner, boot the newest
-      iPhone on the newest iOS runtime instead of failing.
+      When the pinned device/runtime pair is not on the runner, use the newest
+      iPhone on the newest iOS runtime instead of failing. Runner images drop
+      runtimes without warning, so this is on by default and warns loudly.
     required: false
     default: "true"
   boot:
-    description: Boot the simulator and wait for it. Off means only resolve the udid.
+    description: >
+      Boot the simulator and wait for it. Set it to false when the build runs
+      next — `simctl boot` returns as soon as the boot starts, so starting it and
+      waiting for it in two different places is what lets the boot overlap the
+      compile, which is the one place the overlap is free.
     required: false
     default: "true"
+  boot-timeout-seconds:
+    description: >
+      How long to wait for a boot before erasing the device and trying once more.
+      `simctl bootstatus -b` never returns on a device that wedged, and an
+      unbounded wait eats the whole job timeout at 10x macOS billing.
+    required: false
+    default: "240"
+  create-device:
+    description: >
+      auto | true | false. true creates a dedicated device from the newest
+      runtime's own supportedDeviceTypes — the only pairing `simctl create`
+      accepts — after deleting any left over from an earlier run under the same
+      name. auto is true off a GitHub-hosted runner and false on one: a hosted
+      runner is destroyed after the job, so creating there only costs a boot,
+      while a self-hosted Mac accumulates one full disk image per run.
+    required: false
+    default: auto
+  device-name:
+    description: Name for the created device. Also what the stale-device sweep matches on.
+    required: false
+    default: magic-e2e
   install-cocoapods:
     description: auto uses the runner's pod if there is one, true always installs, false never.
     required: false
@@ -84,6 +115,12 @@ outputs:
   simulator-name:
     description: Name and runtime of the simulator that was selected.
     value: ${{ steps.simulator.outputs.name }}
+  created:
+    description: >
+      "true" when this action created the device, so the caller knows to delete
+      it on the way out. A step output of a composite action is invisible to the
+      caller unless it is declared here.
+    value: ${{ steps.simulator.outputs.created }}
   xcode-path:
     description: Developer directory that xcode-select now points at.
     value: ${{ steps.xcode.outputs.path }}
@@ -231,16 +268,133 @@ runs:
         SIM_DEVICE: ${{ inputs.simulator-device }}
         SIM_RUNTIME: ${{ inputs.simulator-runtime }}
         SIM_FALLBACK: ${{ inputs.simulator-fallback }}
-        SIM_BOOT: ${{ inputs.boot }}
+        SIM_CREATE: ${{ inputs.create-device }}
+        SIM_NAME: ${{ inputs.device-name }}
       run: |
         set -euo pipefail
-        selection=$(xcrun simctl list devices available --json | python3 -c '
+
+        create="$SIM_CREATE"
+        if [ "$create" = "auto" ]; then
+          if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]; then create=false; else create=true; fi
+        fi
+
+        if [ "$create" = "true" ]; then
+          # A self-hosted Mac is not destroyed after the job, and a device from
+          # an earlier run is still sitting there with a full disk image behind
+          # it. Sweep before creating, so a cancelled run cannot leave the
+          # machine slowly filling up; the caller tears this one down on the way
+          # out, and this sweep only ever has to catch runs that were killed.
+          stale_list="${RUNNER_TEMP:-/tmp}/magic-stale-simulators.txt"
+          xcrun simctl list devices --json | python3 -c '
+        import json, os, sys
+        want = os.environ["SIM_NAME"]
+        for entries in json.load(sys.stdin)["devices"].values():
+            for device in entries:
+                if device.get("name") == want and device.get("udid"):
+                    print(device["udid"])
+        ' > "$stale_list"
+          while read -r stale; do
+            [ -n "$stale" ] || continue
+            echo "Removing leftover simulator $stale"
+            xcrun simctl shutdown "$stale" 2>/dev/null || true
+            xcrun simctl delete "$stale" 2>/dev/null || true
+          done < "$stale_list"
+
+          # Pick the runtime first, then a device type that runtime actually
+          # lists. Choosing the newest runtime and the newest iPhone
+          # independently pairs combinations `simctl create` rejects.
+          pair=$(xcrun simctl list runtimes --json | python3 -c '
+        import json, os, re, sys
+
+        want_runtime = os.environ.get("SIM_RUNTIME", "").strip()
+        want_device = os.environ.get("SIM_DEVICE", "").strip()
+        fallback = os.environ.get("SIM_FALLBACK") == "true"
+
+        def order(runtime):
+            match = re.search(r"iOS[- ](\d+)(?:[-.](\d+))?", runtime.get("identifier", ""))
+            return (int(match.group(1)), int(match.group(2) or 0)) if match else (0, 0)
+
+        def phone_order(device):
+            name = device.get("name", "")
+            match = re.search(r"iPhone\s+(\d+)", name)
+            generation = int(match.group(1)) if match else 0
+            lowered = name.lower()
+            if "pro max" in lowered:
+                rank = 3
+            elif "pro" in lowered:
+                rank = 2
+            elif "plus" in lowered:
+                rank = 1
+            elif "mini" in lowered:
+                rank = -1
+            else:
+                rank = 0
+            return (generation, rank, name)
+
+        available = [
+            runtime
+            for runtime in json.load(sys.stdin)["runtimes"]
+            if runtime.get("platform") == "iOS" and runtime.get("isAvailable")
+        ]
+        matching = [r for r in available if not want_runtime or r.get("name", "").startswith(want_runtime)]
+        pool = matching or (available if fallback else [])
+        if not pool:
+            sys.exit(1)
+        runtime = sorted(pool, key=order)[-1]
+
+        phones = [
+            device
+            for device in runtime.get("supportedDeviceTypes", [])
+            if device.get("productFamily") == "iPhone"
+        ]
+        named = [device for device in phones if device.get("name") == want_device]
+        chosen = named or (phones if (fallback or not want_device) else [])
+        if not chosen:
+            sys.exit(1)
+        # supportedDeviceTypes comes back in the order Apple ships it, which
+        # is not newest last: taking the final entry picked an iPhone 11 off an
+        # iOS 26 runtime. Sorting by name string is no better either, because
+        # "iPhone 9" beats "iPhone 17" as a string.
+        device = sorted(chosen, key=phone_order)[-1]
+        print(device["identifier"], runtime["identifier"], device["name"], runtime["name"], sep="|")
+        ') || true
+
+          if [ -z "$pair" ]; then
+            echo "::error::No iPhone device type on any installed iOS runtime matches device='$SIM_DEVICE' runtime='$SIM_RUNTIME'."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+          device_type=${pair%%|*}; rest=${pair#*|}
+          runtime_id=${rest%%|*}; rest=${rest#*|}
+          device_name=${rest%%|*}; runtime_name=${rest#*|}
+
+          udid=$(xcrun simctl create "$SIM_NAME" "$device_type" "$runtime_id")
+          name="$device_name ($runtime_name)"
+          echo "Created $SIM_NAME: $name — $udid"
+        else
+          selection=$(xcrun simctl list devices available --json | python3 -c '
         import json, os, re, sys
 
         want_name = os.environ.get("SIM_DEVICE", "").strip()
         want_runtime = os.environ.get("SIM_RUNTIME", "").strip()
         fallback = os.environ.get("SIM_FALLBACK") == "true"
         devices = json.load(sys.stdin)["devices"]
+
+        def phone_order(name):
+            match = re.search(r"iPhone\s+(\d+)", name)
+            generation = int(match.group(1)) if match else 0
+            lowered = name.lower()
+            if "pro max" in lowered:
+                rank = 3
+            elif "pro" in lowered:
+                rank = 2
+            elif "plus" in lowered:
+                rank = 1
+            elif "mini" in lowered:
+                rank = -1
+            else:
+                rank = 0
+            return (generation, rank, name)
 
         def ios_runtimes():
             for runtime, entries in devices.items():
@@ -259,13 +413,16 @@ runs:
                 udid = device.get("udid")
                 if not udid:
                     continue
+                # Sort key first, so the newest runtime wins and, within it,
+                # the newest iPhone — "iPhone 9" sorts above "iPhone 17" as a
+                # string, which is how a picker like this ends up on an SE.
                 if "iPhone" in name:
-                    any_iphone.append((order, name, label, udid))
+                    any_iphone.append(((order, phone_order(name)), name, label, udid))
                 if want_name and name != want_name:
                     continue
                 if want_runtime and not label.startswith(want_runtime):
                     continue
-                exact.append((order, name, label, udid))
+                exact.append(((order, phone_order(name)), name, label, udid))
 
         pool = exact or (any_iphone if fallback else [])
         if not pool:
@@ -275,24 +432,71 @@ runs:
         print(udid, f"{name} ({label})", "exact" if exact else "fallback", sep="|")
         ') || true
 
-        if [ -z "$selection" ]; then
-          echo "::error::No simulator matching device='$SIM_DEVICE' runtime='$SIM_RUNTIME'."
-          xcrun simctl list devices available
-          exit 1
+          if [ -z "$selection" ]; then
+            echo "::error::No simulator matching device='$SIM_DEVICE' runtime='$SIM_RUNTIME'."
+            xcrun simctl list devices available
+            exit 1
+          fi
+          udid=${selection%%|*}; rest=${selection#*|}
+          name=${rest%%|*}; how=${rest#*|}
+          if [ "$how" = "fallback" ]; then
+            echo "::warning::No simulator matched device='$SIM_DEVICE' runtime='$SIM_RUNTIME'; using $name."
+          fi
+          echo "Simulator: $name ($udid)"
         fi
 
-        udid=${selection%%|*}
-        rest=${selection#*|}
-        name=${rest%%|*}
-        how=${rest#*|}
-        if [ "$how" = "fallback" ]; then
-          echo "::warning::No simulator matched device='$SIM_DEVICE' runtime='$SIM_RUNTIME'; using $name."
-        fi
-        echo "Simulator: $name ($udid)"
-        echo "udid=$udid" >> "$GITHUB_OUTPUT"
-        echo "name=$name" >> "$GITHUB_OUTPUT"
+        {
+          echo "udid=$udid"
+          echo "name=$name"
+          echo "created=$create"
+        } >> "$GITHUB_OUTPUT"
 
-        if [ "$SIM_BOOT" = "true" ]; then
-          xcrun simctl boot "$udid" || true
-          xcrun simctl bootstatus "$udid" -b
+    # `simctl boot` returns as soon as the boot starts; only `bootstatus` blocks.
+    # With boot=false the caller starts it here and waits later — against the
+    # compile, which is the one placement that was measured to help. Booting
+    # before `pnpm install` slowed Setup Node from 29s to 249s; waiting for it
+    # after the build left the device booted but not settled and the flows went
+    # from 245s to 457s. Overlapping the compile got them to 165s.
+    - name: 📱 Boot the simulator
+      id: boot
+      shell: bash
+      env:
+        UDID: ${{ steps.simulator.outputs.udid }}
+        SIM_BOOT: ${{ inputs.boot }}
+        BOOT_TIMEOUT: ${{ inputs.boot-timeout-seconds }}
+      run: |
+        set -euo pipefail
+
+        xcrun simctl boot "$UDID" || true
+        if [ "$SIM_BOOT" != "true" ]; then
+          echo "Boot started; nothing waits for it here."
+          exit 0
         fi
+
+        wait_for_boot() {
+          xcrun simctl bootstatus "$UDID" -b &
+          local pid=$! waited=0
+          while kill -0 "$pid" 2>/dev/null; do
+            sleep 5
+            waited=$((waited + 5))
+            if [ "$waited" -ge "$1" ]; then
+              kill "$pid" 2>/dev/null || true
+              wait "$pid" 2>/dev/null || true
+              return 1
+            fi
+          done
+          wait "$pid"
+        }
+
+        if ! wait_for_boot "$BOOT_TIMEOUT"; then
+          echo "::warning::Simulator did not finish booting in ${BOOT_TIMEOUT}s; erasing and booting it again."
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          xcrun simctl erase "$UDID" 2>/dev/null || true
+          xcrun simctl boot "$UDID"
+          wait_for_boot "$BOOT_TIMEOUT" || {
+            echo "::error::Simulator $UDID never booted."
+            xcrun simctl list devices
+            exit 1
+          }
+        fi
+        echo "Booted $UDID"

@@ -1,0 +1,494 @@
+name: Build an Expo/RN app for the iOS simulator
+description: >
+  `expo prebuild` + `pod install` + `xcodebuild`, with the three caches that
+  matter and the build settings that stop the compiler doing work nobody reads.
+  Consume it as GSTJ/magic/.github/actions/build-ios-app@v1.
+
+# Every default here was measured in a repo before it was written down. The
+# numbers, job wall time excluding runner queue:
+#
+#   would-you-rather   44m25 -> 19m13 warm on hosted, 6m41-12m18 on a Mac mini
+#   magic-modal        22m04 -> 12m57 cold, 8m32 warm
+#
+# What the time went to, and what each default does about it:
+#
+#   ARCHS=$(uname -m)         Release defaults ARCHS to ARCHS_STANDARD, which
+#                             for the simulator SDK is "arm64 x86_64", and
+#                             ONLY_ACTIVE_ARCH=YES is a Debug-only default. One
+#                             repo compiled 840 of 850 translation units twice
+#                             and lipo'd every static lib. Only correct because
+#                             the runner is Apple Silicon — which is the reason
+#                             to stay on macos-26 rather than an Intel image.
+#   optimiser off in Release  Never `-configuration Debug`: with expo-dev-client
+#                             a Debug build boots the dev launcher, not the app
+#                             the flows are written against. Turning the
+#                             optimiser off inside Release keeps NDEBUG, the
+#                             embedded JS bundle and the dev-client exclusions.
+#                             The JS is Hermes bytecode either way, so only
+#                             native frames run slower, on a machine that has
+#                             nothing else to do.
+#   no dSYMs, no index store  Nobody symbolicates a CI simulator build.
+#   warnings off              One repo streamed 22k lines of warnings per run.
+#   ios/ cache                Keyed on native inputs only. JS sources are
+#                             deliberately excluded: the Xcode bundling phase is
+#                             alwaysOutOfDate and regenerates the bundle on
+#                             every build, so a JS change cannot go stale
+#                             through this cache. The workflow file is excluded
+#                             too — bump cache-epoch instead of throwing a
+#                             gigabyte away on every CI tweak.
+#   DerivedData               Same key as ios/, on purpose: a restored ios/
+#                             against an empty DerivedData is the one
+#                             combination slower than starting cold, so the two
+#                             must never miss independently.
+#
+# Not ccache. CocoaPods wires it through the CC/CXX build settings and Xcode
+# 26's build system does not use those to compile — an instrumented launcher
+# logged zero invocations and a 12-minute build left ~/.ccache non-existent.
+# Measured in two repos, not assumed. Do not re-add it.
+#
+# Not `expo run:ios` either. It re-runs pod install, waits on a Metro that
+# --no-bundler never started, and finishes by opening
+# `<scheme>://expo-development-client/?url=http://<lan-ip>:8081` on the device,
+# which is where LSApplicationWorkspaceErrorDomain 115 comes from. Driving
+# xcodebuild and simctl directly removes that step rather than retrying it.
+
+inputs:
+  app-dir:
+    description: Directory holding the Expo/RN app — the one with app.json or app.config.*.
+    required: false
+    default: "."
+  configuration:
+    description: >
+      Xcode configuration. Release is what E2E wants: the JS bundle is embedded,
+      so nothing depends on a Metro server. Debug only if you know your app has
+      no expo-dev-client, because with one a Debug build is the dev launcher.
+    required: false
+    default: Release
+  optimize:
+    description: >
+      Leave the optimiser on. Off (the default) is what buys most of the compile
+      time; turn it on if a flow depends on release-optimised native code.
+    required: false
+    default: "false"
+  workspace:
+    description: Path to the .xcworkspace. Empty finds the one under <app-dir>/ios.
+    required: false
+    default: ""
+  scheme:
+    description: Xcode scheme. Empty uses the workspace's basename, which is what prebuild generates.
+    required: false
+    default: ""
+  udid:
+    description: >
+      Simulator UDID to build against. Naming the device tells actool which
+      runtime to thin assets for; `generic/platform=iOS Simulator` leaves it
+      guessing and fails with "iOS <x> Platform Not Installed" on images whose
+      iphonesimulator SDK predates every installed runtime.
+    required: false
+    default: ""
+  prebuild-command:
+    description: Command that generates ios/. Empty skips prebuild (bare RN repos that commit ios/).
+    required: false
+    default: pnpm expo prebuild --platform ios --no-install
+  pod-install:
+    description: Run `pod install` after prebuild. Off for repos whose prebuild already installs.
+    required: false
+    default: "true"
+  native-cache-paths:
+    description: >
+      One glob per line, relative to the repo root, of everything that decides
+      what prebuild and pod install produce. `<app>` expands to app-dir. Hashed
+      through `git ls-files -s`, so only tracked files count — which is the
+      point: ios/ is gitignored, so Podfile.lock does not exist yet when the key
+      has to be computed, and this list is what stands in for it.
+    required: false
+    default: |
+      pnpm-lock.yaml
+      package-lock.json
+      yarn.lock
+      .nvmrc
+      patches/**
+      <app>/package.json
+      <app>/app.json
+      <app>/app.config.*
+      <app>/plugins/**
+      <app>/assets/**
+      <app>/ios/Podfile
+  cache-epoch:
+    description: Bump to invalidate every cache this action keeps.
+    required: false
+    default: v1
+  cache-ios-dir:
+    description: >
+      Cache the prebuilt ios/ directory, Pods included. On a bare React Native
+      repo that commits ios/, add `<app>/ios/**` to native-cache-paths first —
+      the restore writes over tracked files, and the default key does not
+      include them.
+    required: false
+    default: "true"
+  derived-data:
+    description: >
+      auto | cache | persistent | off. auto is `cache` on a GitHub-hosted runner
+      and `persistent` anywhere else. cache uses actions/cache under RUNNER_TEMP;
+      persistent keeps the tree at a fixed path with a key stamp beside it and
+      never uploads it, because a self-hosted runner keeps its disk and pushing
+      1.2 GB to the cache service from it is pure loss.
+    required: false
+    default: auto
+  derived-data-path:
+    description: Override the DerivedData location. Empty picks one from the strategy.
+    required: false
+    default: ""
+  cold:
+    description: Ignore every cache. Wire it to a workflow_dispatch input to measure the cold path.
+    required: false
+    default: "false"
+  build-settings:
+    description: Extra `SETTING=value` xcodebuild arguments, one per line.
+    required: false
+    default: ""
+  save-caches:
+    description: >
+      Save on a miss. Off when the caller saves them itself, or when the build is
+      a throwaway (a fork PR that cannot write to the cache anyway).
+    required: false
+    default: "true"
+
+outputs:
+  app-path:
+    description: Absolute path of the built .app bundle.
+    value: ${{ steps.build.outputs.app-path }}
+  bundle-id:
+    description: CFBundleIdentifier read out of the built app.
+    value: ${{ steps.build.outputs.bundle-id }}
+  native-key:
+    description: The native-input cache key, for callers keying their own caches on it.
+    value: ${{ steps.resolve.outputs.key }}
+  ios-cache-hit:
+    description: "true when the prebuilt ios/ came from the cache."
+    value: ${{ steps.ios-cache.outputs.cache-hit }}
+  derived-data-cache-hit:
+    description: "true when DerivedData was restored, by either strategy."
+    value: ${{ steps.resolve.outputs.dd-hit == 'true' && 'true' || steps.dd-cache.outputs.cache-hit }}
+  derived-data-path:
+    description: Where DerivedData ended up, for a caller that wants to inspect or size it.
+    value: ${{ steps.resolve.outputs.derived-data }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔑 Resolve build inputs and cache keys
+      id: resolve
+      shell: bash
+      env:
+        IN_APP_DIR: ${{ inputs.app-dir }}
+        IN_NATIVE_CACHE_PATHS: ${{ inputs.native-cache-paths }}
+        IN_CACHE_EPOCH: ${{ inputs.cache-epoch }}
+        IN_DERIVED_DATA: ${{ inputs.derived-data }}
+        IN_DERIVED_DATA_PATH: ${{ inputs.derived-data-path }}
+        IN_COLD: ${{ inputs.cold }}
+      run: |
+        set -euo pipefail
+
+        app_dir="${IN_APP_DIR:-.}"
+        app_dir="${app_dir%/}"
+        [ -n "$app_dir" ] || app_dir="."
+        if [ ! -d "$app_dir" ]; then
+          echo "::error::app-dir '$app_dir' does not exist. Did the checkout run?"
+          exit 1
+        fi
+
+        # Globs, one per line, with <app> expanded. Whitespace-only and #
+        # comment lines are dropped so the default above can be commented.
+        patterns=()
+        while IFS= read -r line; do
+          line="${line%%#*}"
+          line="$(printf '%s' "$line" | tr -d '[:space:]')"
+          [ -n "$line" ] || continue
+          if [ "$app_dir" = "." ]; then
+            line="${line//<app>\//}"
+          fi
+          line="${line//<app>/$app_dir}"
+          patterns+=("$line")
+        done <<EOF
+        ${IN_NATIVE_CACHE_PATHS}
+        EOF
+
+        # `git ls-files -s` prints mode, blob sha and path for every tracked
+        # file matching the pathspecs, already sorted. That is a content hash of
+        # exactly the tracked native inputs, in one process, with no dependency
+        # on globstar (the runner's /bin/bash is 3.2 and does not have it).
+        listing=""
+        if [ ${#patterns[@]} -gt 0 ] && git rev-parse --git-dir >/dev/null 2>&1; then
+          listing="$(git ls-files -s -- "${patterns[@]}" 2>/dev/null || true)"
+        fi
+        if [ -n "$listing" ]; then
+          files=$(printf '%s\n' "$listing" | wc -l | tr -d ' ')
+          hash=$(printf '%s\n' "$listing" | shasum -a 256 | cut -c1-16)
+          echo "Native inputs: $files tracked file(s) -> $hash"
+        else
+          # Nothing matched. A date bucket still beats a cold runner every time
+          # and cannot serve a stale Pods tree for longer than a day.
+          hash="nokey-$(date -u +%Y%m%d)"
+          echo "::warning::None of the native-cache-paths matched a tracked file, so the native caches fall back to $hash. Check app-dir and native-cache-paths."
+        fi
+
+        xcode="$(xcodebuild -version | head -1 | tr -d ' ')"
+        key="${IN_CACHE_EPOCH}-${xcode}-${hash}"
+
+        strategy="$IN_DERIVED_DATA"
+        if [ "$strategy" = "auto" ]; then
+          if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]; then
+            strategy="cache"
+          else
+            strategy="persistent"
+          fi
+        fi
+        case "$strategy" in
+          cache | persistent | off) ;;
+          *)
+            echo "::error::derived-data must be auto, cache, persistent or off (got '$IN_DERIVED_DATA')."
+            exit 1
+            ;;
+        esac
+
+        slug="${GITHUB_REPOSITORY:-local}/$([ "$app_dir" = "." ] && echo root || echo "$app_dir")"
+        slug="$(printf '%s' "$slug" | tr -c 'A-Za-z0-9._-' '-')"
+        store="$HOME/.magic-ios-e2e/$slug"
+
+        derived_data="$IN_DERIVED_DATA_PATH"
+        if [ -z "$derived_data" ]; then
+          case "$strategy" in
+            persistent) derived_data="$store/DerivedData" ;;
+            *) derived_data="${RUNNER_TEMP:-$HOME}/DerivedData" ;;
+          esac
+        fi
+
+        # The persistent half of the switch. One tree per (repo, app-dir), with
+        # the key it was built from in a stamp beside it; a mismatch wipes it
+        # rather than accumulating a tree per key until the disk fills. Nothing
+        # is uploaded, which is the whole point on a runner that keeps its disk.
+        dd_hit=false
+        if [ "$strategy" = "persistent" ]; then
+          mkdir -p "$store"
+          stamp="$store/derived-data.key"
+          if [ "$IN_COLD" = "true" ]; then
+            echo "cold=true, discarding $derived_data"
+            rm -rf "$derived_data" "$stamp"
+          elif [ -f "$stamp" ] && [ -d "$derived_data" ] && [ "$(cat "$stamp")" = "$key" ]; then
+            dd_hit=true
+            echo "Persistent DerivedData is on $key ($(du -sh "$derived_data" 2>/dev/null | cut -f1))"
+          else
+            echo "Persistent DerivedData is on a different key; starting clean."
+            rm -rf "$derived_data"
+          fi
+        fi
+
+        {
+          echo "app-dir=$app_dir"
+          echo "key=$key"
+          echo "xcode=$xcode"
+          echo "strategy=$strategy"
+          echo "derived-data=$derived_data"
+          echo "store=$store"
+          echo "dd-hit=$dd_hit"
+          echo "use-cache=$([ "$IN_COLD" = "true" ] && echo false || echo true)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: ♻️ Restore prebuilt ios/ (Pods included)
+      id: ios-cache
+      if: inputs.cache-ios-dir == 'true' && steps.resolve.outputs.use-cache == 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.resolve.outputs.app-dir }}/ios
+        key: magic-ios-dir-${{ steps.resolve.outputs.key }}
+
+    - name: ♻️ Restore DerivedData
+      id: dd-cache
+      if: steps.resolve.outputs.strategy == 'cache' && steps.resolve.outputs.use-cache == 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.resolve.outputs.derived-data }}
+        key: magic-dd-${{ steps.resolve.outputs.key }}
+
+    - name: 🛠 Expo prebuild + pod install
+      if: steps.ios-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ steps.resolve.outputs.app-dir }}
+      env:
+        IN_PREBUILD_COMMAND: ${{ inputs.prebuild-command }}
+        IN_POD_INSTALL: ${{ inputs.pod-install }}
+      run: |
+        set -euo pipefail
+        # An empty prebuild-command is the bare React Native case: ios/ is
+        # committed, so there is nothing to generate — but there are still pods
+        # to install, and skipping both together is how that repo gets a build
+        # with no Pods directory.
+        if [ -n "$IN_PREBUILD_COMMAND" ]; then
+          eval "$IN_PREBUILD_COMMAND"
+        fi
+        if [ "$IN_POD_INSTALL" = "true" ]; then
+          cd ios
+          pod --version
+          pod install
+        fi
+        # Prebuild pins NODE_BINARY to whatever node it found. The hosted
+        # toolcache path moves when the image bumps Node, and this file rides
+        # along inside the ios/ cache, so drop it and let .xcode.env resolve
+        # node from PATH at build time instead.
+        rm -f ios/.xcode.env.local
+
+    - name: 🏗 Build for the simulator
+      id: build
+      shell: bash
+      env:
+        IN_APP_DIR: ${{ steps.resolve.outputs.app-dir }}
+        IN_WORKSPACE: ${{ inputs.workspace }}
+        IN_SCHEME: ${{ inputs.scheme }}
+        IN_CONFIGURATION: ${{ inputs.configuration }}
+        IN_OPTIMIZE: ${{ inputs.optimize }}
+        IN_UDID: ${{ inputs.udid }}
+        IN_BUILD_SETTINGS: ${{ inputs.build-settings }}
+        DERIVED_DATA: ${{ steps.resolve.outputs.derived-data }}
+      run: |
+        set -euo pipefail
+
+        workspace="$IN_WORKSPACE"
+        if [ -z "$workspace" ]; then
+          # An .xcworkspace is a directory, so plain `ls` prints what is inside
+          # it rather than its name. -d is what makes this the workspace.
+          workspace=$(ls -d "$IN_APP_DIR"/ios/*.xcworkspace 2>/dev/null | head -1 || true)
+        fi
+        if [ -z "$workspace" ] || [ ! -d "$workspace" ]; then
+          echo "::error::No .xcworkspace under $IN_APP_DIR/ios. Did prebuild and pod install run?"
+          ls -la "$IN_APP_DIR/ios" 2>/dev/null || true
+          exit 1
+        fi
+        scheme="${IN_SCHEME:-$(basename "$workspace" .xcworkspace)}"
+
+        if [ -n "$IN_UDID" ]; then
+          destination="platform=iOS Simulator,id=$IN_UDID"
+        else
+          echo "::warning::No udid, so the build targets a generic simulator destination. That leaves actool with no runtime to thin assets for, which fails on images whose iphonesimulator SDK predates every installed runtime."
+          destination="generic/platform=iOS Simulator"
+        fi
+
+        settings=(
+          # macOS runners worth using are Apple Silicon, so the simulator only
+          # ever needs the arm64 slice.
+          "ARCHS=$(uname -m)"
+          ONLY_ACTIVE_ARCH=NO
+          CODE_SIGNING_ALLOWED=NO
+          EXPO_NO_CAPABILITY_SYNC=1
+          COMPILER_INDEX_STORE_ENABLE=NO
+          DEBUG_INFORMATION_FORMAT=dwarf
+          GCC_GENERATE_DEBUGGING_SYMBOLS=NO
+          SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO
+          GCC_WARN_INHIBIT_ALL_WARNINGS=YES
+          SWIFT_SUPPRESS_WARNINGS=YES
+        )
+        if [ "$IN_OPTIMIZE" != "true" ]; then
+          settings+=(GCC_OPTIMIZATION_LEVEL=0 SWIFT_OPTIMIZATION_LEVEL=-Onone)
+        fi
+        while IFS= read -r line; do
+          line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          [ -n "$line" ] || continue
+          settings+=("$line")
+        done <<EOF
+        ${IN_BUILD_SETTINGS}
+        EOF
+
+        # Warnings are off and xcbeautify only echoes tasks that failed, so a
+        # green build prints a handful of lines. Probe the flag rather than
+        # trusting it: losing a twenty-minute build to a flag typo is worse than
+        # a verbose log.
+        fmt=(cat)
+        if command -v xcbeautify >/dev/null 2>&1 && echo "" | xcbeautify --quiet >/dev/null 2>&1; then
+          fmt=(xcbeautify --quiet)
+        fi
+
+        echo "::group::xcodebuild $scheme ($IN_CONFIGURATION) -> $destination"
+        set -o pipefail
+        xcodebuild \
+          -workspace "$workspace" \
+          -scheme "$scheme" \
+          -configuration "$IN_CONFIGURATION" \
+          -derivedDataPath "$DERIVED_DATA" \
+          -destination "$destination" \
+          -skipPackagePluginValidation \
+          -skipMacroValidation \
+          -showBuildTimingSummary \
+          "${settings[@]}" \
+          build | "${fmt[@]}"
+        echo "::endgroup::"
+
+        products="$DERIVED_DATA/Build/Products/$IN_CONFIGURATION-iphonesimulator"
+        app_path=$(find "$products" -maxdepth 2 -name "*.app" | head -1 || true)
+        if [ -z "$app_path" ]; then
+          echo "::error::No .app under $products"
+          exit 1
+        fi
+        bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app_path/Info.plist")
+        echo "Built $bundle_id at $app_path"
+        {
+          echo "app-path=$app_path"
+          echo "bundle-id=$bundle_id"
+        } >> "$GITHUB_OUTPUT"
+
+    # Saved before the flows the caller is about to run, and gated on the build
+    # rather than the job, so a red Maestro run still leaves the next build warm.
+    # That is also why this uses cache/restore + cache/save and never plain
+    # actions/cache, which only saves on whole-job success.
+    - name: 💾 Save prebuilt ios/
+      if: >-
+        always() && inputs.save-caches == 'true' && inputs.cache-ios-dir == 'true'
+        && steps.ios-cache.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.resolve.outputs.app-dir }}/ios
+        key: magic-ios-dir-${{ steps.resolve.outputs.key }}
+
+    - name: 💾 Save DerivedData
+      if: >-
+        always() && inputs.save-caches == 'true' && steps.resolve.outputs.strategy == 'cache'
+        && steps.dd-cache.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.resolve.outputs.derived-data }}
+        key: magic-dd-${{ steps.resolve.outputs.key }}
+
+    - name: 💾 Stamp persistent DerivedData
+      if: always() && steps.resolve.outputs.strategy == 'persistent' && steps.build.outcome == 'success'
+      shell: bash
+      env:
+        STORE: ${{ steps.resolve.outputs.store }}
+        KEY: ${{ steps.resolve.outputs.key }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$STORE"
+        printf '%s' "$KEY" > "$STORE/derived-data.key"
+
+    - name: 📊 Build stats
+      if: always()
+      shell: bash
+      env:
+        DERIVED_DATA: ${{ steps.resolve.outputs.derived-data }}
+        APP_DIR: ${{ steps.resolve.outputs.app-dir }}
+        STRATEGY: ${{ steps.resolve.outputs.strategy }}
+        KEY: ${{ steps.resolve.outputs.key }}
+        IOS_HIT: ${{ steps.ios-cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}
+        DD_HIT: ${{ (steps.dd-cache.outputs.cache-hit == 'true' || steps.resolve.outputs.dd-hit == 'true') && 'hit' || 'miss' }}
+      run: |
+        set -euo pipefail
+        {
+          echo "### iOS build"
+          echo ""
+          echo "| metric | value |"
+          echo "| --- | --- |"
+          echo "| native key | \`$KEY\` |"
+          echo "| ios/ cache | $IOS_HIT |"
+          echo "| DerivedData ($STRATEGY) | $DD_HIT |"
+          echo "| DerivedData size | $(du -sh "$DERIVED_DATA" 2>/dev/null | cut -f1) |"
+          echo "| ios/ size | $(du -sh "$APP_DIR/ios" 2>/dev/null | cut -f1) |"
+          echo ""
+        } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"

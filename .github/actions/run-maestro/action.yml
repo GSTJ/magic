@@ -1,0 +1,498 @@
+name: Install an app on a simulator and run Maestro flows
+description: >
+  The half of an iOS E2E job that is not the build: install, absorb the cold
+  launch, optionally open a deep link, run the flows with bounded retries, turn
+  the JUnit report into a job summary, upload the debug output.
+  Consume it as GSTJ/magic/.github/actions/run-maestro@v1.
+
+# Maestro has to be on PATH already — GSTJ/magic/.github/actions/setup-ios-e2e@v1
+# pins and caches it. This action deliberately does not install it, so the
+# version a run used is decided in one place.
+#
+# The things here that look like paranoia and are not:
+#
+#   --device            Not optional, whatever the help text says. Without it
+#                       Maestro attaches to whichever simulator it finds booted.
+#                       A hosted runner has exactly one, so it is always right
+#                       there; a self-hosted Mac is somebody's actual desktop,
+#                       and the first run on one drove the iPhone the owner had
+#                       open, found the app missing, and failed every flow on
+#                       "Failed to get app binary directory for bundle ...".
+#   bounded boot wait   `simctl bootstatus -b` never returns on a device that
+#                       wedged instead of finishing its boot, and an unbounded
+#                       step eats the whole job timeout at 10x macOS billing.
+#                       That has already cost one real cancelled hour.
+#   launch probe        LaunchServices answers LSApplicationWorkspaceErrorDomain
+#                       115 on a simulator that has only just booted. Absorbing
+#                       the first cold launch here makes it a cheap retry
+#                       instead of a flow failure that reads as a product bug.
+#   quarantine skip     A flow listed in quarantine-file never executes and never
+#                       fails the run. The file format and the 30-day decay rule
+#                       are in this repo's README under "Flaky flows".
+
+inputs:
+  udid:
+    description: Simulator UDID. Take it from setup-ios-e2e's `udid` output.
+    required: true
+  app-path:
+    description: Path to the built .app. Empty skips install and assumes it is already on the device.
+    required: false
+    default: ""
+  bundle-id:
+    description: Bundle identifier. Empty reads CFBundleIdentifier out of app-path.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory the flow paths are relative to.
+    required: false
+    default: "."
+  flows:
+    description: >
+      Flow files or directories, one per line, relative to working-directory.
+      Empty uses flows-dir. Order is preserved and handed to a single
+      `maestro test` invocation, because that is what lets Maestro's own
+      config.yaml flowsOrder govern relative order.
+    required: false
+    default: ""
+  flows-dir:
+    description: Directory scanned for *.yaml/*.yml when flows is empty. Top level only.
+    required: false
+    default: .maestro
+  shard-index:
+    description: 0-based shard index. Empty runs everything.
+    required: false
+    default: ""
+  shard-total:
+    description: >
+      Number of shards. With shard-index, the resolved flow list is dealt
+      round-robin. Round-robin assumes the flows are independent — if they share
+      state, name the shards explicitly instead of slicing by count.
+    required: false
+    default: ""
+  quarantine-file:
+    description: >
+      File of quarantined flow stems, relative to working-directory. One stem per
+      line, `# reason: ...; owner: @handle; added: YYYY-MM-DD` after it.
+    required: false
+    default: ""
+  per-flow:
+    description: >
+      One `maestro test` invocation per flow, so a failure has a clean boundary
+      in the log and retries are per flow. Off keeps them in one invocation,
+      which is what preserves flowsOrder for a stateful chain.
+    required: false
+    default: "false"
+  retries:
+    description: >
+      Extra attempts after the first. A real regression fails consistently across
+      retries; single-run noise does not. 0 to see the raw flake rate.
+    required: false
+    default: "1"
+  launch-retries:
+    description: Attempts at the cold launch probe before giving up.
+    required: false
+    default: "3"
+  boot-timeout-seconds:
+    description: How long to wait for the device to finish booting before erasing and retrying it once.
+    required: false
+    default: "240"
+  deep-link:
+    description: >
+      URL opened with `simctl openurl` after install and before the flows — the
+      generic form of the E2E auth-token injection that removes a WebView login
+      from every flow. Retried, because openurl on a freshly booted device is
+      exactly as flaky as launch.
+    required: false
+    default: ""
+  maestro-env:
+    description: "`KEY=value` lines passed to Maestro as -e."
+    required: false
+    default: ""
+  name:
+    description: Label for the summary table and the artifact. Set it per shard.
+    required: false
+    default: maestro
+  upload-artifacts:
+    description: always | on-failure | never.
+    required: false
+    default: on-failure
+  soft-fail:
+    description: >
+      Report the failures and exit 0. Only ever set this per shard from a matrix
+      — a job-level `continue-on-error` makes a red run report green to PR
+      checks, which is how one repo shipped three broken runs as successes.
+    required: false
+    default: "false"
+
+outputs:
+  result:
+    description: pass | fail | skipped
+    value: ${{ steps.run.outputs.result }}
+  flows:
+    description: Number of flows this invocation actually ran.
+    value: ${{ steps.flows.outputs.count }}
+  report-dir:
+    description: Directory holding the JUnit report(s) this action produced.
+    value: ${{ steps.flows.outputs.report-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: 📲 Install the app and absorb the first launch
+      if: inputs.app-path != ''
+      shell: bash
+      env:
+        UDID: ${{ inputs.udid }}
+        APP_PATH: ${{ inputs.app-path }}
+        IN_BUNDLE_ID: ${{ inputs.bundle-id }}
+        IN_LAUNCH_RETRIES: ${{ inputs.launch-retries }}
+        IN_BOOT_TIMEOUT: ${{ inputs.boot-timeout-seconds }}
+        IN_DEEP_LINK: ${{ inputs.deep-link }}
+      run: |
+        set -euo pipefail
+
+        wait_for_boot() {
+          xcrun simctl bootstatus "$UDID" -b &
+          local pid=$! waited=0
+          while kill -0 "$pid" 2>/dev/null; do
+            sleep 5
+            waited=$((waited + 5))
+            if [ "$waited" -ge "$1" ]; then
+              kill "$pid" 2>/dev/null || true
+              wait "$pid" 2>/dev/null || true
+              return 1
+            fi
+          done
+          wait "$pid"
+        }
+
+        if ! wait_for_boot "$IN_BOOT_TIMEOUT"; then
+          echo "::warning::Simulator did not finish booting in ${IN_BOOT_TIMEOUT}s; erasing and booting it again."
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          xcrun simctl erase "$UDID" 2>/dev/null || true
+          xcrun simctl boot "$UDID"
+          wait_for_boot "$IN_BOOT_TIMEOUT" || {
+            echo "::error::Simulator $UDID never booted."
+            xcrun simctl list devices
+            exit 1
+          }
+        fi
+
+        xcrun simctl install "$UDID" "$APP_PATH"
+
+        bundle_id="$IN_BUNDLE_ID"
+        if [ -z "$bundle_id" ]; then
+          bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
+        fi
+        echo "Installed $bundle_id on $UDID"
+
+        attempt=1
+        until xcrun simctl launch "$UDID" "$bundle_id"; do
+          if [ "$attempt" -ge "$IN_LAUNCH_RETRIES" ]; then
+            echo "::error::$bundle_id failed to launch after $attempt attempts."
+            exit 1
+          fi
+          echo "::warning::Launch attempt $attempt failed; retrying in 10s."
+          attempt=$((attempt + 1))
+          sleep 10
+        done
+
+        if [ -n "$IN_DEEP_LINK" ]; then
+          attempt=1
+          until xcrun simctl openurl "$UDID" "$IN_DEEP_LINK"; do
+            if [ "$attempt" -ge "$IN_LAUNCH_RETRIES" ]; then
+              echo "::error::Deep link did not open after $attempt attempts."
+              exit 1
+            fi
+            echo "::warning::Deep link attempt $attempt failed; retrying in 5s."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          # The app has to act on the link before it is torn down again.
+          sleep 5
+        fi
+
+        # Terminate so Maestro's own launchApp starts from a clean process.
+        xcrun simctl terminate "$UDID" "$bundle_id" 2>/dev/null || true
+
+    - name: 🗂 Resolve the flow list
+      id: flows
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        IN_FLOWS: ${{ inputs.flows }}
+        IN_FLOWS_DIR: ${{ inputs.flows-dir }}
+        IN_SHARD_INDEX: ${{ inputs.shard-index }}
+        IN_SHARD_TOTAL: ${{ inputs.shard-total }}
+        IN_QUARANTINE_FILE: ${{ inputs.quarantine-file }}
+        IN_NAME: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+
+        work="${RUNNER_TEMP:-/tmp}/magic-maestro/${IN_NAME}"
+        rm -rf "$work"
+        mkdir -p "$work"
+        candidates="$work/candidates.txt"
+        selected="$work/flows.txt"
+        : > "$candidates"
+
+        # -maxdepth 1: a .maestro directory normally also holds subflows and
+        # utils that the real flows `runFlow`, and running those directly fails.
+        # Maestro's own config.yaml is configuration, not a flow, and passing it
+        # as one makes the invocation fail before anything runs.
+        add_path() {
+          if [ -d "$1" ]; then
+            find "$1" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' \) | sort >> "$candidates"
+          elif [ -f "$1" ]; then
+            printf '%s\n' "$1" >> "$candidates"
+          else
+            echo "::error::flow path '$1' does not exist under $(pwd)."
+            return 1
+          fi
+        }
+
+        if [ -n "$(printf '%s' "$IN_FLOWS" | tr -d '[:space:]')" ]; then
+          while IFS= read -r line; do
+            line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            [ -n "$line" ] || continue
+            add_path "$line"
+          done <<EOF
+        ${IN_FLOWS}
+        EOF
+        else
+          add_path "$IN_FLOWS_DIR"
+        fi
+
+        grep -v '/config\.ya\?ml$' "$candidates" > "$candidates.filtered" || true
+        mv "$candidates.filtered" "$candidates"
+
+        quarantined="$work/quarantined.txt"
+        : > "$quarantined"
+        if [ -n "$IN_QUARANTINE_FILE" ]; then
+          if [ -f "$IN_QUARANTINE_FILE" ]; then
+            sed 's/#.*//' "$IN_QUARANTINE_FILE" | awk 'NF {print $1}' > "$quarantined"
+          else
+            echo "::warning::quarantine-file '$IN_QUARANTINE_FILE' does not exist under $(pwd); nothing is quarantined."
+          fi
+        fi
+
+        : > "$selected"
+        index=0
+        kept=0
+        while IFS= read -r flow; do
+          [ -n "$flow" ] || continue
+          stem=$(basename "$flow")
+          stem="${stem%.*}"
+          if grep -qx "$stem" "$quarantined" 2>/dev/null; then
+            echo "::notice::skipping quarantined flow $stem"
+            continue
+          fi
+          # Round-robin, not contiguous chunks: with n flows over t shards it is
+          # the split that stays balanced when n is not a multiple of t.
+          if [ -n "$IN_SHARD_TOTAL" ] && [ "$IN_SHARD_TOTAL" -gt 1 ]; then
+            if [ "$((index % IN_SHARD_TOTAL))" -ne "${IN_SHARD_INDEX:-0}" ]; then
+              index=$((index + 1))
+              continue
+            fi
+          fi
+          index=$((index + 1))
+          kept=$((kept + 1))
+          printf '%s\n' "$flow" >> "$selected"
+        done < "$candidates"
+
+        echo "$kept of $index flow(s) selected:"
+        sed 's/^/  /' "$selected"
+
+        {
+          echo "count=$kept"
+          echo "list=$selected"
+          echo "report-dir=$work"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: 🎬 Run the flows
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        UDID: ${{ inputs.udid }}
+        FLOW_LIST: ${{ steps.flows.outputs.list }}
+        FLOW_COUNT: ${{ steps.flows.outputs.count }}
+        REPORT_DIR: ${{ steps.flows.outputs.report-dir }}
+        IN_PER_FLOW: ${{ inputs.per-flow }}
+        IN_RETRIES: ${{ inputs.retries }}
+        IN_MAESTRO_ENV: ${{ inputs.maestro-env }}
+        IN_NAME: ${{ inputs.name }}
+        IN_SOFT_FAIL: ${{ inputs.soft-fail }}
+        MAESTRO_CLI_NO_ANALYTICS: "1"
+      run: |
+        # No `-e`: every failure below is handled, and the exit code is decided
+        # once at the bottom. `-u` and pipefail stay on.
+        set -uo pipefail
+
+        if ! command -v maestro >/dev/null 2>&1; then
+          echo "::error::maestro is not on PATH. Run GSTJ/magic/.github/actions/setup-ios-e2e@v1 first."
+          exit 1
+        fi
+
+        if [ "${FLOW_COUNT:-0}" -eq 0 ]; then
+          echo "::warning::No flows to run — everything was quarantined, or this shard is empty."
+          echo "result=skipped" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        env_args=()
+        while IFS= read -r line; do
+          line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          [ -n "$line" ] || continue
+          case "$line" in
+            *=*) env_args+=(-e "$line") ;;
+            *)
+              echo "::error::maestro-env line '$line' is not KEY=value."
+              exit 1
+              ;;
+          esac
+        done <<EOF
+        ${IN_MAESTRO_ENV}
+        EOF
+
+        flows=()
+        while IFS= read -r flow; do
+          [ -n "$flow" ] || continue
+          flows+=("$flow")
+        done < "$FLOW_LIST"
+
+        run_once() {
+          out="$1"
+          shift
+          if [ ${#env_args[@]} -gt 0 ]; then
+            maestro --device "$UDID" test "$@" "${env_args[@]}" --format junit --output "$out"
+          else
+            maestro --device "$UDID" test "$@" --format junit --output "$out"
+          fi
+        }
+
+        attempts=$((IN_RETRIES + 1))
+        failed=0
+
+        if [ "$IN_PER_FLOW" = "true" ]; then
+          slot=0
+          for flow in "${flows[@]}"; do
+            stem=$(basename "$flow")
+            stem="${stem%.*}"
+            out="$REPORT_DIR/$(printf '%02d' "$slot")-$stem.xml"
+            slot=$((slot + 1))
+            ok=0
+            attempt=1
+            while [ "$attempt" -le "$attempts" ]; do
+              echo "::group::$stem (attempt $attempt/$attempts)"
+              if run_once "$out" "$flow"; then
+                ok=1
+                echo "::endgroup::"
+                break
+              fi
+              echo "::endgroup::"
+              if [ "$attempt" -lt "$attempts" ]; then
+                echo "::warning::$stem failed on attempt $attempt; retrying."
+              fi
+              attempt=$((attempt + 1))
+            done
+            if [ "$ok" -ne 1 ]; then failed=1; fi
+          done
+        else
+          ok=0
+          attempt=1
+          while [ "$attempt" -le "$attempts" ]; do
+            echo "::group::$IN_NAME (attempt $attempt/$attempts)"
+            if run_once "$REPORT_DIR/report.xml" "${flows[@]}"; then
+              ok=1
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt "$attempts" ]; then
+              echo "::warning::$IN_NAME failed on attempt $attempt; retrying."
+            fi
+            attempt=$((attempt + 1))
+          done
+          if [ "$ok" -ne 1 ]; then failed=1; fi
+        fi
+
+        if [ "$failed" -eq 0 ]; then
+          echo "result=pass" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "result=fail" >> "$GITHUB_OUTPUT"
+        if [ "$IN_SOFT_FAIL" = "true" ]; then
+          echo "::warning::$IN_NAME failed, and this shard is soft-gated, so the job still passes."
+          exit 0
+        fi
+        exit 1
+
+    - name: 📊 Summarise the JUnit report
+      if: always() && steps.flows.outcome == 'success'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REPORT_DIR: ${{ steps.flows.outputs.report-dir }}
+        IN_NAME: ${{ inputs.name }}
+        IN_QUARANTINE_FILE: ${{ inputs.quarantine-file }}
+      run: |
+        set -uo pipefail
+        python3 - <<'PY' >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+        import os
+        import xml.etree.ElementTree as ET
+        from pathlib import Path
+
+        name = os.environ.get("IN_NAME", "maestro")
+        report_dir = Path(os.environ.get("REPORT_DIR", ""))
+
+        quarantined = {}
+        qfile = os.environ.get("IN_QUARANTINE_FILE", "")
+        if qfile and os.path.exists(qfile):
+            for raw in Path(qfile).read_text(encoding="utf8").splitlines():
+                stem, _, note = raw.partition("#")
+                stem = stem.strip()
+                if stem:
+                    quarantined[stem] = note.strip()
+
+        rows = []
+        for path in sorted(report_dir.glob("*.xml")) if report_dir.name else []:
+            try:
+                root = ET.parse(path).getroot()
+            except ET.ParseError as error:
+                rows.append((path.name, "⚠️ unreadable", str(error)))
+                continue
+            for case in root.iter("testcase"):
+                bad = case.find("failure") is not None or case.find("error") is not None
+                rows.append((case.get("name") or path.stem, "❌ fail" if bad else "✅ pass", ""))
+
+        print(f"### {name}")
+        print()
+        if rows:
+            print("| flow | result | notes |")
+            print("| --- | --- | --- |")
+            for flow, result, note in rows:
+                print(f"| `{flow}` | {result} | {note} |")
+        else:
+            print("No JUnit report was produced — see the step log.")
+        if quarantined:
+            print()
+            print("Quarantined, therefore not run:")
+            for stem, note in sorted(quarantined.items()):
+                print(f"- `{stem}` — {note or 'no reason recorded'}")
+        print()
+        PY
+
+    - name: 📤 Upload the Maestro debug output
+      if: >-
+        always() && inputs.upload-artifacts != 'never'
+        && (inputs.upload-artifacts == 'always' || steps.run.outcome != 'success' || steps.run.outputs.result == 'fail')
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.name }}-${{ github.run_attempt }}
+        path: |
+          ${{ steps.flows.outputs.report-dir }}/*.xml
+          ~/.maestro/tests
+        if-no-files-found: ignore
+        retention-days: 7

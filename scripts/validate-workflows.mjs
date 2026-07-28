@@ -101,9 +101,11 @@ for (const file of yamlFiles) {
     }
 
     // The action's default input is the one place the command is a value rather
-    // than a command line, and it carries the flag already.
+    // than a command line, and it carries the flag already. A comment — YAML's
+    // or the shell's, they look the same here — is prose, not an install.
     const looseInstall =
       /\bpnpm install\b/.test(raw) &&
+      !raw.trimStart().startsWith("#") &&
       !raw.includes("--frozen-lockfile") &&
       !/default:\s*pnpm install/.test(raw);
     if (looseInstall) {

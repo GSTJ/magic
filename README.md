@@ -4,20 +4,23 @@ Shared tooling for GSTJ projects. One place for lint, format, TypeScript config,
 CI workflows and Renovate settings, so twelve repos stop each having their own
 slightly-wrong version.
 
-| Package                                         | What it is                                                      |
-| ----------------------------------------------- | --------------------------------------------------------------- |
-| [`magic-oxlint-config`](packages/oxlint-config) | oxlint presets: `base`, `react`, `react-native`, `next`, `expo` |
-| [`magic-oxfmt-config`](packages/oxfmt-config)   | oxfmt config, including the import sort order                   |
-| [`magic-oxlint-plugin`](packages/oxlint-plugin) | Eight opt-in lint rules with no oxlint equivalent               |
-| [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases   |
-| [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                |
-| [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform      |
-| `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck  |
-| `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm          |
-| `.github/actions/setup`                         | Composite: Node + pnpm, store cache on, frozen install          |
-| `.github/actions/setup-ios-e2e`                 | Composite: Xcode, Maestro, CocoaPods, a booted simulator        |
-| `.github/actions/approve-parked-ci`             | Composite: release the `action_required` runs on a bot PR       |
-| `default.json`                                  | Renovate preset, consumable as `github>GSTJ/magic`              |
+| Package                                         | What it is                                                        |
+| ----------------------------------------------- | ----------------------------------------------------------------- |
+| [`magic-oxlint-config`](packages/oxlint-config) | oxlint presets: `base`, `react`, `react-native`, `next`, `expo`   |
+| [`magic-oxfmt-config`](packages/oxfmt-config)   | oxfmt config, including the import sort order                     |
+| [`magic-oxlint-plugin`](packages/oxlint-plugin) | Eight opt-in lint rules with no oxlint equivalent                 |
+| [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases     |
+| [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                  |
+| [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform        |
+| `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck    |
+| `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm            |
+| `.github/workflows/e2e-ios.yml`                 | Reusable `workflow_call` job: Maestro iOS E2E, optionally sharded |
+| `.github/actions/setup`                         | Composite: Node + pnpm, store cache on, frozen install            |
+| `.github/actions/setup-ios-e2e`                 | Composite: Xcode, Maestro, CocoaPods, a booted simulator          |
+| `.github/actions/build-ios-app`                 | Composite: prebuild, pods, `xcodebuild`, and the caches           |
+| `.github/actions/run-maestro`                   | Composite: install, launch, run the flows, report, upload         |
+| `.github/actions/approve-parked-ci`             | Composite: release the `action_required` runs on a bot PR         |
+| `default.json`                                  | Renovate preset, consumable as `github>GSTJ/magic`                |
 
 ESLint and Prettier no longer _run_ anywhere: oxlint replaces ESLint, oxfmt
 replaces Prettier **and** `@ianvs/prettier-plugin-sort-imports`.
@@ -612,7 +615,12 @@ jobs. Setting it writes an `.npmrc` containing a literal `${NODE_AUTH_TOKEN}`,
 and the package-manager probes behind `cache:` choke on that when no token is
 exported — pass `registry-url` and `node-auth-token` together, or neither.
 
-For iOS E2E on a macOS runner:
+For iOS E2E, call [`e2e-ios.yml`](#ios-e2e) instead of assembling the steps
+yourself. The three composites it is made of —
+[`setup-ios-e2e`](.github/actions/setup-ios-e2e/action.yml),
+[`build-ios-app`](.github/actions/build-ios-app/action.yml) and
+[`run-maestro`](.github/actions/run-maestro/action.yml) — are usable on their
+own when a repo needs a shape the workflow does not have:
 
 ```yaml
 steps:
@@ -622,17 +630,22 @@ steps:
     id: ios
     with:
       xcode-version: "26" # newest installed Xcode 26.x
-      maestro-version: 2.6.0 # pinned and cached at ~/.maestro
-      simulator-device: iPhone 17 Pro Max
-      simulator-runtime: iOS 26
-  - run: pnpm expo run:ios --device "${{ steps.ios.outputs.udid }}"
+      boot: "false" # start the boot, let the build overlap it
+  - uses: GSTJ/magic/.github/actions/build-ios-app@v1
+    id: build
+    with:
+      udid: ${{ steps.ios.outputs.udid }}
+  - uses: GSTJ/magic/.github/actions/run-maestro@v1
+    with:
+      udid: ${{ steps.ios.outputs.udid }}
+      app-path: ${{ steps.build.outputs.app-path }}
 ```
 
-It pins and caches Maestro, picks the Xcode you asked for, caches the CocoaPods
-specs and DerivedData, and boots the simulator — falling back to the newest
-iPhone on the runner with a warning when the pinned pair is not installed, so a
-runner image change degrades instead of failing. Fingerprint-keyed `.app`
-caching stays in the repo that needs it; it is too repo-specific to generalise.
+Not `expo run:ios`. It re-runs `pod install`, waits on a Metro that
+`--no-bundler` never started, and finishes by opening
+`<scheme>://expo-development-client/?url=http://<lan-ip>:8081` on the device —
+which is where the intermittent `LSApplicationWorkspaceErrorDomain 115` comes
+from. `build-ios-app` drives `xcodebuild` and `simctl` directly instead.
 
 And on a bot-opened PR whose runs GitHub parks at `action_required`:
 
@@ -642,6 +655,206 @@ And on a bot-opened PR whose runs GitHub parks at `action_required`:
     pull-request: ${{ steps.pr.outputs.number }}
     token: ${{ secrets.GH_PAT }} # needs actions:write + pull-requests:write
 ```
+
+<a id="ios-e2e"></a>
+
+## iOS E2E
+
+```yaml
+# .github/workflows/e2e-ios.yml in the consuming repo
+name: E2E iOS
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      app-dir: apps/mobile
+```
+
+That is the whole adoption for a repo with an Expo app and a `.maestro`
+directory next to it. It prebuilds, installs pods, builds for the simulator,
+boots a device against the compile, installs the app, runs every flow with a
+retry, and uploads the screenshots when something goes red.
+
+The defaults are the ones that were measured, not the ones that read well. Two
+repos went from 44m25 and 22m04 to 19m13 and 8m32 on hosted runners, and one to
+6m41 on a Mac mini, on these settings:
+
+| Default                                         | Why                                                                                                                                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ARCHS=$(uname -m)`, `ONLY_ACTIVE_ARCH=NO`      | Release defaults to `arm64 x86_64` for the simulator SDK. One repo compiled 840 of 850 translation units twice.                                            |
+| Optimiser off _inside_ Release                  | `-configuration Debug` boots the dev launcher when expo-dev-client is installed. Release keeps NDEBUG and the JS bundle.                                   |
+| `ios/` cached on native inputs only             | JS is excluded on purpose: the Xcode bundling phase is `alwaysOutOfDate`, so a JS change cannot go stale through the cache.                                |
+| DerivedData on the **same** key as `ios/`       | A restored `ios/` against an empty DerivedData is the one combination slower than starting cold.                                                           |
+| DerivedData strategy switches on runner kind    | `actions/cache` on a hosted runner, a fixed path with a key stamp on a self-hosted one — 1.2 GB is not worth uploading from a machine that keeps its disk. |
+| `cache/restore` + `cache/save`, never `cache`   | Plain `actions/cache` only saves on whole-job success, so a red Maestro run leaves the next build cold.                                                    |
+| Boot started before the build, waited for after | Measured: booting before `pnpm install` cost 220s on Setup Node; waiting after the build left the flows at 457s instead of 165s.                           |
+| Bounded boot wait, then erase and retry once    | `simctl bootstatus -b` never returns on a wedged device. An unbounded step already cost one cancelled hour at 10x billing.                                 |
+| Device picked from the runtime's own list       | Choosing the newest runtime and the newest iPhone independently pairs combinations `simctl create` rejects.                                                |
+| `maestro --device <udid>`                       | Without it Maestro drives whichever simulator is booted. On a Mac mini that is the owner's, not yours.                                                     |
+| No ccache                                       | CocoaPods wires it through `CC`/`CXX`, which Xcode 26 does not use to compile. An instrumented launcher logged zero calls.                                 |
+
+### Adoption, per repo shape
+
+**Public repo, hosted runner.** macOS minutes are free on a public repo, so
+there is nothing to tune:
+
+```yaml
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      app-dir: examples/kitchen-sink
+      flows: |
+        .maestro/smoke-launch.yaml
+        .maestro/smoke-modal-open-close.yaml
+```
+
+**Private repo with a Mac runner and a hosted fallback.** macOS bills at 10x on
+a private repo, so this one job can cost more than everything else in the
+account. Route to the Mac when it is awake and to a hosted runner when it is
+not. The routing signal is a beacon, not a live lookup:
+`gh api repos/{repo}/actions/runners` needs the `administration` permission,
+which `GITHUB_TOKEN` cannot hold under any `permissions:` block — it answers
+403 and always will. A timer on the Mac confirms the runner is listening and
+writes a timestamp into a repo variable, which any workflow can read for free.
+
+```yaml
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      runner-labels: '["self-hosted","macos-local"]'
+      hosted-fallback-labels: '["macos-26"]'
+      runner-heartbeat: ${{ vars.MAC_RUNNER_HEARTBEAT }}
+```
+
+`runner-heartbeat` has to be passed in: a called workflow cannot read the
+caller's variables for you. On a self-hosted runner the workflow also creates
+its own simulator and deletes it afterwards, because a machine that is not
+destroyed after the job accumulates one full disk image per run, and it keeps
+DerivedData at a fixed path instead of round-tripping it through the cache
+service.
+
+**Stateful suite, sharded and part-gated.** Flows that share a fixture cannot be
+split by count, only by which rows they touch. Name the shards, and let the ones
+you do not trust yet report without blocking:
+
+```yaml
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      app-dir: apps/mobile
+      quarantine-file: .maestro/quarantined.txt
+      shards: >-
+        [
+          {"name": "core",   "flows": "flows/01-launch.yaml,flows/02-login.yaml,flows/03-feed.yaml"},
+          {"name": "fresh",  "flows": "flows/20-account-creation.yaml"},
+          {"name": "delete", "flows": "flows/27-delete-account.yaml", "soft": true}
+        ]
+```
+
+Every non-quarantined flow should appear in exactly one shard — nothing checks
+that for you, so say it in a comment above the list and keep it true.
+
+### When to shard, and when not
+
+A second macOS job costs job setup, a checkout, the `.app` download and another
+simulator boot: about 3 minutes, measured, billed at 10x on a private repo. Each
+shard also pays Maestro's ~60s XCUITest driver start again. So sharding into `S`
+shards is only faster when the flows themselves take longer than
+
+    T > 240 × S / (S − 1) seconds
+
+| Shards | Flows must exceed | Extra macOS minutes bought |
+| ------ | ----------------- | -------------------------- |
+| 2      | 8 min             | ~4                         |
+| 3      | 6 min             | ~8                         |
+| 4      | 5m20              | ~12                        |
+
+Two repos measured their suites at 165s and 16s of actual flow execution and
+both kept a single job — at those numbers a matrix makes the run slower _and_
+more expensive. Time the flows before you shard: `maestro test` prints per-flow
+durations, and the job summary this workflow writes lists them per run.
+
+`shards: "3"` deals the flows round-robin, which assumes they are independent.
+If flow 03 reads what flow 02 wrote, it is not a sharding problem yet — it is a
+fixture problem, and naming the shards is the honest workaround.
+
+### Flaky flows
+
+Two halves, and only one of them is code here.
+
+**Quarantine — shipped.** Point `quarantine-file` at a file of flow stems:
+
+```
+# <flow-stem>   # reason: <text>; owner: @handle; added: YYYY-MM-DD
+27-delete-account   # reason: XCUITest driver dies mid-flow; owner: @GSTJ; added: 2026-07-20
+```
+
+A listed flow never runs and never fails the build, and its owner's handle is
+rendered into the job summary on every run. The `preflight` job lints the file
+before anything expensive starts: all three fields are required, and an entry
+older than `quarantine-max-age-days` (30) turns the workflow red. That decay
+rule is the whole point. A quarantine file without one is a list of tests that
+quietly stopped mattering; with one it is a borrowing facility with a maturity
+date, and past it nothing merges until somebody fixes the flow, deletes the
+entry, or moves it to a soft-gated shard.
+
+**Flake statistics — a recipe, not code.** The loop worth closing is: read the
+JUnit reports from the last N runs, compute a pass rate per flow, and map it to
+an action rather than a number.
+
+| Pass rate over ≥5 runs | Verdict                      |
+| ---------------------- | ---------------------------- |
+| ≥ 95%                  | stable — promote to required |
+| 80–95%                 | ok                           |
+| 30–80%                 | flaky — investigate          |
+| ≤ 30%                  | broken — quarantine or fix   |
+
+This is deliberately not shipped as an action. It needs `gh run list` filtered
+by _your_ workflow file name, `gh run download` matched against _your_ artifact
+names, and an XML walk whose suite-to-flow mapping depends on whether you set
+`per-flow`. Every one of those is a repo-specific string, and an action that
+took five inputs to express them would be harder to read than the 90 lines of
+Python it replaced. What this workflow guarantees is the input side: every run
+uploads a JUnit report per shard, named after the shard, under
+`<shard-name>-<run-attempt>`. A working implementation to copy lives in
+`pegada`'s `.github/scripts/maestro-flake-stats.py`.
+
+The same goes for `@expo/fingerprint` bundle-swap caching — around 260 lines of
+repo-specific logic with a liveness-probe fallback. It stays in the repo that
+needs it.
+
+### Input surface
+
+| Input                                                           | Default                   | For                                        |
+| --------------------------------------------------------------- | ------------------------- | ------------------------------------------ |
+| `app-dir`                                                       | `.`                       | Where `app.json` / `app.config.*` lives    |
+| `flows-dir` / `flows`                                           | `.maestro` / all of it    | What to run                                |
+| `build-profile`                                                 | `release`                 | `release` or `dev-client` (Debug)          |
+| `runner-labels` / `hosted-fallback-labels` / `runner-heartbeat` | `["macos-26"]`            | The Mac-runner router                      |
+| `shards` / `soft-gate-shards`                                   | `"0"` / `false`           | Job topology                               |
+| `quarantine-file` / `quarantine-max-age-days`                   | unset / `30`              | Flake containment with an expiry           |
+| `xcode-version` / `maestro-version`                             | `latest` / `2.7.0`        | Toolchain pins                             |
+| `simulator-device` / `simulator-runtime`                        | newest available          | Pin only if a flow needs a screen size     |
+| `prebuild-command` / `install-command` / `node-version-file`    | Expo + pnpm defaults      | Bare RN, npm, a pinned Node                |
+| `native-cache-paths` / `cache-epoch` / `cold`                   | sensible / `v1` / `false` | Cache keying and cache busting             |
+| `build-settings`                                                | unset                     | Extra `SETTING=value` xcodebuild arguments |
+| `maestro-env` / `deep-link`                                     | unset                     | `-e` variables, and auth-token injection   |
+| `retries` / `per-flow`                                          | `1` / `false`             | Retry shape                                |
+| `env-file-contents`                                             | unset                     | Repos whose config reads a `.env`          |
+| `timeout-minutes` / `flow-timeout-minutes`                      | `60` / `30`               | Bounds                                     |
+
+`deep-link` is the one worth knowing about: it opens a URL on the device after
+install and before the flows. Mint a token in an earlier step, encode it into
+your app's scheme, and no flow has to drive a WebView login — which removes the
+single biggest source of mobile E2E flake and wall-clock, and the network
+dependency on your identity provider along with it.
 
 ## Renovate
 

@@ -1,0 +1,676 @@
+name: 📱 E2E iOS (Maestro)
+
+# Reusable iOS E2E for Expo and bare React Native apps. One macOS job by
+# default, because that is what the measurements say:
+#
+#   jobs:
+#     e2e:
+#       uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+#       with:
+#         app-dir: apps/mobile
+#
+# Everything it does was proved somewhere first. The build settings and the
+# cache keys are documented in build-ios-app; the simulator and Maestro
+# handling in setup-ios-e2e and run-maestro. What is decided *here* is the job
+# topology, and there are only three shapes:
+#
+#   shards: "0"   one macOS job: build, install, run every flow. The default,
+#                 and correct until the flows themselves take minutes.
+#   shards: "3"   a build job that publishes the .app, then three matrix jobs
+#                 that deal the flows round-robin. Only for independent flows.
+#   shards: '[…]' the same, with the flows named per shard. This is what a
+#                 stateful suite needs: flows that share a fixture cannot be
+#                 split by count, only by which rows they touch.
+#
+# When *not* to shard, with the arithmetic. A second macOS job costs job setup
+# + checkout + the .app download + a second simulator boot, measured at ~3
+# minutes, and on a private repo every one of those minutes bills at 10x. Two
+# repos measured their flow sets at 165s and 16s of actual execution and both
+# kept a single job. Maestro also spends ~60s per invocation starting its
+# XCUITest driver, which every shard pays again. Shard when
+#
+#   flow-seconds / shards + 180 < flow-seconds
+#
+# i.e. when the flows take more than about 3 minutes per shard you are adding.
+# Below that, sharding makes the job slower and (privately) more expensive.
+#
+# Requires: an Apple Silicon macOS runner. The single-architecture build below
+# is only correct because the runner is arm64 — macos-26 and any modern Mac
+# are, an Intel image is not.
+
+on:
+  workflow_call:
+    inputs:
+      app-dir:
+        description: "Directory holding the app — the one with app.json or app.config.*."
+        type: string
+        required: false
+        default: "."
+      flows-dir:
+        description: "Maestro flow directory, relative to app-dir. Top level only; subflows are not run directly."
+        type: string
+        required: false
+        default: ".maestro"
+      flows:
+        description: "Explicit flow files, one per line, relative to app-dir. Empty scans flows-dir."
+        type: string
+        required: false
+        default: ""
+      build-profile:
+        description: >
+          release builds the Release configuration with the optimiser off: the JS
+          bundle is embedded, so nothing depends on a Metro server, and that is
+          what E2E wants. dev-client builds Debug — only pick it if you know the
+          app has no expo-dev-client, because with one a Debug build boots the
+          dev launcher instead of the app the flows are written against.
+        type: string
+        required: false
+        default: release
+      runner-labels:
+        description: "JSON array of labels for the macOS jobs."
+        type: string
+        required: false
+        default: '["macos-26"]'
+      hosted-fallback-labels:
+        description: >
+          JSON array to fall back to when runner-labels names a self-hosted
+          runner and its heartbeat is stale. Empty disables routing entirely.
+        type: string
+        required: false
+        default: ""
+      runner-heartbeat:
+        description: >
+          Unix timestamp the self-hosted runner last published, normally the
+          repo variable MAC_RUNNER_HEARTBEAT. It has to be an input: a called
+          workflow cannot read the caller's variables for you. Why a beacon and
+          not a live lookup — `gh api repos/{repo}/actions/runners` needs the
+          `administration` permission, which GITHUB_TOKEN cannot hold under any
+          `permissions:` block. It answers 403 and always will.
+        type: string
+        required: false
+        default: ""
+      heartbeat-max-age-seconds:
+        description: "How stale the heartbeat may be before the run goes hosted."
+        type: number
+        required: false
+        default: 600
+      shards:
+        description: >
+          "0" for one job. A number for that many round-robin shards. A JSON
+          array of {name, flows, soft} to name them — `flows` is a
+          comma-separated list of paths relative to app-dir, `soft` opts that
+          shard out of gating.
+        type: string
+        required: false
+        default: "0"
+      soft-gate-shards:
+        description: >
+          Default `soft` for shards that do not say. Soft shards report their
+          failures in the job summary and as warnings, and still pass. It covers
+          flow results only — a build or install failure is infrastructure and
+          stays red.
+        type: boolean
+        required: false
+        default: false
+      quarantine-file:
+        description: >
+          Path relative to app-dir of a file of quarantined flow stems. Listed
+          flows never run and never fail the build; the file is linted before
+          anything else in the DAG, so a stale entry turns the workflow red.
+        type: string
+        required: false
+        default: ""
+      quarantine-max-age-days:
+        description: "How long a quarantine entry may live before the lint fails."
+        type: number
+        required: false
+        default: 30
+      xcode-version:
+        description: '"latest", a prefix like "26", or an exact "26.2".'
+        type: string
+        required: false
+        default: latest
+      maestro-version:
+        type: string
+        required: false
+        default: "2.7.0"
+      simulator-device:
+        description: "Device name. Empty takes the newest iPhone the chosen runtime supports."
+        type: string
+        required: false
+        default: ""
+      simulator-runtime:
+        description: 'Runtime prefix, e.g. "iOS 26". Empty takes the newest installed.'
+        type: string
+        required: false
+        default: ""
+      node-version-file:
+        type: string
+        required: false
+        default: ".nvmrc"
+      install-command:
+        type: string
+        required: false
+        default: "pnpm install --frozen-lockfile"
+      prebuild-command:
+        description: "Empty for bare React Native repos that commit ios/."
+        type: string
+        required: false
+        default: "pnpm expo prebuild --platform ios --no-install"
+      native-cache-paths:
+        description: "Globs that decide what prebuild produces, one per line. `<app>` expands to app-dir."
+        type: string
+        required: false
+        default: ""
+      build-settings:
+        description: "Extra `SETTING=value` xcodebuild arguments, one per line."
+        type: string
+        required: false
+        default: ""
+      cache-epoch:
+        description: "Bump to invalidate every cache this workflow keeps."
+        type: string
+        required: false
+        default: v1
+      cold:
+        description: "Ignore every cache. Wire it to a workflow_dispatch input to measure the cold path."
+        type: boolean
+        required: false
+        default: false
+      maestro-env:
+        description: "`KEY=value` lines passed to Maestro as -e."
+        type: string
+        required: false
+        default: ""
+      deep-link:
+        description: >
+          URL opened on the device after install and before the flows. The
+          generic form of E2E auth-token injection: mint a token, encode it into
+          your app's scheme, and no flow has to drive a WebView login.
+        type: string
+        required: false
+        default: ""
+      retries:
+        description: "Extra attempts per Maestro invocation. A real regression fails across all of them."
+        type: number
+        required: false
+        default: 1
+      per-flow:
+        description: "One `maestro test` per flow. Off keeps them in one invocation, preserving flowsOrder."
+        type: boolean
+        required: false
+        default: false
+      env-file-contents:
+        description: "Written to app-dir/.env before the build, for repos whose config reads one."
+        type: string
+        required: false
+        default: ""
+      timeout-minutes:
+        description: "Timeout for the macOS build job."
+        type: number
+        required: false
+        default: 60
+      flow-timeout-minutes:
+        description: "Timeout for a sharded flow job."
+        type: number
+        required: false
+        default: 30
+      job-name:
+        description: "Second half of the required-check context the single-job shape reports as."
+        type: string
+        required: false
+        default: "🧪 Maestro iOS"
+    secrets:
+      NPM_TOKEN:
+        description: "Only when the install needs a private registry."
+        required: false
+    outputs:
+      result:
+        description: pass | fail | skipped, from the unsharded job.
+        value: ${{ jobs.e2e.outputs.result }}
+
+permissions:
+  contents: read
+
+env:
+  MAESTRO_CLI_NO_ANALYTICS: "1"
+
+jobs:
+  # Ubuntu, seconds, and the only job that can hard-gate the expensive ones.
+  # Skipped entirely in the simple shape — one job with no quarantine file and
+  # no routing needs no plan, and a check context nobody reads is a cost too.
+  preflight:
+    name: 🧭 Preflight
+    if: inputs.shards != '0' || inputs.quarantine-file != '' || inputs.hosted-fallback-labels != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      labels: ${{ steps.route.outputs.labels }}
+      matrix: ${{ steps.shards.outputs.matrix }}
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v7
+
+      # A quarantine entry is a borrowing facility with a maturity date. The
+      # lint is what makes it one: three fields, and an age. Past the age
+      # nothing merges to this path until somebody fixes the flow or moves it to
+      # a soft-gated shard. Without the decay rule a quarantine file is just a
+      # list of tests that stopped mattering.
+      - name: 🚧 Lint the quarantine file
+        if: inputs.quarantine-file != ''
+        env:
+          IN_APP_DIR: ${{ inputs.app-dir }}
+          IN_QUARANTINE_FILE: ${{ inputs.quarantine-file }}
+          IN_MAX_AGE_DAYS: ${{ inputs.quarantine-max-age-days }}
+        run: |
+          set -euo pipefail
+          file="${IN_APP_DIR%/}/$IN_QUARANTINE_FILE"
+          file="${file#./}"
+          if [ ! -f "$file" ]; then
+            echo "::error::quarantine-file '$file' does not exist. Create it, or unset the input."
+            exit 1
+          fi
+
+          now=$(date -u +%s)
+          failures=0
+          entries=0
+          line_number=0
+          while IFS= read -r raw || [ -n "$raw" ]; do
+            line_number=$((line_number + 1))
+            stem=$(printf '%s' "$raw" | sed 's/#.*//' | awk 'NF {print $1}')
+            [ -n "$stem" ] || continue
+            entries=$((entries + 1))
+            case "$raw" in
+              *"#"*) note="${raw#*#}" ;;
+              *) note="" ;;
+            esac
+
+            for field in reason owner added; do
+              case "$note" in
+                *"$field:"*) ;;
+                *)
+                  echo "::error file=$file,line=$line_number::$stem is missing '$field:'. The format is: <flow-stem>  # reason: <text>; owner: @handle; added: YYYY-MM-DD"
+                  failures=$((failures + 1))
+                  ;;
+              esac
+            done
+
+            added=$(printf '%s' "$note" | sed -n 's/.*added:[[:space:]]*\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\).*/\1/p')
+            if [ -z "$added" ]; then
+              echo "::error file=$file,line=$line_number::$stem has no parseable 'added: YYYY-MM-DD'."
+              failures=$((failures + 1))
+              continue
+            fi
+            if ! added_at=$(date -u -d "$added" +%s 2>/dev/null); then
+              echo "::error file=$file,line=$line_number::$stem has an invalid date '$added'."
+              failures=$((failures + 1))
+              continue
+            fi
+            age=$(((now - added_at) / 86400))
+            if [ "$age" -gt "$IN_MAX_AGE_DAYS" ]; then
+              echo "::error file=$file,line=$line_number::$stem has been quarantined for $age days (max $IN_MAX_AGE_DAYS). Fix the flow, delete the entry, or move it to a soft-gated shard."
+              failures=$((failures + 1))
+            else
+              echo "$stem — quarantined $age of $IN_MAX_AGE_DAYS days"
+            fi
+          done < "$file"
+
+          echo "$entries quarantined flow(s), $failures problem(s)."
+          [ "$failures" -eq 0 ]
+
+      # The beacon, not a live lookup. A self-hosted Mac publishes a timestamp
+      # to a repo variable from a timer that has already confirmed the runner is
+      # listening; a stale one means asleep, offline or dead, and the run goes
+      # hosted. Repo variables are readable for free and hold nothing secret.
+      - name: 🧭 Route
+        id: route
+        env:
+          IN_LABELS: ${{ inputs.runner-labels }}
+          IN_FALLBACK: ${{ inputs.hosted-fallback-labels }}
+          IN_HEARTBEAT: ${{ inputs.runner-heartbeat }}
+          IN_MAX_AGE: ${{ inputs.heartbeat-max-age-seconds }}
+        run: |
+          set -euo pipefail
+          labels="$IN_LABELS"
+          verdict="🏷 $labels"
+          if [ -n "$IN_FALLBACK" ]; then
+            if [ -z "$IN_HEARTBEAT" ]; then
+              labels="$IN_FALLBACK"
+              verdict="☁️ $labels — no heartbeat published"
+            else
+              age=$(( $(date -u +%s) - IN_HEARTBEAT ))
+              if [ "$age" -ge 0 ] && [ "$age" -lt "$IN_MAX_AGE" ]; then
+                verdict="🖥️ $labels — heartbeat ${age}s old"
+              else
+                labels="$IN_FALLBACK"
+                verdict="☁️ $labels — heartbeat stale (${age}s)"
+              fi
+            fi
+          fi
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          echo "$verdict"
+          echo "$verdict" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 🧮 Plan the shards
+        id: shards
+        if: inputs.shards != '0'
+        env:
+          IN_SHARDS: ${{ inputs.shards }}
+          IN_SOFT: ${{ inputs.soft-gate-shards }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/plan-shards.mjs" <<'JS'
+          const raw = (process.env.IN_SHARDS ?? "").trim();
+          const soft = process.env.IN_SOFT === "true";
+          let entries;
+          if (/^\d+$/.test(raw)) {
+            const total = Number(raw);
+            if (total < 1) throw new Error(`shards must be "0" or >= 1, got ${raw}`);
+            entries = Array.from({ length: total }, (_, index) => ({
+              name: `shard-${index + 1}-of-${total}`,
+              flows: "",
+              index: String(index),
+              total: String(total),
+              soft: String(soft),
+            }));
+          } else {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed) || parsed.length === 0) {
+              throw new Error("shards must be a count or a non-empty JSON array");
+            }
+            entries = parsed.map((shard, index) => {
+              if (!shard || typeof shard !== "object") {
+                throw new Error(`shard ${index} is not an object`);
+              }
+              if (!shard.flows) throw new Error(`shard ${index} has no flows`);
+              return {
+                name: String(shard.name ?? `shard-${index + 1}`),
+                // Commas are what a YAML author reaches for; the action takes
+                // one path per line.
+                flows: String(shard.flows)
+                  .split(",")
+                  .map((flow) => flow.trim())
+                  .filter(Boolean)
+                  .join("\n"),
+                index: "",
+                total: "",
+                soft: String(shard.soft ?? soft),
+              };
+            });
+          }
+          const names = new Set(entries.map((entry) => entry.name));
+          if (names.size !== entries.length) throw new Error("shard names must be unique");
+          process.stdout.write(JSON.stringify(entries));
+          JS
+          matrix=$(node "$RUNNER_TEMP/plan-shards.mjs")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Shards"
+            echo ""
+            echo '```json'
+            printf '%s\n' "$matrix"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The default shape. Build and flows in one job, because the .app never leaves
+  # the runner and the simulator boots once.
+  e2e:
+    name: ${{ inputs.job-name }}
+    needs: preflight
+    if: ${{ !cancelled() && needs.preflight.result != 'failure' && inputs.shards == '0' }}
+    runs-on: ${{ fromJSON(needs.preflight.outputs.labels || inputs.runner-labels) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    concurrency:
+      group: magic-e2e-ios-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    outputs:
+      result: ${{ steps.maestro.outputs.result }}
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v7
+
+      # Referenced by owner/repo, never `./`: inside a called workflow a `./`
+      # path resolves against the caller's checkout.
+      - name: 🏗 Setup Node + pnpm
+        uses: GSTJ/magic/.github/actions/setup@v1
+        with:
+          working-directory: ${{ inputs.app-dir }}
+          node-version-file: ${{ inputs.node-version-file }}
+          install-command: ${{ inputs.install-command }}
+          registry-url: ${{ secrets.NPM_TOKEN != '' && 'https://registry.npmjs.org' || '' }}
+          node-auth-token: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🔧 Write .env
+        if: inputs.env-file-contents != ''
+        working-directory: ${{ inputs.app-dir }}
+        env:
+          CONTENTS: ${{ inputs.env-file-contents }}
+        run: printf '%s\n' "$CONTENTS" > .env
+
+      # boot: false — this starts the boot and nothing waits for it here, so it
+      # overlaps the compile below. run-maestro does the bounded wait.
+      - name: 🍎 Setup Xcode, Maestro and the simulator
+        id: ios
+        uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          maestro-version: ${{ inputs.maestro-version }}
+          simulator-device: ${{ inputs.simulator-device }}
+          simulator-runtime: ${{ inputs.simulator-runtime }}
+          working-directory: ${{ inputs.app-dir }}
+          boot: "false"
+          install-cocoapods: auto
+          # build-ios-app owns DerivedData; two actions caching it under
+          # different keys is how a cache serves the wrong tree.
+          cache-derived-data: "false"
+
+      - name: 🏗 Build for the simulator
+        id: build
+        uses: GSTJ/magic/.github/actions/build-ios-app@v1
+        with:
+          app-dir: ${{ inputs.app-dir }}
+          configuration: ${{ inputs.build-profile == 'dev-client' && 'Debug' || 'Release' }}
+          udid: ${{ steps.ios.outputs.udid }}
+          prebuild-command: ${{ inputs.prebuild-command }}
+          native-cache-paths: ${{ inputs.native-cache-paths }}
+          build-settings: ${{ inputs.build-settings }}
+          cache-epoch: ${{ inputs.cache-epoch }}
+          cold: ${{ inputs.cold }}
+
+      - name: 🎬 Maestro
+        id: maestro
+        uses: GSTJ/magic/.github/actions/run-maestro@v1
+        with:
+          udid: ${{ steps.ios.outputs.udid }}
+          app-path: ${{ steps.build.outputs.app-path }}
+          bundle-id: ${{ steps.build.outputs.bundle-id }}
+          working-directory: ${{ inputs.app-dir }}
+          flows: ${{ inputs.flows }}
+          flows-dir: ${{ inputs.flows-dir }}
+          quarantine-file: ${{ inputs.quarantine-file }}
+          per-flow: ${{ inputs.per-flow }}
+          retries: ${{ inputs.retries }}
+          deep-link: ${{ inputs.deep-link }}
+          maestro-env: ${{ inputs.maestro-env }}
+          name: maestro-ios
+
+      - name: 🧹 Remove the created simulator
+        if: always() && steps.ios.outputs.created == 'true'
+        env:
+          UDID: ${{ steps.ios.outputs.udid }}
+        run: |
+          set -euo pipefail
+          [ -n "${UDID:-}" ] || exit 0
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          xcrun simctl delete "$UDID" 2>/dev/null || true
+          echo "Deleted $UDID"
+
+  # The sharded shape. One build, published once, consumed by every shard.
+  build:
+    name: 🏗 Build (sharded)
+    needs: preflight
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && inputs.shards != '0' }}
+    runs-on: ${{ fromJSON(needs.preflight.outputs.labels || inputs.runner-labels) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    concurrency:
+      group: magic-e2e-ios-build-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    outputs:
+      bundle-id: ${{ steps.build.outputs.bundle-id }}
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v7
+
+      - name: 🏗 Setup Node + pnpm
+        uses: GSTJ/magic/.github/actions/setup@v1
+        with:
+          working-directory: ${{ inputs.app-dir }}
+          node-version-file: ${{ inputs.node-version-file }}
+          install-command: ${{ inputs.install-command }}
+          registry-url: ${{ secrets.NPM_TOKEN != '' && 'https://registry.npmjs.org' || '' }}
+          node-auth-token: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🔧 Write .env
+        if: inputs.env-file-contents != ''
+        working-directory: ${{ inputs.app-dir }}
+        env:
+          CONTENTS: ${{ inputs.env-file-contents }}
+        run: printf '%s\n' "$CONTENTS" > .env
+
+      # No Maestro and no boot in this job: it only produces the .app. A
+      # simulator is still selected, because naming the device is what tells
+      # actool which runtime to thin assets for.
+      - name: 🍎 Setup Xcode and the simulator
+        id: ios
+        uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          maestro-version: ${{ inputs.maestro-version }}
+          simulator-device: ${{ inputs.simulator-device }}
+          simulator-runtime: ${{ inputs.simulator-runtime }}
+          working-directory: ${{ inputs.app-dir }}
+          boot: "false"
+          create-device: "false"
+          cache-derived-data: "false"
+
+      - name: 🏗 Build for the simulator
+        id: build
+        uses: GSTJ/magic/.github/actions/build-ios-app@v1
+        with:
+          app-dir: ${{ inputs.app-dir }}
+          configuration: ${{ inputs.build-profile == 'dev-client' && 'Debug' || 'Release' }}
+          udid: ${{ steps.ios.outputs.udid }}
+          prebuild-command: ${{ inputs.prebuild-command }}
+          native-cache-paths: ${{ inputs.native-cache-paths }}
+          build-settings: ${{ inputs.build-settings }}
+          cache-epoch: ${{ inputs.cache-epoch }}
+          cold: ${{ inputs.cold }}
+
+      # tar, not a raw upload: a .app is a directory of symlinks and executable
+      # bits, and upload-artifact preserves neither.
+      - name: 📦 Publish the .app
+        env:
+          APP_PATH: ${{ steps.build.outputs.app-path }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/magic-app"
+          tar -C "$(dirname "$APP_PATH")" -czf "$RUNNER_TEMP/magic-app/app.tgz" "$(basename "$APP_PATH")"
+          ls -lh "$RUNNER_TEMP/magic-app/app.tgz"
+
+      - name: 📤 Upload the .app
+        uses: actions/upload-artifact@v7
+        with:
+          name: magic-ios-app-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/magic-app/app.tgz
+          retention-days: 1
+
+  shard:
+    name: 🧪 ${{ matrix.shard.name }}
+    needs: [preflight, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ${{ fromJSON(needs.preflight.outputs.labels || inputs.runner-labels) }}
+    timeout-minutes: ${{ inputs.flow-timeout-minutes }}
+    strategy:
+      # One shard's failure must not cancel its siblings: the point of the run
+      # is the whole picture, and a cancelled sibling reports as neither.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+    concurrency:
+      group: magic-e2e-ios-${{ github.workflow }}-${{ github.ref }}-${{ matrix.shard.name }}
+      cancel-in-progress: true
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v7
+
+      - name: 📥 Download the .app
+        uses: actions/download-artifact@v7
+        with:
+          name: magic-ios-app-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/magic-app
+
+      - name: 📦 Unpack the .app
+        id: app
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/magic-app/unpacked"
+          mkdir -p "$dest"
+          tar -C "$dest" -xzf "$RUNNER_TEMP/magic-app/app.tgz"
+          app_path=$(find "$dest" -maxdepth 1 -name "*.app" | head -1 || true)
+          if [ -z "$app_path" ]; then
+            echo "::error::No .app in the published artifact."
+            exit 1
+          fi
+          echo "path=$app_path" >> "$GITHUB_OUTPUT"
+
+      # boot: true here — there is no compile in this job to overlap with, so
+      # the wait may as well happen up front where the bound is enforced.
+      - name: 🍎 Setup Maestro and the simulator
+        id: ios
+        uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          maestro-version: ${{ inputs.maestro-version }}
+          simulator-device: ${{ inputs.simulator-device }}
+          simulator-runtime: ${{ inputs.simulator-runtime }}
+          working-directory: ${{ inputs.app-dir }}
+          boot: "true"
+          install-cocoapods: "false"
+          cache-pods: "false"
+          cache-derived-data: "false"
+
+      - name: 🎬 Maestro
+        id: maestro
+        uses: GSTJ/magic/.github/actions/run-maestro@v1
+        with:
+          udid: ${{ steps.ios.outputs.udid }}
+          app-path: ${{ steps.app.outputs.path }}
+          bundle-id: ${{ needs.build.outputs.bundle-id }}
+          working-directory: ${{ inputs.app-dir }}
+          # A named shard brings its own list. A counted one brings none, and
+          # then the workflow-level list (or flows-dir) is what gets sliced.
+          flows: ${{ matrix.shard.flows != '' && matrix.shard.flows || inputs.flows }}
+          flows-dir: ${{ inputs.flows-dir }}
+          shard-index: ${{ matrix.shard.index }}
+          shard-total: ${{ matrix.shard.total }}
+          quarantine-file: ${{ inputs.quarantine-file }}
+          per-flow: ${{ inputs.per-flow }}
+          retries: ${{ inputs.retries }}
+          deep-link: ${{ inputs.deep-link }}
+          maestro-env: ${{ inputs.maestro-env }}
+          # Soft-gating lives here rather than in a job-level
+          # continue-on-error, which reports a red run as green to PR checks —
+          # one repo shipped three failing runs as successes that way.
+          soft-fail: ${{ matrix.shard.soft }}
+          name: ${{ matrix.shard.name }}
+
+      - name: 🧹 Remove the created simulator
+        if: always() && steps.ios.outputs.created == 'true'
+        env:
+          UDID: ${{ steps.ios.outputs.udid }}
+        run: |
+          set -euo pipefail
+          [ -n "${UDID:-}" ] || exit 0
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          xcrun simctl delete "$UDID" 2>/dev/null || true
+          echo "Deleted $UDID"

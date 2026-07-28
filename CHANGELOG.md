@@ -3,6 +3,84 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-27 — CI: reusable iOS E2E
+
+No npm package changed. Everything here is in `.github/`. The repo tag for this
+round is `v1.6.0` — a minor, because `e2e-ios.yml` and two composites are new
+and nothing existing changed shape — and `v1` moves onto it.
+
+Three repos had hand-rolled Maestro pipelines with the same bugs in different
+places, and a fourth had 87 flow YAMLs that CI never ran at all. This is the
+union of what was measured across them, with every dead end left out.
+
+### New: `GSTJ/magic/.github/workflows/e2e-ios.yml@v1`
+
+```yaml
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      app-dir: apps/mobile
+```
+
+Prebuild, pods, `xcodebuild`, boot, install, flows, report, artifacts. Three job
+topologies behind one input: `shards: "0"` is one macOS job (the default),
+`shards: "3"` deals independent flows round-robin across a matrix, and a JSON
+array names the shards for a suite whose flows share a fixture. Per-shard
+`soft: true` reports without gating.
+
+Measured on the repos it came from: 44m25 → 19m13 and 22m04 → 8m32 on hosted
+runners, 6m41–12m18 on a Mac mini. The README section has the full table of
+which default bought what.
+
+### New: two composites
+
+| Action                                        | What it is                                                       |
+| --------------------------------------------- | ---------------------------------------------------------------- |
+| `GSTJ/magic/.github/actions/build-ios-app@v1` | prebuild + pods + `xcodebuild`, single-arch, three caches         |
+| `GSTJ/magic/.github/actions/run-maestro@v1`   | install, launch probe, deep link, flows, JUnit summary, artifacts |
+
+Both are usable on their own when a repo needs a shape the workflow does not
+have.
+
+### Changed: `setup-ios-e2e`
+
+- `simulator-device` and `simulator-runtime` now default to empty, meaning
+  "newest available". They used to default to `iPhone 17 Pro Max` / `iOS 26`,
+  which is a pin against a runner image that drops runtimes without warning.
+- The device picker ranks iPhones by generation and then Pro Max > Pro > Plus >
+  plain > mini. It used to take the last entry, which is neither: a runtime
+  lists its device types in Apple's order (last is an iPhone 11), and sorting by
+  name puts "iPhone 9" above "iPhone 17".
+- `boot: "false"` starts the boot without waiting, so it overlaps the compile.
+  Measured: booting before `pnpm install` cost 220s on Setup Node, waiting after
+  the build left the flows at 457s instead of 165s.
+- The wait is bounded (`boot-timeout-seconds`, default 240) and erases and
+  retries once. `simctl bootstatus -b` never returns on a wedged device, and an
+  unbounded step already ate a cancelled hour at 10x macOS billing.
+- `create-device` makes a dedicated device off a self-hosted runner and sweeps
+  the ones earlier runs left behind. A hosted runner is destroyed after the job;
+  a Mac mini accumulates one full disk image per run.
+
+### New: quarantine, with an expiry
+
+Point `quarantine-file` at a list of flow stems and they stop running and stop
+failing the build. The `preflight` job lints the file first: `reason:`,
+`owner:` and `added:` are all required, and an entry older than 30 days turns
+the workflow red. Without the decay rule a quarantine file is a list of tests
+that quietly stopped mattering.
+
+Flake statistics across runs stayed a recipe rather than an action — see the
+README. It needs your workflow filename, your artifact names and a suite-to-flow
+mapping that depends on `per-flow`, and an action taking five inputs to express
+those is harder to read than the Python it would replace. What is guaranteed is
+the input side: a JUnit report per shard, named after the shard, on every run.
+
+### Fixed: `validate-workflows` and prose
+
+`pnpm install` inside a comment no longer counts as a missing
+`--frozen-lockfile`.
+
 ## 2026-07-27 — magic-observability 1.0.0
 
 New package. One PostHog layer for every product, replacing the two hand-rolled
