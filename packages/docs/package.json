@@ -1,0 +1,93 @@
+{
+  "name": "magic-docs",
+  "version": "1.0.0",
+  "description": "GSTJ's reusable Fumadocs foundation: site contract, layout and MDX presets, TypeScript API docs, static export helpers, and visual theme.",
+  "keywords": [
+    "documentation",
+    "fumadocs",
+    "github-pages",
+    "mdx",
+    "typescript"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/docs#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/docs"
+  },
+  "bin": {
+    "magic-docs-init": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "theme.css",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./fumadocs": {
+      "types": "./dist/fumadocs.d.ts",
+      "default": "./dist/fumadocs.js"
+    },
+    "./mdx": {
+      "types": "./dist/mdx.d.ts",
+      "default": "./dist/mdx.js"
+    },
+    "./llms": {
+      "types": "./dist/llms.d.ts",
+      "default": "./dist/llms.js"
+    },
+    "./typescript": {
+      "types": "./dist/typescript.d.ts",
+      "default": "./dist/typescript.js"
+    },
+    "./theme.css": "./theme.css",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "prepack": "pnpm run build",
+    "clean": "rm -rf dist .turbo",
+    "lint": "oxlint",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "fumadocs-typescript": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/mdx": "^2.0.13",
+    "@types/react": "^19.2.0",
+    "fumadocs-core": "16.12.1",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.12.1",
+    "magic-tsconfig": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "6.0.3"
+  },
+  "peerDependencies": {
+    "@types/mdx": ">=2.0.0",
+    "@types/react": "^19.2.0",
+    "fumadocs-core": "^16.12.1",
+    "fumadocs-ui": "^16.12.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

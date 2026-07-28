@@ -49,6 +49,12 @@
       "automerge": true
     },
     {
+      "description": "Fumadocs Core, UI, MDX and integrations are one coupled docs framework. Group upgrades and require review because even patch releases can change generated content, peer pins, or exported layout types.",
+      "matchPackageNames": ["fumadocs-{/,}**", "@fumadocs/{/,}**"],
+      "groupName": "fumadocs",
+      "automerge": false
+    },
+    {
       "description": "GitHub Actions pinned by tag; group so a PR isn't opened per action.",
       "matchManagers": ["github-actions"],
       "groupName": "github actions",

@@ -1,0 +1,143 @@
+/*
+ * GSTJ's Fumadocs visual foundation.
+ *
+ * Consumers only need:
+ *   @import "tailwindcss";
+ *   @import "magic-docs/theme.css";
+ *
+ * Keep selectors on documented Fumadocs IDs/data attributes. The color and
+ * typography tokens do most of the work and survive upstream layout changes.
+ */
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@theme {
+  --font-sans: var(
+    --font-magic-sans,
+    "Geist",
+    "Inter Variable",
+    "Inter",
+    ui-sans-serif,
+    system-ui,
+    sans-serif
+  );
+  --font-mono: var(
+    --font-magic-mono,
+    "Geist Mono",
+    "SFMono-Regular",
+    "Cascadia Code",
+    ui-monospace,
+    monospace
+  );
+
+  --color-fd-background: oklch(98.7% 0.004 286);
+  --color-fd-foreground: oklch(18% 0.018 286);
+  --color-fd-muted: oklch(96.2% 0.007 286);
+  --color-fd-muted-foreground: oklch(49% 0.025 286);
+  --color-fd-popover: oklch(99.6% 0.003 286);
+  --color-fd-popover-foreground: oklch(18% 0.018 286);
+  --color-fd-card: oklch(99.7% 0.002 286);
+  --color-fd-card-foreground: oklch(18% 0.018 286);
+  --color-fd-border: oklch(89.5% 0.012 286 / 72%);
+  --color-fd-primary: oklch(52% 0.245 288);
+  --color-fd-primary-foreground: oklch(99% 0.004 286);
+  --color-fd-secondary: oklch(94.8% 0.012 286);
+  --color-fd-secondary-foreground: oklch(24% 0.025 286);
+  --color-fd-accent: oklch(92.7% 0.031 286 / 78%);
+  --color-fd-accent-foreground: oklch(32% 0.12 288);
+  --color-fd-ring: oklch(60% 0.21 288);
+}
+
+:root {
+  color-scheme: light;
+  --fd-layout-width: 94rem;
+  --magic-grid: oklch(61% 0.17 288 / 7%);
+  --magic-glow: oklch(66% 0.2 288 / 12%);
+}
+
+.dark {
+  color-scheme: dark;
+  --color-fd-background: oklch(14.5% 0.018 286);
+  --color-fd-foreground: oklch(94.5% 0.009 286);
+  --color-fd-muted: oklch(19% 0.022 286);
+  --color-fd-muted-foreground: oklch(70% 0.022 286);
+  --color-fd-popover: oklch(17.5% 0.022 286);
+  --color-fd-popover-foreground: oklch(94.5% 0.009 286);
+  --color-fd-card: oklch(17% 0.021 286);
+  --color-fd-card-foreground: oklch(94.5% 0.009 286);
+  --color-fd-border: oklch(43% 0.036 286 / 38%);
+  --color-fd-primary: oklch(72% 0.19 288);
+  --color-fd-primary-foreground: oklch(15% 0.025 286);
+  --color-fd-secondary: oklch(21% 0.027 286);
+  --color-fd-secondary-foreground: oklch(92% 0.012 286);
+  --color-fd-accent: oklch(28% 0.075 288 / 68%);
+  --color-fd-accent-foreground: oklch(88% 0.065 288);
+  --color-fd-ring: oklch(72% 0.19 288);
+  --magic-grid: oklch(74% 0.17 288 / 7%);
+  --magic-glow: oklch(60% 0.22 288 / 16%);
+}
+
+html {
+  scroll-behavior: smooth;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+body {
+  background-color: var(--color-fd-background);
+  background-image:
+    radial-gradient(circle at 52% -18rem, var(--magic-glow), transparent 34rem),
+    linear-gradient(to right, var(--magic-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--magic-grid) 1px, transparent 1px);
+  background-size:
+    auto,
+    3.5rem 3.5rem,
+    3.5rem 3.5rem;
+  background-attachment: fixed;
+}
+
+::selection {
+  color: var(--color-fd-primary-foreground);
+  background: var(--color-fd-primary);
+}
+
+#nd-docs-layout {
+  background: transparent;
+}
+
+#nd-sidebar,
+#nd-subnav,
+[data-toc-popover] {
+  background-color: color-mix(
+    in oklab,
+    var(--color-fd-background) 88%,
+    transparent
+  );
+  backdrop-filter: blur(18px) saturate(135%);
+}
+
+#nd-sidebar {
+  border-color: color-mix(in oklab, var(--color-fd-border) 80%, transparent);
+}
+
+.prose :where(h1, h2, h3) {
+  text-wrap: balance;
+  letter-spacing: -0.025em;
+}
+
+.prose :where(p, li) {
+  text-wrap: pretty;
+}
+
+.prose :where(code):not(:where(pre *)) {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.42rem;
+  background: color-mix(in oklab, var(--color-fd-secondary) 78%, transparent);
+  padding-inline: 0.32em;
+  padding-block: 0.12em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
