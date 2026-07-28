@@ -12,6 +12,7 @@ slightly-wrong version.
 | [`magic-tsconfig`](packages/tsconfig)           | `base`, `internal-package`, `nextjs`, `expo` TypeScript bases     |
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                  |
 | [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform        |
+| [`magic-docs`](packages/docs)                   | Fumadocs theme, layout/MDX presets, TypeScript reference, Pages   |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck    |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm            |
 | `.github/workflows/e2e-ios.yml`                 | Reusable `workflow_call` job: Maestro iOS E2E, optionally sharded |

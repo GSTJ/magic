@@ -2049,3 +2049,100 @@ deduplicated one.
   pulls in `react-native`. Its defaults are tested through `expo/options.ts`,
   which imports the SDK for types only and therefore compiles to a module with
   no runtime import. Same trick as `node/adapter.ts`.
+
+## 12. `magic-docs`
+
+Added 2026-07-28. The incumbent OSS documentation was TypeDoc's HTML output:
+accurate as a declaration dump, but it made the generated reference the whole
+information architecture and inherited an interface that looks generated
+because it is. The replacement is a reusable Fumadocs foundation, not another
+reference renderer.
+
+### Version and UI baseline
+
+The package is tested against Fumadocs Core/UI 16.12.1, MDX 15.2.0, and the
+TypeScript integration 5.3.0. Fumadocs UI 16.13.0 existed during implementation
+but was about one day old, inside this repo's three-day package quarantine;
+16.12.1 was the newest admissible release. The peer range accepts compatible
+16.x updates, while the shared Renovate preset groups the Fumadocs family and
+requires review.
+
+`fumadocs-ui` is installed as an npm alias to `@fumadocs/base-ui`, matching the
+current official default while retaining Fumadocs' stable import paths. The
+classic DocsLayout is deliberate. Flux's own documentation describes it as
+prioritising aesthetics over user experience; an OSS API needs persistent
+navigation and TOC affordances. The custom theme supplies the modern visual
+layer without removing them.
+
+The package itself compiles on TypeScript 6.0.3, separately from the root's
+TypeScript 7.0.2. It imports no `next` runtime or types. This is the same
+framework-boundary rule recorded earlier for Next 15: a shared package must not
+force a compiler known to break the framework consuming it.
+
+### Theme as tokens first
+
+`theme.css` imports Fumadocs' neutral and Tailwind v4 presets, then changes its
+documented color/font/layout variables. The few selectors use documented IDs or
+data attributes (`#nd-sidebar`, `#nd-subnav`, `[data-toc-popover]`) rather than
+assuming internal DOM shape. That keeps upstream layout updates available
+without surrendering GSTJ's identity.
+
+The package exports the CSS directly and `magic-docs-init` can materialize an
+identical repository-owned copy. The CLI is idempotent, refuses to replace a
+different local file without `--force`, and creates `public/.nojekyll`. This
+supports both steady-state npm consumption and the first rollout from a
+committed `pnpm pack` tarball.
+
+### GitHub Pages is not just `output: "export"`
+
+The canonical site URL includes the Pages project path. `magicDocsBasePath`
+derives Next's `basePath` from it; `createMagicDocsStaticExport` also sets
+`output: "export"`, trailing slashes and unoptimised images.
+
+It intentionally does **not** set `assetPrefix`. Current Next guidance says
+`basePath` is the sub-path-hosting feature and already prefixes `/_next`;
+`assetPrefix` is a CDN feature and is not recommended here.
+
+`basePath` only affects URLs Next owns. It cannot rewrite strings passed to
+`fetch`, Orama, Markdown copy buttons, `llms.txt`, or metadata. The public-path
+helper therefore owns these separately:
+
+- static Orama reads `/<project>/api/search`;
+- page Markdown reads `/<project>/<page>.md`;
+- `llms.txt` and `llms-full.txt` get explicit project paths;
+- canonical and Open Graph URLs are absolute;
+- prefixing is idempotent, so a value cannot become
+  `/<project>/<project>/...`.
+
+`public/.nojekyll` has a second half: `actions/upload-pages-artifact` excludes
+hidden files unless the workflow sets `include-hidden-files: true`. The README
+shows the pair because either half alone still produces a broken deployment.
+
+### Generated types, readable by agents
+
+The TypeScript remark integration works well for exported object/interface
+properties. Real runs against `ModalProps` also exposed three limits in
+`fumadocs-typescript@5.3.0`: top-level functions generate no entries, enums can
+include inherited String members, and property `@description` tags do not
+populate summaries. Functions and enums remain hand-authored; ordinary JSDoc
+prose supplies property descriptions.
+
+There is a less visible failure in the default LLM path. The remark plugin turns
+`<auto-type-table>` into `<TypeTable type={...}>`, where `type` contains both
+GeneratedDoc JSON and a full ESTree. Plain
+`includeProcessedMarkdown: true` serializes that implementation detail into
+copy-Markdown and `llms-full.txt`, making a single reference page enormous and
+mostly useless.
+
+The preset instead configures
+`mdxAsPlaceholder: ["TypeTable"]` and renders the placeholder at runtime as
+compact Markdown: property, full type, required/optional, deprecated, default,
+and description. A test seeds the real placeholder shape and asserts the output
+contains the API facts and no ESTree.
+
+### Content is not the generated table
+
+Every site keeps the same order: overview/result, installation, five-minute
+quickstart, task guides, reference, troubleshooting. Generated reference follows
+the task-first material. This is the central product decision: better CSS around
+a declaration dump would still be declaration-dump documentation.
