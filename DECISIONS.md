@@ -1852,6 +1852,24 @@ version in `packages/*`, so the first automated release lands at 1.3.0 rather
 than 0.0.1. This supersedes "Release automation for these packages isn't wired"
 in §4.
 
+**The repo tag and the package versions are different axes, and a `!` commit
+conflates them.** Found on 2026-07-28, cutting `magic-oxlint-config@2.0.0`.
+`bumpFor` reads a `!` marker or a `BREAKING CHANGE:` footer as major and applies
+it to the **repo** tag, but the repo tag versions the workflows and composite
+actions, not the npm packages — those are hand-bumped in `package.json`. Nothing
+about the workflows broke in that round, and letting the plan cut `v2.0.0` would
+have frozen `v1` at 1.9.1 for every repo on
+`GSTJ/magic/.github/workflows/ci.yml@v1`, which is the silent-staleness failure
+this whole section exists to avoid. `validate-workflows.mjs` hardcodes
+`MAJOR_TAG = "v1"` and would have kept passing while every consumer quietly
+stopped receiving CI fixes.
+
+The commit keeps the honest marker, because that is the classification a reader
+of the history needs, and the release was cut with `release-as` instead —
+`1.10.0`, a minor, which is what the plan computes for the same commits with the
+marker removed. If this happens a second time, teach `release-plan.mjs` to read
+the two axes separately rather than repeating the manual step.
+
 Two things it does not do, on purpose:
 
 - **No provenance.** pnpm 11.17.0 has no `--provenance` flag (verified against
