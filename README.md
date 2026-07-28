@@ -26,15 +26,15 @@ slightly-wrong version.
 ESLint and Prettier no longer _run_ anywhere: oxlint replaces ESLint, oxfmt
 replaces Prettier **and** `@ianvs/prettier-plugin-sort-imports`.
 
-`eslint` can still come back into the tree, though, and it is worth saying so
-plainly. `magic-oxlint-config` depends on two ESLint plugins that oxlint loads as
-JS plugins — `eslint-plugin-safe-jsx` and `eslint-plugin-react-native` — and both
-declare a **required** `eslint` peer, so pnpm's default `autoInstallPeers` drags
-eslint 9 and ~16 `@eslint`/`@typescript-eslint` directories back in. Nothing
-executes them; it is node_modules weight, a confusing lockfile, and one
-unfixable brace-expansion advisory. See the pnpm section for the
-`packageExtensions` stanza that stops it, and DECISIONS.md §4 for why it is not
-fixed at the source yet.
+`eslint` no longer comes back into the tree either, as of
+`magic-oxlint-config@2.0.0`. It used to: the two ESLint plugins oxlint loaded as
+JS plugins both declared a **required** `eslint` peer, and pnpm's default
+`autoInstallPeers` honoured it, so installing the config pulled eslint 9 and its
+`minimatch@3` -> `brace-expansion@1` tail into repos that never run eslint. The
+four `react-native` rules are now ported into `magic-oxlint-plugin`, and
+`eslint-plugin-safe-jsx` marked its peer optional upstream. A fresh
+`npm i magic-oxlint-config` adds 3 packages where it used to add 90, and `npm
+audit` reports nothing where it used to report 5 highs. See DECISIONS.md §4.
 
 ---
 
@@ -489,10 +489,26 @@ a removal that is coming. Do not "fix" it by moving the settings into
 `pnpm-workspace.yaml`: that file without a `packages` key is exactly what breaks
 Vercel's pnpm. If you add one, give it `packages:`.
 
-**Stopping the ESLint tree coming back.** `magic-oxlint-config`'s two bundled JS
-plugins declare a required `eslint` peer, and pnpm's default
-`autoInstallPeers: true` honours it. Nothing runs eslint. To keep it out, tell
-pnpm the peer is optional:
+**The ESLint tree that used to come back.** `magic-oxlint-config@1.2.0` and
+earlier depended on two ESLint plugins with a required `eslint` peer, and pnpm's
+default `autoInstallPeers: true` honoured it even though nothing runs eslint.
+`2.0.0` ends it at the source: the four `react-native` rules moved into
+`magic-oxlint-plugin`, which has no dependencies, and `eslint-plugin-safe-jsx`
+shipped the optional peer upstream in 1.3.2. Measured on a fresh install into an
+empty project:
+
+|                                 | `magic-oxlint-config@1.2.0` | `@2.0.0` |
+| ------------------------------- | --------------------------- | -------- |
+| `npm i`, packages added         | 90                          | 3        |
+| `.pnpm` directories             | 90                          | 3        |
+| `eslint`                        | 9.39.5                      | absent   |
+| `minimatch` / `brace-expansion` | 3.1.5 / 1.1.16              | absent   |
+| `npm audit`                     | 5 high                      | 0        |
+
+No `packageExtensions` stanza, no `overrides`, nothing for a consumer to add.
+
+**If you are still on 1.2.0**, the mitigations below still apply. On pnpm, mark
+the peer optional:
 
 ```yaml
 # pnpm-workspace.yaml
@@ -507,21 +523,12 @@ packageExtensions:
         optional: true
 ```
 
-This repo runs the same stanza. It takes the install from 187 resolved packages
-to 101, and with eslint 9 goes its `minimatch@3` → `brace-expansion@1` tail,
-which is where GHSA-mh99-v99m-4gvg lives with no v1 fix to upgrade to.
+`peerDependencyRules.ignoreMissing` does **not** do this: on pnpm 11.17.0 it
+silences the missing-peer warning and installs eslint anyway, byte-identical
+lockfile with and without it.
 
-Earlier revisions of this section recommended `peerDependencyRules.ignoreMissing`
-instead. That does not work: on pnpm 11.17.0 it silences the missing-peer warning
-and installs eslint anyway, byte-identical lockfile with and without it. Use
-`packageExtensions`.
-
-It only addresses _this_ source. A repo that also depends on something with a
-real `eslint` dependency — `expo-module-scripts` is the one in this set — gets
-the tree back anyway. Check what `pnpm why eslint` says before adding it.
-
-**On npm or yarn**, there is no `packageExtensions`, and a required peer is
-installed whatever you do. Pin the major instead:
+On npm or yarn there is no `packageExtensions`, and a required peer is installed
+whatever you do, so pin the major instead:
 
 ```jsonc
 // package.json — npm
@@ -530,17 +537,15 @@ installed whatever you do. Pin the major instead:
 { "resolutions": { "eslint": "^10" } }
 ```
 
-Measured on a fresh `npm i magic-oxlint-config@1.2.0` into an empty project: 78
-packages and `brace-expansion@1.1.16` without it, 62 packages and
-`brace-expansion@5.0.8` with it. Nothing executes eslint either way, so the
-major it resolves to only decides which transitive tail comes along.
+That took a fresh `npm i magic-oxlint-config@1.2.0` from 78 packages and
+`brace-expansion@1.1.16` to 62 and `5.0.8`. It worked because
+`eslint-plugin-react-native@5.0.0` capped its peer at `^9`, and eslint 9 is the
+last major carrying `@eslint/eslintrc` and a `@eslint/config-array` on
+`minimatch@3`, which is the `brace-expansion@1` tail with no v1 fix.
 
-Which is the whole reason the pin works. `eslint-plugin-react-native@5.0.0` caps
-its peer at `^9`, and eslint 9 is the last major carrying `@eslint/eslintrc` and
-a `@eslint/config-array` on `minimatch@3` — the `brace-expansion@1` tail with no
-v1 fix. `eslint-plugin-safe-jsx@1.3.1` allows `^10`, so on its own it
-resolves to eslint 10, `minimatch@10` and the patched `brace-expansion@5.0.8`.
-The react-native plugin is what holds the tree on 9.
+None of it addresses a repo that depends on something with a real `eslint`
+dependency — `expo-module-scripts` is the one in this set. Check `pnpm why
+eslint` before assuming the upgrade cleared it.
 
 ---
 

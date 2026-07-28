@@ -106,9 +106,16 @@ a repo is ready. See the root README for the switch-on checklist.
 **JS plugins.** `react` and below wire in `eslint-plugin-safe-jsx`
 (`safe-jsx/jsx-explicit-boolean`), which catches `items.length && <Row/>`
 rendering a literal `0`. The React Native variants add
-`eslint-plugin-react-native` for `no-inline-styles` and `no-color-literals`.
-Both are dependencies of this package and are resolved from here, so pnpm's
-non-hoisted layout doesn't break them.
+`magic-oxlint-plugin/react-native` for `no-inline-styles`, `no-color-literals`,
+`no-single-element-style-arrays` and `no-unused-styles`. Both are dependencies
+of this package and are resolved from here, so pnpm's non-hoisted layout doesn't
+break them.
+
+Those four used to come from `eslint-plugin-react-native`, which declares a
+required `eslint` peer that oxlint never calls; `autoInstallPeers` honoured it
+and installed eslint 9 into every consumer. The rule ids did not change. Since
+2.0.0 a fresh `npm i magic-oxlint-config` adds 3 packages instead of 90, with no
+eslint and no `brace-expansion` in the tree.
 
 **What's deliberately not in it.** Per-repo conventions — component wrappers,
 service boundaries, ORM access patterns. Those go in each repo's own config.

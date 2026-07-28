@@ -1,9 +1,17 @@
 # magic-oxlint-plugin
 
-Eight oxlint rules with no usable built-in equivalent. **All opt-in** — nothing
-here is enabled by any `magic-oxlint-config` preset. They're policies rather
-than bug detectors, or they're stack-specific, and both kinds of rule should be
-a deliberate choice per repo.
+Twelve oxlint rules with no usable built-in equivalent, in two namespaces.
+
+`magic/*` is eight rules and **all opt-in** — nothing under that namespace is
+enabled by any `magic-oxlint-config` preset. They're policies rather than bug
+detectors, or they're stack-specific, and both kinds of rule should be a
+deliberate choice per repo.
+
+`react-native/*` is four rules ported from `eslint-plugin-react-native`, and
+those the `react-native` and `expo` presets do turn on. They live here so
+`magic-oxlint-config` can ship them without depending on a package whose
+required `eslint` peer pulled eslint 9 into every consumer. See
+[the section below](#react-native).
 
 ## Install
 
@@ -274,6 +282,132 @@ Measured before shipping, over the repos themselves: 22 reports in
 `gabriel-taveira-portfolio`, 11 in `chatmode`, 6 in `invest-radar`, 1 in
 `padrinhos-ana-julia-gabriel`, and 0 in `e-card`, `pegada` and
 `would-you-rather`, which already route every composition through `cn`.
+
+## React Native
+
+Four rules ported from `eslint-plugin-react-native@5.0.0` (MIT — see
+[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)). They ship from a separate
+entry point under the `react-native` namespace, and `magic-oxlint-config`'s
+`react-native` and `expo` variants enable all four at `error`, so a repo on
+either preset gets them without doing anything:
+
+```ts
+// what the preset does, if you want them without it
+jsPlugins: [
+  { name: "react-native", specifier: "magic-oxlint-plugin/react-native" },
+],
+rules: {
+  "react-native/no-inline-styles": "error",
+  "react-native/no-color-literals": "error",
+  "react-native/no-single-element-style-arrays": "error",
+  "react-native/no-unused-styles": "error",
+},
+```
+
+The namespace is `react-native` rather than `magic` on purpose. Rule ids show up
+in repo configs and in `// oxlint-disable-next-line react-native/no-inline-styles`
+comments, and oxlint takes the namespace from the `jsPlugins` entry's `name`, so
+keeping it costs nothing and renaming would cost a migration in every React
+Native repo.
+
+### `react-native/no-inline-styles`
+
+An object literal in a `style` prop is a new object every render, and
+`StyleSheet` never sees it, so it crosses the bridge again each time.
+
+```tsx
+// reported
+<View style={{ padding: 8 }} />
+<View style={[styles.row, { margin: 4 }]} />
+<View style={cond ? { padding: 1 } : styles.row} />
+<View style={{ height: -1 }} />
+
+// fine
+<View style={styles.row} />
+<View style={{ padding: spacing.small }} />
+<View style={{ ...base }} />
+```
+
+It matches any attribute whose name contains "style", so
+`contentContainerStyle` counts. A property only makes the object reportable when
+its value is a literal, a conditional with a literal branch, or unary `-`/`+` on
+a literal.
+
+### `react-native/no-color-literals`
+
+A hard-coded colour can't follow a theme. Any property whose name contains
+"color", in a style prop or inside `StyleSheet.create`:
+
+```tsx
+// reported
+<View style={{ borderColor: "blue" }} />;
+const styles = StyleSheet.create({ tinted: { shadowColor: "#000" } });
+
+// fine
+<View style={{ borderColor: theme.border }} />;
+```
+
+Only the top level of each style object is inspected, which is upstream's reach.
+`settings["react-native/style-sheet-object-names"]` still works if a repo uses
+`EStyleSheet.create` or similar.
+
+### `react-native/no-single-element-style-arrays`
+
+`style={[styles.row]}` allocates a fresh array every render for nothing.
+Autofixable: the fix unwraps it to `style={styles.row}`.
+
+Unlike `no-inline-styles`, this one matches the attribute name `style` exactly,
+so `contentContainerStyle={[styles.row]}` is not reported. That asymmetry is
+upstream's and the port keeps it.
+
+### `react-native/no-unused-styles`
+
+A `StyleSheet.create` entry nothing reads still gets registered at startup, and
+it is the usual residue of a deleted component.
+
+Matching is per-file and shallow, which is what keeps it quiet rather than
+noisy. A use is any `sheet.entry` member expression anywhere in the file;
+`styles.row.color` and `styles["row"]` mark nothing. And the rule reports
+nothing at all unless it detected a React component in the file, so a shared
+`styles.ts` whose sheets are consumed elsewhere stays silent.
+
+### Divergences from upstream
+
+Three, all recorded in the rule files:
+
+- **A valueless `<View style />` no longer crashes the linter.** Upstream's
+  `no-single-element-style-arrays` reads `node.value.expression` unguarded. Under
+  oxlint that TypeError aborts the JS plugin host for the whole file, so every
+  rule in this plugin goes quiet on it, not just that one.
+- **The component detection walks `node.parent` instead of scopes.** Same
+  enclosing-function sequence, no dependency on how oxlint names its scopes.
+- **`ClassProperty` is not handled.** Upstream registers that visitor and no
+  parser has emitted the node since ESTree renamed it to `PropertyDefinition`,
+  so the branch never runs upstream either.
+
+Everything else matches, message strings included. Parity was measured by
+running both plugins over the same 13-file corpus under oxlint 1.75.0: 40
+diagnostics each, identical rule, byte offset, span length and message, plus
+identical `--fix` output. A fourteenth file holds the crash case, which only one
+of the two survives. `fixtures/adversarial/react-native` keeps the
+behaviour pinned.
+
+### The three rules that did not come along
+
+`no-raw-text`, `sort-styles` and `split-platform-components` are not ported. The
+preset set all three to `off`, so nothing here loses coverage, but a repo that
+turned one back on needs to bring upstream in itself, under its own namespace:
+
+```ts
+jsPlugins: [
+  { name: "rn-upstream", specifier: "eslint-plugin-react-native" },
+],
+rules: { "rn-upstream/no-raw-text": "error" },
+```
+
+The namespace has to differ from `react-native` — the preset already claims that
+one. Doing this puts the eslint peer back in the tree; pin `eslint` to `^10` if
+that matters (the root README has the snippet).
 
 ## Rules covered natively instead
 
