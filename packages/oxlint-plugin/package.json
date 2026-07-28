@@ -1,7 +1,7 @@
 {
   "name": "magic-oxlint-plugin",
-  "version": "1.1.0",
-  "description": "Opt-in oxlint JS-plugin rules for GSTJ projects: prefer-early-return, no-ancestor-directory-import, no-barrel-file, no-manual-classname, no-module-mocks, prefer-suspense-query, react-hooks-strict-return, react-require-autocomplete.",
+  "version": "1.2.0",
+  "description": "oxlint JS-plugin rules for GSTJ projects. Opt-in under `magic/*`: prefer-early-return, no-ancestor-directory-import, no-barrel-file, no-manual-classname, no-module-mocks, prefer-suspense-query, react-hooks-strict-return, react-require-autocomplete. Plus `react-native/*` — no-inline-styles, no-color-literals, no-single-element-style-arrays, no-unused-styles — ported from eslint-plugin-react-native and wired by magic-oxlint-config.",
   "keywords": [
     "eslint-plugin",
     "lint",
@@ -22,7 +22,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "type": "module",
   "main": "./dist/index.js",
@@ -31,6 +32,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./react-native": {
+      "types": "./dist/react-native.d.ts",
+      "default": "./dist/react-native.js"
     },
     "./package.json": "./package.json"
   },

@@ -3,6 +3,74 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — The react-native rules are ours now, and eslint is gone
+
+`magic-oxlint-config@2.0.0` (**breaking**), `magic-oxlint-plugin@1.2.0`.
+
+### Breaking: three rule names disappear from the react-native and expo variants
+
+`react-native/no-raw-text`, `react-native/sort-styles` and
+`react-native/split-platform-components` are no longer valid rule names under
+these presets. All three were set to `off`, so nothing loses coverage, but the
+`off` entries had to go with them: oxlint treats a rule name a loaded plugin does
+not define as a fatal config error, not a warning
+(`Rule 'no-raw-text' not found in plugin 'react-native'`, exit 1).
+
+If a repo turned one of the three back on, bring upstream in under its own
+namespace:
+
+```ts
+jsPlugins: [{ name: "rn-upstream", specifier: "eslint-plugin-react-native" }],
+rules: { "rn-upstream/no-raw-text": "error" },
+```
+
+The name has to differ from `react-native`; the preset claims that one. Nothing
+else changes. The four rules the preset actually runs keep their ids, so configs
+and `// oxlint-disable-next-line react-native/no-inline-styles` comments are
+untouched.
+
+### `no-inline-styles`, `no-color-literals`, `no-single-element-style-arrays` and `no-unused-styles` now ship from `magic-oxlint-plugin`
+
+Ported from `eslint-plugin-react-native@5.0.0` (MIT, attribution in
+`packages/oxlint-plugin/THIRD-PARTY-NOTICES.md`) and wired under the same
+`react-native` namespace, because oxlint takes the namespace from the
+`jsPlugins` entry's `name`.
+
+Parity was measured, not assumed: both plugins over the same 13-file corpus
+under oxlint 1.75.0, covering every branch of the upstream collectors and the
+component gate that decides whether `no-unused-styles` says anything at all. 40
+diagnostics each, identical rule id, byte offset, span length and message text,
+and identical `--fix` output.
+
+Three deliberate divergences, all recorded in the rule files and in DECISIONS.md
+§4. The one worth knowing: upstream throws a `TypeError` on a valueless
+`<View style />`, and under oxlint that aborts the JS plugin host for the whole
+file, so every rule in the plugin goes quiet on it. The port guards it.
+
+`fixtures/adversarial/react-native` grew from 6 expectations to 19, and
+`validate-rules.mjs` gained a pass that fails the build if a variant names a
+`react-native/*` rule the plugin does not export, or exports one no variant
+enables. `pnpm run check` is 95/95, up from 83/83.
+
+### What it does to a consumer's tree
+
+Measured on a fresh install into an empty project.
+
+| | `magic-oxlint-config@1.2.0` | `@2.0.0` |
+| --- | --- | --- |
+| `npm i`, packages added | 90 | 3 |
+| `.pnpm` directories | 90 | 3 |
+| `eslint` | 9.39.5 | absent |
+| `minimatch` / `brace-expansion` | 3.1.5 / 1.1.16 | absent |
+| `npm audit` | 5 high | 0 |
+
+GHSA-mh99-v99m-4gvg reached consumers because upstream declared a required
+`eslint` peer that oxlint never calls, and `autoInstallPeers` honoured it. The
+`packageExtensions` stanza from v1.8.1 fixed it for this repo only; every
+consumer had to add their own. Now there is nothing to add.
+`eslint-plugin-safe-jsx@1.3.2` shipped the same fix upstream on the other arm,
+so `^1.3.0` picks it up on any fresh resolve.
+
 ## 2026-07-28 — No native oxlint cover for the react-native rules
 
 No npm package changed. The round ships as `v1.8.3`; `v1` moves onto it.

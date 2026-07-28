@@ -45,7 +45,12 @@ const knownRules = new Set(
   Object.keys(schema.definitions[ruleMapRef].properties),
 );
 
-/** Namespaces provided by JS plugins, which the Rust schema cannot know about. */
+/**
+ * Namespaces provided by JS plugins, which the Rust schema cannot know about.
+ * `magic` and `react-native` both come from `magic-oxlint-plugin` and get a
+ * real check further down; `safe-jsx` is somebody else's package and only gets
+ * this pass.
+ */
 const jsPluginNamespaces = new Set(["safe-jsx", "react-native", "magic"]);
 
 const VARIANT_FILES = [
@@ -161,4 +166,70 @@ if (magicFailures.length > 0) {
 process.stdout.write(
   `validate-rules: OK — every magic/* name in ${sourcesOfRuleNames.length} configs and docs ` +
     `resolves to one of the ${pluginRules.size} rules the plugin exports, and every rule is documented.\n`,
+);
+
+// --------------------------------------------------------------------------
+// Pass 3 — `react-native/*`, which the presets DO enable.
+// --------------------------------------------------------------------------
+
+/**
+ * These four are the only rule names in this repo that a preset turns on from a
+ * JS plugin, so they are the only ones where a typo reaches a consumer without
+ * anybody opting in. Two directions, both failures:
+ *
+ *   - a name a variant enables that the plugin does not export — oxlint refuses
+ *     the whole config with `Rule 'x' not found in plugin 'react-native'`;
+ *   - a rule the plugin exports that no variant enables — dead code shipped to
+ *     every consumer, and the symptom DECISIONS.md warned the port would have.
+ *
+ * The second half is what makes this worth writing: a broken jsPlugin specifier
+ * does not throw, it just stops reporting, and a rule that is never named is
+ * indistinguishable from one that is never reached.
+ */
+const rnModule = await import(join(pluginDir, "dist", "react-native.js"));
+const rnRules = new Set(Object.keys(rnModule.default.rules));
+
+const readVariant = (variant) =>
+  JSON.parse(readFileSync(join(configDir, variant), "utf8"));
+
+const rnEnabled = new Set(
+  variants.flatMap((variant) =>
+    collectRuleNames(readVariant(variant)).filter((name) =>
+      name.startsWith("react-native/"),
+    ),
+  ),
+);
+
+const rnFailures = [
+  ...[...rnEnabled]
+    .map((name) => name.slice("react-native/".length))
+    .filter((rule) => !rnRules.has(rule))
+    .map(
+      (rule) =>
+        `emitted variants: "react-native/${rule}" is not a rule in magic-oxlint-plugin/react-native`,
+    ),
+  ...[...rnRules]
+    .filter((rule) => !rnEnabled.has(`react-native/${rule}`))
+    .map(
+      (rule) =>
+        `packages/oxlint-config: "react-native/${rule}" ships but no variant enables it`,
+    ),
+  ...[...rnRules]
+    .filter((rule) => !pluginReadme.includes(`react-native/${rule}`))
+    .map(
+      (rule) =>
+        `packages/oxlint-plugin/README.md: "react-native/${rule}" is undocumented`,
+    ),
+];
+
+if (rnFailures.length > 0) {
+  process.stderr.write(`${rnFailures.join("\n")}\n`);
+  process.stderr.write(
+    `\nvalidate-rules: ${rnFailures.length} problem(s) with react-native/* rule names.\n`,
+  );
+  process.exit(1);
+}
+
+process.stdout.write(
+  `validate-rules: OK — all ${rnRules.size} react-native/* rules are enabled by a variant and documented.\n`,
 );

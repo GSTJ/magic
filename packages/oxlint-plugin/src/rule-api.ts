@@ -20,15 +20,25 @@
  * whole lint run.
  */
 
+export type SourceCode = {
+  getAncestors?: (node: unknown) => { type?: string }[];
+  getText?: (node?: unknown) => string;
+  getScope?: (node: unknown) => unknown;
+};
+
 export type RuleContext = {
   options?: unknown[];
   getFilename?: () => string;
   filename?: string;
-  sourceCode?: {
-    getAncestors?: (node: unknown) => { type?: string }[];
-    getText?: (node?: unknown) => string;
-    getScope?: (node: unknown) => unknown;
-  };
+  /**
+   * oxlint passes the config's `settings` object through to JS plugins
+   * unchanged — verified on 1.75.0 — which is what keeps ESLint-shaped
+   * `settings["plugin/key"]` conventions working under it.
+   */
+  settings?: Record<string, unknown>;
+  sourceCode?: SourceCode;
+  /** ESLint's older accessor. oxlint provides both; older ESLint only this. */
+  getSourceCode?: () => SourceCode | undefined;
   report: (descriptor: {
     node: unknown;
     messageId: string;

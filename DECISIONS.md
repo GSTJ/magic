@@ -709,6 +709,10 @@ consumers breaks this repo's own build first.
   vendoring the two react-native rules into `magic-oxlint-plugin`, because a
   `packageExtensions` entry is per-repo and every consumer has to add it.
 
+  (Both of those happened on 2026-07-28. safe-jsx 1.3.2 shipped the optional
+  peer; the react-native rules were ported. The stanza now covers safe-jsx alone
+  and only until the lockfile moves onto 1.3.2 — see "Done, 2026-07-28" below.)
+
   What forced the issue: Dependabot GHSA-mh99-v99m-4gvg (CVE-2026-14257,
   unbounded expansion length in `brace-expansion`, CVSS 7.5). The only vulnerable
   copy in this lockfile was `brace-expansion@1.1.16` under `minimatch@3.1.5`,
@@ -781,6 +785,78 @@ consumers breaks this repo's own build first.
   behind the `App.tsx` exemption above. Revisit it if upstream stays dormant, and
   prove it with fixtures asserting identical diagnostics on real consumer code
   before shipping.
+
+  **Done, 2026-07-28, in `magic-oxlint-config@2.0.0`.** Two of the three
+  objections above were smaller than the assessment made them.
+
+  The line count was wrong because it counted what upstream ships rather than
+  what the four rules reach. `lib/util/variable` is imported by `no-raw-text` and
+  `sort-styles`, neither of which is ported, and most of `lib/util/Components`
+  exists to answer questions `no-unused-styles` never asks — it consults the
+  detector once, as `Object.keys(components.all()).length > 0`. The port is 946
+  lines with the plugin entry point, docblocks and all, against the ~1230
+  estimated.
+
+  The specifier objection was real and turned out to be answerable. The rules
+  ship from `magic-oxlint-plugin/react-native`, and `magic-oxlint-plugin` is a
+  dependency of `magic-oxlint-config`, so the bare specifier in the emitted JSON
+  resolves from the JSON's own directory inside the virtual store — measured
+  working on both npm's hoisted layout and pnpm's non-hoisted one, from a clean
+  `npm i` / `pnpm add` of the packed tarballs, down both the `.mts` and the
+  `react-native.json` paths, all four rules firing. And the failure mode is no
+  longer silent: `validate-rules.mjs` gained a pass that fails the build if a
+  variant names a `react-native/*` rule the plugin does not export, or exports
+  one no variant enables.
+
+  **Parity, measured rather than asserted.** Both plugins run over the same
+  13-file corpus under oxlint 1.75.0, covering every branch of the upstream
+  collectors — object, array element, logical, conditional, unary; colour
+  literals inline and inside `StyleSheet.create`; the component gate opened by a
+  class, a block-bodied function, an expression arrow and `React.createElement`,
+  and left shut by a `this`-bearing function and a JSX-returning callback; deep,
+  computed and cross-sheet member accesses that must mark nothing. 40 diagnostics
+  each, identical rule id, byte offset, span length and message text, and
+  identical `--fix` output. The message text matches because the port keeps
+  upstream's `util.inspect` rendering of the offending values, which oxlint's JS
+  plugin host supports (`node:util` imports fine).
+
+  **Three deliberate divergences**, all recorded in the rule files:
+
+  - Upstream's `no-single-element-style-arrays` reads `node.value.expression`
+    unguarded, so a valueless `<View style />` throws. Under oxlint that is not
+    one rule failing — the JS plugin host aborts for the file and every rule in
+    the plugin goes quiet on it (`Error running JS plugin … Cannot read
+properties of null (reading 'expression')`). Guarded.
+  - Component detection walks `node.parent` instead of `sourceCode.getScope`.
+    Same enclosing-function sequence, no dependency on how oxlint names scopes.
+  - `ClassProperty` is dropped. Upstream registers the visitor and no parser has
+    emitted that node since ESTree renamed it to `PropertyDefinition`, so the
+    branch never runs upstream either.
+
+  `settings["react-native/style-sheet-object-names"]` still works — oxlint passes
+  `settings` through to JS plugins verbatim, verified on 1.75.0 with
+  `EStyleSheet.create`.
+
+  **What it cost consumers, and why 2.0.0.** `no-raw-text`, `sort-styles` and
+  `split-platform-components` are gone. The preset set all three to `off`, so no
+  coverage is lost, but the `off` entries had to go too: oxlint treats a rule
+  name a loaded plugin does not define as a fatal config error
+  (`Rule 'no-raw-text' not found in plugin 'react-native'`, exit 1), so leaving
+  them would have broken every consumer instead of quietly doing nothing. A repo
+  that turned one back on has to bring upstream in itself under a different
+  namespace. That is the only migration, and it is what makes this a major.
+
+  The four rule ids did not move. oxlint takes the namespace from the
+  `jsPlugins` entry's `name`, so `react-native/no-inline-styles` and every
+  `oxlint-disable` comment naming it keep working.
+
+  **Consumer payoff, measured on a fresh install into an empty project.**
+  `npm i magic-oxlint-config@1.2.0` added 90 packages, eslint 9.39.5,
+  `minimatch@3.1.5`, `brace-expansion@1.1.16` and 5 high `npm audit` findings.
+  The 2.0.0 tarball adds 3 packages, no eslint, no `brace-expansion`, 0 findings.
+  On pnpm, 90 `.pnpm` directories to 3. No `packageExtensions`, no `overrides`,
+  nothing for a consumer to add — which was the whole objection to the
+  `packageExtensions` fix in the first place.
 
   **There is no native shortcut either, as of oxlint 1.76.0.** Checked against
   oxlint's own `configuration_schema.json`, the same source `validate-rules.mjs`
@@ -1488,8 +1564,9 @@ toolchain stop disagreeing by default.
   narrowing-preserving autofix. Both are changes in another repository plus a
   publish. §4.
 - A `vitest` preset variant. §4.
-- `eslint-plugin-react-native`'s required `eslint` peer — upstream, or vendor the
-  two rules used. §4.
+- ~~`eslint-plugin-react-native`'s required `eslint` peer — upstream, or vendor
+  the two rules used.~~ Done, 2026-07-28: four rules ported into
+  `magic-oxlint-plugin`, dependency dropped. §4.
 - The four upstream oxc bugs. Worked around; filing them is the follow-up. §4.
 
 ---
@@ -1774,6 +1851,24 @@ then `v1` force-moved onto it. With no `v*` tag at all the base is the highest
 version in `packages/*`, so the first automated release lands at 1.3.0 rather
 than 0.0.1. This supersedes "Release automation for these packages isn't wired"
 in §4.
+
+**The repo tag and the package versions are different axes, and a `!` commit
+conflates them.** Found on 2026-07-28, cutting `magic-oxlint-config@2.0.0`.
+`bumpFor` reads a `!` marker or a `BREAKING CHANGE:` footer as major and applies
+it to the **repo** tag, but the repo tag versions the workflows and composite
+actions, not the npm packages — those are hand-bumped in `package.json`. Nothing
+about the workflows broke in that round, and letting the plan cut `v2.0.0` would
+have frozen `v1` at 1.9.1 for every repo on
+`GSTJ/magic/.github/workflows/ci.yml@v1`, which is the silent-staleness failure
+this whole section exists to avoid. `validate-workflows.mjs` hardcodes
+`MAJOR_TAG = "v1"` and would have kept passing while every consumer quietly
+stopped receiving CI fixes.
+
+The commit keeps the honest marker, because that is the classification a reader
+of the history needs, and the release was cut with `release-as` instead —
+`1.10.0`, a minor, which is what the plan computes for the same commits with the
+marker removed. If this happens a second time, teach `release-plan.mjs` to read
+the two axes separately rather than repeating the manual step.
 
 Two things it does not do, on purpose:
 
