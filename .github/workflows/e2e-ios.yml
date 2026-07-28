@@ -131,6 +131,7 @@ on:
         required: false
         default: latest
       maestro-version:
+        description: "Maestro version, pinned and cached at ~/.maestro."
         type: string
         required: false
         default: "2.7.0"
@@ -145,10 +146,12 @@ on:
         required: false
         default: ""
       node-version-file:
+        description: "Where the Node version comes from, relative to app-dir."
         type: string
         required: false
         default: ".nvmrc"
       install-command:
+        description: "Dependency install. Keep --frozen-lockfile unless you have a reason."
         type: string
         required: false
         default: "pnpm install --frozen-lockfile"
