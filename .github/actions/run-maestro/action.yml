@@ -105,9 +105,20 @@ inputs:
     required: false
     default: ""
   maestro-env:
-    description: "`KEY=value` lines passed to Maestro as -e."
+    description: >
+      `KEY=value` lines passed to Maestro as -e. APP_ID is passed for you (see
+      app-id); a line here that sets it wins.
     required: false
     default: ""
+  app-id:
+    description: >
+      auto | a bundle id | off. auto passes `-e APP_ID=<the bundle id this
+      action resolved>`, which is what the obytes Expo template's flows read
+      (`appId: ${APP_ID}`) and what every repo was otherwise hard-coding into
+      its own maestro-env — a second copy of a value the build already knows,
+      kept in sync by hand until it was not. off passes nothing.
+    required: false
+    default: auto
   name:
     description: Label for the summary table and the artifact. Set it per shard.
     required: false
@@ -128,6 +139,11 @@ outputs:
   result:
     description: pass | fail | skipped
     value: ${{ steps.run.outputs.result }}
+  app-id:
+    description: >
+      The bundle id this action passed as APP_ID. Empty when app-id is off, or
+      when maestro-env set APP_ID itself and this action stayed out of it.
+    value: ${{ steps.run.outputs.app-id }}
   flows:
     description: Number of flows this invocation actually ran.
     value: ${{ steps.flows.outputs.count }}
@@ -139,6 +155,7 @@ runs:
   using: composite
   steps:
     - name: 📲 Install the app and absorb the first launch
+      id: install
       if: inputs.app-path != ''
       shell: bash
       env:
@@ -185,6 +202,7 @@ runs:
           bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
         fi
         echo "Installed $bundle_id on $UDID"
+        echo "bundle-id=$bundle_id" >> "$GITHUB_OUTPUT"
 
         attempt=1
         until xcrun simctl launch "$UDID" "$bundle_id"; do
@@ -321,6 +339,11 @@ runs:
         IN_PER_FLOW: ${{ inputs.per-flow }}
         IN_RETRIES: ${{ inputs.retries }}
         IN_MAESTRO_ENV: ${{ inputs.maestro-env }}
+        IN_APP_ID: ${{ inputs.app-id }}
+        # The install step reads CFBundleIdentifier out of the built app, which
+        # is the only copy that cannot be wrong. It is skipped when app-path is
+        # empty, and then the caller's bundle-id is all there is.
+        RESOLVED_BUNDLE_ID: ${{ steps.install.outputs.bundle-id || inputs.bundle-id }}
         IN_NAME: ${{ inputs.name }}
         IN_SOFT_FAIL: ${{ inputs.soft-fail }}
         MAESTRO_CLI_NO_ANALYTICS: "1"
@@ -341,9 +364,13 @@ runs:
         fi
 
         env_args=()
+        caller_sets_app_id=false
         while IFS= read -r line; do
           line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           [ -n "$line" ] || continue
+          case "$line" in
+            APP_ID=*) caller_sets_app_id=true ;;
+          esac
           case "$line" in
             *=*) env_args+=(-e "$line") ;;
             *)
@@ -354,6 +381,28 @@ runs:
         done <<EOF
         ${IN_MAESTRO_ENV}
         EOF
+
+        # The flows the Expo templates ship are written `appId: ${APP_ID}`, and
+        # Maestro leaves an undefined one as the literal string — which fails as
+        # "app not installed" rather than as a missing variable, so every repo
+        # hit it once and hard-coded the bundle id into its own maestro-env. The
+        # build already resolved it; pass it.
+        app_id=""
+        case "$IN_APP_ID" in
+          off | "") ;;
+          auto) app_id="$RESOLVED_BUNDLE_ID" ;;
+          *) app_id="$IN_APP_ID" ;;
+        esac
+        if [ "$caller_sets_app_id" = "true" ]; then
+          [ -z "$app_id" ] || echo "maestro-env sets APP_ID; leaving it alone."
+          app_id=""
+        elif [ -n "$app_id" ]; then
+          env_args+=(-e "APP_ID=$app_id")
+          echo "APP_ID=$app_id"
+        elif [ "$IN_APP_ID" = "auto" ]; then
+          echo "::warning::app-id is auto but no bundle id was resolved (no app-path and no bundle-id), so APP_ID is not passed. Flows that read it will fail."
+        fi
+        echo "app-id=$app_id" >> "$GITHUB_OUTPUT"
 
         flows=()
         while IFS= read -r flow; do
