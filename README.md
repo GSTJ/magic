@@ -706,9 +706,15 @@ Three things, and each one hides the next. Any one of them left alone makes the
 other two worth nothing, which is why fixing them one at a time changed the
 measured build time by zero seconds twice in a row.
 
-**The workspace has to survive.** `actions/checkout` defaults to
-`clean: true`, which runs `git clean -ffdx` and deletes every ignored file —
-`node_modules` and `ios/` included. On a runner that keeps its disk that is
+**The workspace has to survive — in every workflow, not just this one.**
+`actions/checkout` defaults to `clean: true`, which runs `git clean -ffdx` and
+deletes every ignored file — `node_modules` and `ios/` included. And a runner
+keeps **one** directory per repo, shared by every workflow in it, so a lint job
+that cleans undoes this for the E2E job that runs after it. `ci.yml` takes the
+same `checkout-clean` input and the same default for exactly that reason; a
+repo with hand-written workflows on the same runner has to do the same, or the
+build alternates between 27s and 90s depending on what ran before it (measured,
+and the reason this paragraph exists). On a runner that keeps its disk that is
 loss twice over. The run pays to restore `ios/` from a cache of a directory it
 already had, and the reinstalled `node_modules` makes React Native's codegen
 re-emit `ios/build/generated/**`: 84 files, byte-for-byte identical, every one

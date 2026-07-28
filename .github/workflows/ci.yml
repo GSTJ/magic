@@ -35,6 +35,18 @@ on:
         type: string
         required: false
         default: ""
+      checkout-clean:
+        description: >
+          auto | true | false, passed to actions/checkout's `clean`. auto is
+          false off a GitHub-hosted runner and true on one.
+
+          A lint job has no use for `git clean -ffdx`, and on a self-hosted
+          runner it is actively harmful: every workflow in a repo shares one
+          runner directory, so cleaning here deletes the node_modules and ios/
+          that the iOS E2E workflow keeps in order to build incrementally.
+        type: string
+        required: false
+        default: auto
       working-directory:
         description: "Directory to run every step in."
         type: string
@@ -110,6 +122,12 @@ jobs:
     steps:
       - name: 🏗 Checkout
         uses: actions/checkout@v7
+        with:
+          # See checkout-clean. This job does not care about leftover ignored
+          # files, but the runner directory is shared with every other workflow
+          # in the repo — including the iOS E2E one, whose whole warm path is
+          # the node_modules and ios/ that `git clean -ffdx` deletes.
+          clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
       # Referenced by owner/repo, not `./`: inside a called workflow a `./` path
       # resolves against the *caller's* checkout, so `./.github/actions/setup`
