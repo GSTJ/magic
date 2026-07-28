@@ -3,6 +3,28 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — No native oxlint cover for the react-native rules
+
+No npm package changed. The round ships as `v1.8.3`; `v1` moves onto it.
+
+### Documented: why `eslint-plugin-react-native` stays
+
+DECISIONS.md section 4 already recorded one half, that vendoring the four rules
+risks silent rule loss rather than a throw, because oxlint resolves `jsPlugins`
+specifiers from the consumer's config directory. This adds the other half.
+
+Checked against oxlint's own `configuration_schema.json`: 1.75.0 carries 998
+rules and 1.76.0 carries 1001, both across the same fourteen plugin prefixes,
+none of them `react-native`. All four rule names are absent from both, and
+`"plugins": ["react-native"]` is refused with `Unknown plugin: 'react-native'`.
+On a probe file the four plugin rules report 4 diagnostics and oxlint's nearest
+native rules report 2, and those two are `react-perf` rules this preset turns
+off on purpose. `no-color-literals` and `no-unused-styles` have no native
+analogue.
+
+The version is stated so a future reader re-checks against a later oxlint
+instead of re-deriving the whole thing.
+
 ## 2026-07-28 — Which plugin pins eslint to 9, and what consumers can do
 
 No npm package changed. The round ships as `v1.8.2`; `v1` moves onto it.

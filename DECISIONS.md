@@ -782,6 +782,23 @@ consumers breaks this repo's own build first.
   prove it with fixtures asserting identical diagnostics on real consumer code
   before shipping.
 
+  **There is no native shortcut either, as of oxlint 1.76.0.** Checked against
+  oxlint's own `configuration_schema.json`, the same source `validate-rules.mjs`
+  reads: 1.75.0 carries 998 rules and 1.76.0 carries 1001, both across the same
+  fourteen plugin prefixes (`import`, `jest`, `jsdoc`, `jsx-a11y`, `nextjs`,
+  `node`, `oxc`, `promise`, `react`, `react-perf`, `typescript`, `unicorn`,
+  `vitest`, `vue`). None is `react-native`, all four rule names are absent from
+  both, and `"plugins": ["react-native"]` is refused outright with
+  `Unknown plugin: 'react-native'`. On a probe file holding an inline style, a
+  single-element style array, a colour literal inside `StyleSheet.create` and a
+  dead style entry, the four plugin rules report 4 diagnostics and oxlint's
+  nearest native rules report 2. Those two are `react-perf/jsx-no-new-object-as-prop`
+  and `react-perf/jsx-no-new-array-as-prop`, which fire on any new object or array
+  prop rather than on `style`, and which this preset sets to `off` on purpose (see
+  the react-perf block in `react-native.ts`), so they are not an available
+  substitute. `no-color-literals` and `no-unused-styles` have no native analogue
+  at all. Re-check against a later oxlint before reopening this.
+
 - **`eslint-plugin-safe-jsx`'s autofix destroys narrowing.**
   `safe-jsx/jsx-explicit-boolean` rewrites `{toast && <Toast {...toast} />}` to
   `{Boolean(toast) && <Toast {...toast} />}`. `Boolean(x)` does not narrow, so
