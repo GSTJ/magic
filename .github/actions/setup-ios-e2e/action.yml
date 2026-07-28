@@ -85,6 +85,17 @@ inputs:
     description: Ruby to install CocoaPods against. Empty uses the runner's Ruby.
     required: false
     default: ""
+  cache-maestro:
+    description: >
+      auto | true | false. Cache ~/.maestro through actions/cache. auto is true
+      on a GitHub-hosted runner and false anywhere else, and the asymmetry is
+      the point: the directory is 332 MB (3m51 to upload cold), and on a
+      self-hosted Mac ~/.maestro is the login user's real install, with their
+      `maestro test` history under it. Restoring a cache over that replaces a
+      working install with CI's copy and drops a stale run history on the
+      machine, to save a download the runner never has to do — it kept its disk.
+    required: false
+    default: auto
   cache-pods:
     description: Cache ~/.cocoapods and ~/Library/Caches/CocoaPods.
     required: false
@@ -202,6 +213,12 @@ runs:
         echo "hash=$hash" >> "$GITHUB_OUTPUT"
 
     - name: 🗄 Cache Maestro
+      # `runner.environment`, not `env.RUNNER_ENVIRONMENT`: the env context holds
+      # what a workflow set, not the runner's own variables. The shell steps use
+      # $RUNNER_ENVIRONMENT because there the process environment is all there is.
+      if: >-
+        inputs.cache-maestro == 'true'
+        || (inputs.cache-maestro == 'auto' && runner.environment == 'github-hosted')
       uses: actions/cache@v6
       with:
         path: ~/.maestro
@@ -218,8 +235,18 @@ runs:
           curl -fsSL "https://get.maestro.mobile.dev" | MAESTRO_VERSION="$MAESTRO_VERSION" bash
         fi
         echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        # tail, not head: it drains its input, so the writer never takes a
+        # SIGPIPE that pipefail would turn into this step's exit code.
         version=$("$HOME/.maestro/bin/maestro" --version | tail -1)
         echo "maestro $version"
+        # An install already on the runner is used as-is rather than overwritten
+        # — off a hosted runner it is the machine owner's, not CI's. Say so when
+        # it is not the pinned version, because otherwise the version a run used
+        # is decided by whatever that machine happens to have.
+        case "$version" in
+          *"$MAESTRO_VERSION"*) ;;
+          *) echo "::warning::maestro $version is already installed at ~/.maestro and is what this run will use, not the pinned $MAESTRO_VERSION. Remove ~/.maestro on this runner, or change maestro-version to match." ;;
+        esac
         echo "version=$version" >> "$GITHUB_OUTPUT"
 
     - name: 🗄 Cache CocoaPods specs and sources
