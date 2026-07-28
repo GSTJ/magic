@@ -3,6 +3,7 @@ dist/
 build/
 coverage/
 .turbo/
+public/r/
 *.tsbuildinfo
 # `pnpm pack` / `npm pack` output, left behind by publish dry-runs.
 *.tgz

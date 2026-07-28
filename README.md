@@ -13,6 +13,7 @@ slightly-wrong version.
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                  |
 | [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform        |
 | [`magic-docs`](packages/docs)                   | Fumadocs theme, layout/MDX presets, TypeScript reference, Pages   |
+| `GSTJ/magic/docs-landing`                       | Editable shadcn block for dark package landing pages              |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck    |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm            |
 | `.github/workflows/e2e-ios.yml`                 | Reusable `workflow_call` job: Maestro iOS E2E, optionally sharded |
@@ -37,6 +38,78 @@ four `react-native` rules are now ported into `magic-oxlint-plugin`, and
 audit` reports nothing where it used to report 5 highs. See DECISIONS.md §4.
 
 ---
+
+## Docs landing block
+
+`docs-landing` is the editable landing layer for `magic-docs`. It installs the
+shell, section primitives, clipboard button, scoped CSS, and GSAP effects into
+the consumer repo. Each package supplies its product demo, examples, history,
+and copy.
+
+Install it from the public GitHub registry:
+
+```sh
+pnpm dlx shadcn@latest add GSTJ/magic/docs-landing
+```
+
+```text
+components/docs-landing/
+|-- docs-landing.tsx
+|-- docs-landing-effects.tsx
+|-- docs-landing.module.css
+`-- install-command.tsx
+```
+
+The CLI resolves `@components` from `components.json` and installs
+`gsap@3.15.0`.
+
+Compose the page around repository-owned content:
+
+```tsx
+import {
+  DocsDemoFrame,
+  DocsHero,
+  DocsLanding,
+  DocsSection,
+  DocsStatStrip,
+} from "@/components/docs-landing/docs-landing";
+
+export default function LandingPage() {
+  return (
+    <DocsLanding
+      name={site.name}
+      navigation={site.navigation}
+      repository={{ href: site.repository, label: "GitHub" }}
+      version={site.version}
+    >
+      <DocsHero
+        actions={hero.actions}
+        description={hero.description}
+        eyebrow={hero.eyebrow}
+        installCommand={site.installCommand}
+        title={hero.title}
+        visual={<ProductDemo />}
+      />
+      <DocsStatStrip items={projectStats} />
+      <DocsSection
+        description={example.description}
+        eyebrow={example.eyebrow}
+        index="01"
+        title={example.title}
+        tone="blue"
+      >
+        <DocsDemoFrame label={example.label}>
+          <ProductExample />
+        </DocsDemoFrame>
+      </DocsSection>
+    </DocsLanding>
+  );
+}
+```
+
+The shell defaults to dark. Set its `--docs-*` variables with the `style` prop
+or a wrapper class. Motion is scoped to the landing root, cleans up on unmount,
+and stays off when the visitor requests reduced motion.
 
 ## Setup, by project type
 
