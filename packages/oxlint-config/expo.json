@@ -17,7 +17,7 @@
     },
     {
       "name": "react-native",
-      "specifier": "eslint-plugin-react-native"
+      "specifier": "magic-oxlint-plugin/react-native"
     }
   ],
   "ignorePatterns": [
@@ -668,9 +668,6 @@
     "react-native/no-color-literals": "error",
     "react-native/no-single-element-style-arrays": "error",
     "react-native/no-unused-styles": "error",
-    "react-native/no-raw-text": "off",
-    "react-native/sort-styles": "off",
-    "react-native/split-platform-components": "off",
     "jsx-a11y/alt-text": "off",
     "jsx-a11y/anchor-is-valid": "off",
     "jsx-a11y/click-events-have-key-events": "off",

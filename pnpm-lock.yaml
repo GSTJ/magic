@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-packageExtensionsChecksum: sha256-9L77HZvEJTOIjqhR1FkJr2NbwRz4andude3vf3Sqs+Q=
+packageExtensionsChecksum: sha256-uSZ68ZfgPunTHvzVPylGuwHeRKSIygyGjbqpfQ7w6Ns=
 
 importers:
 
@@ -141,12 +141,12 @@ importers:
 
   packages/oxlint-config:
     dependencies:
-      eslint-plugin-react-native:
-        specifier: ^5.0.0
-        version: 5.0.0
       eslint-plugin-safe-jsx:
         specifier: ^1.3.0
         version: 1.3.0
+      magic-oxlint-plugin:
+        specifier: workspace:^
+        version: link:../oxlint-plugin
       oxlint:
         specifier: '>=1.75.0'
         version: 1.75.0
@@ -836,17 +836,6 @@ packages:
   escape-string-regexp@5.0.0:
     resolution: {integrity: sha512-/veY75JbMK4j1yjvuUxuVsiS/hr/4iHs9FTT6cgTexxdE0Ly/glccBAkloH/DofkjRbZU3bnoj38mOmhkZ0lHw==}
     engines: {node: '>=12'}
-
-  eslint-plugin-react-native-globals@0.1.2:
-    resolution: {integrity: sha512-9aEPf1JEpiTjcFAmmyw8eiIXmcNZOqaZyHO77wgm0/dWfT/oxC1SrIq8ET38pMxHYrcB6Uew+TzUVsBeczF88g==}
-
-  eslint-plugin-react-native@5.0.0:
-    resolution: {integrity: sha512-VyWlyCC/7FC/aONibOwLkzmyKg4j9oI8fzrk9WYNs4I8/m436JuOTAFwLvEn1CVvc7La4cPfbCyspP4OYpP52Q==}
-    peerDependencies:
-      eslint: ^3.17.0 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9
-    peerDependenciesMeta:
-      eslint:
-        optional: true
 
   eslint-plugin-safe-jsx@1.3.0:
     resolution: {integrity: sha512-6IvENBEMjHLxp8TOtSHwZ2qmlsZ1XQEyyO9EVDBze37rLvXyPXmqs0wjFNbXFQpF+oTJhEg7hr/x9qMthqezrw==}
@@ -1958,12 +1947,6 @@ snapshots:
   entities@6.0.1: {}
 
   escape-string-regexp@5.0.0: {}
-
-  eslint-plugin-react-native-globals@0.1.2: {}
-
-  eslint-plugin-react-native@5.0.0:
-    dependencies:
-      eslint-plugin-react-native-globals: 0.1.2
 
   eslint-plugin-safe-jsx@1.3.0: {}
 

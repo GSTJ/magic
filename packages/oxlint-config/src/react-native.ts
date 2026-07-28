@@ -15,6 +15,15 @@ import { react } from "./react.ts";
  * convention, not a general guideline, so it stays in each repo's own config.
  * See the README section "Restricting imports per repo" for the snippet.
  *
+ * The four `react-native/*` rules below run from `magic-oxlint-plugin`, not from
+ * `eslint-plugin-react-native`. The rule ids are unchanged — oxlint takes the
+ * namespace from the `jsPlugins` entry's `name` — so configs and
+ * `oxlint-disable` comments that name them keep working. The reason for the
+ * port is that upstream declares a required `eslint` peer nothing calls, which
+ * `autoInstallPeers` then installed into every consumer along with eslint 9's
+ * `minimatch@3` -> `brace-expansion@1` tail. See DECISIONS.md ("Vendoring the
+ * react-native rules") for the measured parity.
+ *
  * Also absent: `reanimated/js-function-in-worklet`, which the old react-native
  * config ran at `error`. `eslint-plugin-reanimated@2.0.1` *loads* fine as a
  * jsPlugin, but the rule's `create()` bails out immediately unless
@@ -24,7 +33,7 @@ import { react } from "./react.ts";
  * than leaving it out. See DECISIONS.md ("Dropped").
  */
 const reactNativeConfig: MagicOxlintConfig = extendConfig(react, {
-  jsPlugins: [jsPlugin("react-native", "eslint-plugin-react-native")],
+  jsPlugins: [jsPlugin("react-native", "magic-oxlint-plugin/react-native")],
 
   globals: {
     __DEV__: "readonly",
@@ -63,14 +72,21 @@ const reactNativeConfig: MagicOxlintConfig = extendConfig(react, {
       },
     ],
 
+    // magic-oxlint-plugin/react-native. Same four rules, same ids, same
+    // diagnostics — parity is measured in fixtures/adversarial/react-native.
+    //
+    // Gone with the dependency: `no-raw-text`, `sort-styles` and
+    // `split-platform-components`, which this preset set to `off` and which
+    // nothing here ported. They are not `off` entries any more because oxlint
+    // treats a rule name a loaded plugin does not define as an error
+    // ("Rule 'no-raw-text' not found in plugin 'react-native'", exit 1), so
+    // naming them would break every consumer instead of quietly doing nothing.
+    // A repo that wants one back adds upstream itself under its own namespace;
+    // the README has the snippet.
     "react-native/no-inline-styles": "error",
     "react-native/no-color-literals": "error",
     "react-native/no-single-element-style-arrays": "error",
     "react-native/no-unused-styles": "error",
-    // Requires a design-system <Text> wrapper to be useful; too noisy without one.
-    "react-native/no-raw-text": "off",
-    "react-native/sort-styles": "off",
-    "react-native/split-platform-components": "off",
 
     // React Native has no DOM. jsx-a11y's rules target DOM elements and roles
     // and produce nothing but false positives against RN primitives.
