@@ -696,6 +696,38 @@ repos went from 44m25 and 22m04 to 19m13 and 8m32 on hosted runners, and one to
 | Device picked from the runtime's own list       | Choosing the newest runtime and the newest iPhone independently pairs combinations `simctl create` rejects.                                                |
 | `maestro --device <udid>`                       | Without it Maestro drives whichever simulator is booted. On a Mac mini that is the owner's, not yours.                                                     |
 | No ccache                                       | CocoaPods wires it through `CC`/`CXX`, which Xcode 26 does not use to compile. An instrumented launcher logged zero calls.                                 |
+| pnpm hardlinks off a hosted runner              | A cloned `node_modules` is a new inode and a new mtime per file, so a warm DerivedData recompiles everything anyway. See below.                            |
+
+### The install method decides whether a warm build is warm
+
+`package-import-method` defaults to `auto`, which is `hardlink` off a
+GitHub-hosted runner and pnpm's own default on one.
+
+pnpm's own `auto` clones — APFS copy-on-write — and a clone is a **new inode
+with a new mtime** for every file it materialises. So a second run that changed
+no dependency still hands Xcode a `node_modules` where every file is newer than
+the object files built from it, and a DerivedData tree that was kept at some
+expense buys nothing: React Native's pods compile from `node_modules`, and Xcode
+decides what is stale by timestamp. Hardlinking reuses the store's inodes,
+mtimes included. On a hosted runner nothing survives the job, so there is no
+warm anything to protect and pnpm's default stays.
+
+It is set in the environment for the install step only. Nothing writes an
+`.npmrc`, so no developer's checkout changes and no later command inherits it.
+Which variable does the work depends on the pnpm version, and the action sets
+both because the fleet is on more than one:
+
+| pnpm  | `npm_config_package_import_method` | `PNPM_CONFIG_PACKAGE_IMPORT_METHOD` |
+| ----- | ---------------------------------- | ----------------------------------- |
+| 9, 10 | ✅                                 | ❌                                  |
+| 11    | ❌                                 | ✅                                  |
+
+pnpm 11 stopped reading `npm_config_*` altogether — `npm_config_store_dir` does
+not move the store either — which is worth knowing before you reach for that
+prefix for anything else.
+
+Hardlinking needs the store and the workspace on one volume. When they are not,
+pnpm falls back on its own; nothing here has to detect it.
 
 ### Adoption, per repo shape
 
@@ -735,9 +767,21 @@ jobs:
 `runner-heartbeat` has to be passed in: a called workflow cannot read the
 caller's variables for you. On a self-hosted runner the workflow also creates
 its own simulator and deletes it afterwards, because a machine that is not
-destroyed after the job accumulates one full disk image per run, and it keeps
+destroyed after the job accumulates one full disk image per run; it keeps
 DerivedData at a fixed path instead of round-tripping it through the cache
-service.
+service; it hardlinks the pnpm install rather than cloning it; and it leaves
+`~/.maestro` alone, because on a machine somebody uses that is their install
+and their run history, not CI's.
+
+**Routing is advice and cannot stop the suite.** The `🧭 Route` job runs on
+`ubuntu-latest` with `continue-on-error`, and every job that consumes it reads
+`needs.route.outputs.labels || inputs.runner-labels`. That matters more than it
+sounds: a repo whose Actions billing has lapsed cannot start _any_ hosted job,
+and in the round before this one routing was a step in a hard-gating preflight —
+so the router failed on arrival, the macOS job refused to start, and the E2E
+suite stopped running with nothing red to show for it. The only Ubuntu job that
+can still stop a merge is the quarantine lint, which exists only when you set
+`quarantine-file`, and which is meant to.
 
 **Stateful suite, sharded and part-gated.** Flows that share a fixture cannot be
 split by count, only by which rows they touch. Name the shards, and let the ones
@@ -800,8 +844,8 @@ Two halves, and only one of them is code here.
 ```
 
 A listed flow never runs and never fails the build, and its owner's handle is
-rendered into the job summary on every run. The `preflight` job lints the file
-before anything expensive starts: all three fields are required, and an entry
+rendered into the job summary on every run. The `🚧 Quarantine lint` job checks
+the file before anything expensive starts: all three fields are required, and an entry
 older than `quarantine-max-age-days` (30) turns the workflow red. That decay
 rule is the whole point. A quarantine file without one is a list of tests that
 quietly stopped mattering; with one it is a borrowing facility with a maturity
@@ -824,10 +868,26 @@ by _your_ workflow file name, `gh run download` matched against _your_ artifact
 names, and an XML walk whose suite-to-flow mapping depends on whether you set
 `per-flow`. Every one of those is a repo-specific string, and an action that
 took five inputs to express them would be harder to read than the 90 lines of
-Python it replaced. What this workflow guarantees is the input side: every run
-uploads a JUnit report per shard, named after the shard, under
-`<shard-name>-<run-attempt>`. A working implementation to copy lives in
-`pegada`'s `.github/scripts/maestro-flake-stats.py`.
+Python it replaced. A working implementation to copy lives in `pegada`'s
+`.github/scripts/maestro-flake-stats.py`.
+
+**Set `upload-artifacts: always` before you try it.** The default is
+`on-failure`, which is right for a repo that only wants evidence when something
+broke — and useless for flake statistics, because a flaky flow passes some of
+the time by definition. A history that keeps only the red runs makes every flow
+in it look 0% and computes no pass rate at all:
+
+```yaml
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      app-dir: apps/mobile
+      upload-artifacts: always # every run, so a pass rate has a denominator
+```
+
+With it on, every run uploads a JUnit report per shard, named after the shard,
+under `<shard-name>-<run-attempt>`.
 
 The same goes for `@expo/fingerprint` bundle-swap caching — around 260 lines of
 repo-specific logic with a liveness-probe fallback. It stays in the repo that
@@ -835,29 +895,72 @@ needs it.
 
 ### Input surface
 
-| Input                                                           | Default                   | For                                        |
-| --------------------------------------------------------------- | ------------------------- | ------------------------------------------ |
-| `app-dir`                                                       | `.`                       | Where `app.json` / `app.config.*` lives    |
-| `flows-dir` / `flows`                                           | `.maestro` / all of it    | What to run                                |
-| `build-profile`                                                 | `release`                 | `release` or `dev-client` (Debug)          |
-| `runner-labels` / `hosted-fallback-labels` / `runner-heartbeat` | `["macos-26"]`            | The Mac-runner router                      |
-| `shards` / `soft-gate-shards`                                   | `"0"` / `false`           | Job topology                               |
-| `quarantine-file` / `quarantine-max-age-days`                   | unset / `30`              | Flake containment with an expiry           |
-| `xcode-version` / `maestro-version`                             | `latest` / `2.7.0`        | Toolchain pins                             |
-| `simulator-device` / `simulator-runtime`                        | newest available          | Pin only if a flow needs a screen size     |
-| `prebuild-command` / `install-command` / `node-version-file`    | Expo + pnpm defaults      | Bare RN, npm, a pinned Node                |
-| `native-cache-paths` / `cache-epoch` / `cold`                   | sensible / `v1` / `false` | Cache keying and cache busting             |
-| `build-settings`                                                | unset                     | Extra `SETTING=value` xcodebuild arguments |
-| `maestro-env` / `deep-link`                                     | unset                     | `-e` variables, and auth-token injection   |
-| `retries` / `per-flow`                                          | `1` / `false`             | Retry shape                                |
-| `env-file-contents`                                             | unset                     | Repos whose config reads a `.env`          |
-| `timeout-minutes` / `flow-timeout-minutes`                      | `60` / `30`               | Bounds                                     |
+| Input                                                           | Default                         | For                                        |
+| --------------------------------------------------------------- | ------------------------------- | ------------------------------------------ |
+| `app-dir`                                                       | `.`                             | Where `app.json` / `app.config.*` lives    |
+| `flows-dir` / `flows`                                           | `.maestro` / all of it          | What to run                                |
+| `build-profile`                                                 | `release`                       | `release` or `dev-client` (Debug)          |
+| `runner-labels` / `hosted-fallback-labels` / `runner-heartbeat` | `["macos-26"]`                  | The Mac-runner router                      |
+| `shards` / `soft-gate-shards`                                   | `"0"` / `false`                 | Job topology                               |
+| `quarantine-file` / `quarantine-max-age-days`                   | unset / `30`                    | Flake containment with an expiry           |
+| `xcode-version` / `maestro-version`                             | `latest` / `2.7.0`              | Toolchain pins                             |
+| `cache-maestro`                                                 | `auto`                          | Hosted only; see below                     |
+| `simulator-device` / `simulator-runtime`                        | newest available                | Pin only if a flow needs a screen size     |
+| `prebuild-command` / `install-command` / `node-version-file`    | Expo + pnpm defaults            | Bare RN, npm, a pinned Node                |
+| `package-import-method`                                         | `auto`                          | Hardlink off a hosted runner; see above    |
+| `native-cache-paths` / `cache-epoch` / `cold`                   | the list below / `v1` / `false` | Cache keying and cache busting             |
+| `build-settings`                                                | unset                           | Extra `SETTING=value` xcodebuild arguments |
+| `maestro-env` / `app-id` / `deep-link`                          | unset / `auto` / unset          | `-e` variables, and auth-token injection   |
+| `retries` / `per-flow`                                          | `1` / `false`                   | Retry shape                                |
+| `upload-artifacts`                                              | `on-failure`                    | `always` for flake stats, `never` to stop  |
+| `env-file-contents`                                             | unset                           | Repos whose config reads a `.env`          |
+| `timeout-minutes` / `flow-timeout-minutes`                      | `60` / `30`                     | Bounds                                     |
 
 `deep-link` is the one worth knowing about: it opens a URL on the device after
 install and before the flows. Mint a token in an earlier step, encode it into
 your app's scheme, and no flow has to drive a WebView login — which removes the
 single biggest source of mobile E2E flake and wall-clock, and the network
 dependency on your identity provider along with it.
+
+`app-id` is the one nobody should have to know about. The Expo templates write
+their flows as `appId: ${APP_ID}`, Maestro leaves an undefined variable as that
+literal string, and the failure reads as "app not installed" rather than as a
+missing variable — so every repo hit it once and pasted its bundle id into
+`maestro-env`, a second copy of a value the build already read out of the built
+`Info.plist`. It is passed for you now. Set `app-id: off` if your flows name the
+bundle themselves, or put `APP_ID=…` in `maestro-env` to win outright.
+
+`cache-maestro` defaults to caching `~/.maestro` on a GitHub-hosted runner and
+nowhere else. It is 332 MB — 3m51 to upload on a cold miss — and on a
+self-hosted Mac that directory is the login user's own Maestro, with their test
+history under it. A runner that keeps its disk does not need a cache of a thing
+it already has, and restoring one over a working install to save a download it
+never has to do is the worst of both.
+
+### `native-cache-paths`, and what happens when it is short
+
+The key that decides whether `ios/` and DerivedData are reused is a hash of
+these tracked files, and nothing else:
+
+```
+pnpm-lock.yaml        package-lock.json     yarn.lock       .nvmrc
+patches/**            Gemfile.lock          <app>/package.json
+<app>/app.json        <app>/app.config.*    <app>/env.*     <app>/Gemfile.lock
+<app>/plugins/**      <app>/assets/**       <app>/ios/Podfile
+```
+
+`<app>` expands to `app-dir`. Setting the input **replaces** this list, so add
+to it rather than trimming it: a native input that is not on the list can change
+without changing the key, and then the cache serves an `ios/` tree built from
+something else. That is not hypothetical — `env.*` is on the list because the
+obytes Expo template computes `BUNDLE_ID` and `NAME` in `env.js`, which decides
+what lands in `Info.plist`, and a key that ignored it happily served the old
+bundle id after somebody renamed the app. JS sources stay off the list on
+purpose: Xcode's bundling phase is `alwaysOutOfDate` and regenerates the bundle
+every build, so a JS change cannot go stale through this cache.
+
+The list is printed in the build log on every run, and a run that matches no
+tracked file at all says so with a warning and falls back to a date bucket.
 
 ## Renovate
 

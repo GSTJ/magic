@@ -3,6 +3,121 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — CI: what the first iOS E2E adoption found
+
+No npm package changed. Everything here is in `.github/`. The repo tag for this
+round is `v1.7.0` — a minor, because `e2e-ios.yml` grows four inputs and the
+job topology changes shape — and `v1` moves onto it.
+
+`would-you-rather` adopted `e2e-ios.yml@v1` the day it shipped and found seven
+things, all of them by running into them. Every fix below has the run that
+caused it.
+
+### Fixed: `xcodebuild -version | head -1` could abort the build
+
+`head` exits after the line it wanted, `xcodebuild` takes SIGPIPE writing the
+next one, and its Objective-C runtime turns that into an
+`NSFileHandleOperationException` abort — **exit 134**, which `set -o pipefail`
+then makes the step's exit code. It needs `head` to win a race, so it is
+intermittent, and it killed a real master run while only ever trying to read a
+version string.
+
+Every `| head` under `pipefail` in this repo is gone: the version is sliced with
+parameter expansion, the workspace comes from a glob, and the two `find | head -1`
+sites write a file and `read` the first line. `| tail` is fine and stays — tail
+drains its input, so nothing is ever writing to a closed pipe.
+
+### Changed: routing cannot take the suite down any more
+
+`preflight` was one Ubuntu job doing three jobs' work, and it hard-gated the
+macOS one. On a repo whose Actions billing has lapsed no `ubuntu-latest` job can
+start at all, so the router failed on arrival, the E2E job refused to start, and
+the suite silently stopped running (would-you-rather run 30324571838). It is now
+three separate things, each answering to what it actually is:
+
+| Job                  | When                          | Can it stop a merge?         |
+| -------------------- | ----------------------------- | ---------------------------- |
+| `🧭 Route`           | `hosted-fallback-labels` set  | No — `continue-on-error`     |
+| `🚧 Quarantine lint` | `quarantine-file` set         | Yes, on purpose              |
+| shard plan           | a step in the build job       | Yes, but it is the sharded shape's own input |
+
+Consumers read `needs.route.outputs.labels || inputs.runner-labels`, so a router
+that never ran costs nothing. The shard plan moved onto the macOS runner as the
+build job's first step — before the checkout, so a malformed `shards` still
+fails in seconds — which takes Ubuntu off the sharded path too.
+
+A repo that was working around this with its own `route` job (there is one) can
+delete it and pass `hosted-fallback-labels` instead.
+
+### Fixed: `APP_ID` never reached the flows
+
+`run-maestro` resolved the bundle id and then did not pass it. The Expo
+templates write `appId: ${APP_ID}`, Maestro leaves an undefined variable as that
+literal string, and the failure reads as "app not installed" rather than as a
+missing variable — so the repos that hit it pasted their bundle id into
+`maestro-env`, a second copy of a value read out of the built `Info.plist` a
+step earlier. `-e APP_ID=<resolved>` is passed now, `app-id: off` opts out, and
+an `APP_ID=` line in `maestro-env` still wins.
+
+### Fixed: `native-cache-paths` missed the file that names the app
+
+The default list did not include `env.js`/`env.ts`, which is where the obytes
+Expo template computes `BUNDLE_ID` and `NAME` — so editing it changed
+`Info.plist` while the `ios/` cache key did not move, and the build served the
+old bundle. `<app>/env.*` and `Gemfile.lock` are on the list now, and the list
+is printed in the log on every run.
+
+The default also *reached* nobody through `e2e-ios.yml`: an action default
+applies when an input is absent, and a reusable workflow forwarding its own
+unset input passes `""` instead. The list lives in the step's environment now
+and an empty input falls back to it, which is the only arrangement where both
+callers get the same thing.
+
+### New: `upload-artifacts`, and why flake stats need `always`
+
+`e2e-ios.yml` never exposed `run-maestro`'s `upload-artifacts`, so a green run
+uploaded no JUnit report — which quietly contradicts the flake-statistics recipe
+in the README, because a flaky flow passes some of the time by definition and a
+history of red runs alone has no denominator. Exposed, `on-failure` by default,
+`always` documented as the thing flake stats require.
+
+### New: `cache-maestro`, off where the cache is a liability
+
+`~/.maestro` was cached unconditionally: 332 MB, 3m51 to upload cold, and on a
+self-hosted Mac it is the login user's own Maestro install with their run
+history under it. `auto` now means hosted-only. A runner that keeps its disk
+does not need a cache of a directory it already has.
+
+### New: `package-import-method`, or why a warm DerivedData was not warm
+
+pnpm's default `auto` clones (APFS copy-on-write), and a clone is a **new inode
+with a new mtime** for every file. A second run that changed no dependency still
+handed Xcode a `node_modules` where everything was newer than the object files
+built from it, so the DerivedData tree kept at some expense bought nothing.
+`auto` now means `hardlink` off a GitHub-hosted runner — same inodes, same
+mtimes — and pnpm's own default on one, where nothing survives the job anyway.
+
+Set in the environment for the install step only; nothing writes an `.npmrc`.
+Which variable does the work depends on the pnpm version, measured by counting
+hard links on the installed file, so the action sets both:
+
+| pnpm  | `npm_config_package_import_method` | `PNPM_CONFIG_PACKAGE_IMPORT_METHOD` |
+| ----- | ---------------------------------- | ----------------------------------- |
+| 9, 10 | ✅                                 | ❌                                  |
+| 11    | ❌                                 | ✅                                  |
+
+pnpm 11 stopped reading `npm_config_*` at all — `npm_config_store_dir` does not
+move the store either. Worth knowing before reaching for that prefix again.
+
+### Fixed: a check called `🧪 ${{ matrix.shard.name }}`
+
+A `name:` holding a matrix expression is rendered *literally* when the job is
+skipped, and the unsharded shape — the default — skips it every run. So every
+consumer carried a PR check named after the template. The shard job has no
+`name:` now and the matrix vector is the bare shard name, which is what makes
+GitHub's own naming do the right thing in both directions: `shard (core)` when
+the matrix expands, plain `shard` when it does not.
+
 ## 2026-07-27 — CI: reusable iOS E2E
 
 No npm package changed. Everything here is in `.github/`. The repo tag for this
