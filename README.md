@@ -770,11 +770,14 @@ shards is only faster when the flows themselves take longer than
 
     T > 240 × S / (S − 1) seconds
 
-| Shards | Flows must exceed | Extra macOS minutes bought |
+| Shards | Flows must exceed | Extra macOS minutes billed |
 | ------ | ----------------- | -------------------------- |
 | 2      | 8 min             | ~4                         |
 | 3      | 6 min             | ~8                         |
 | 4      | 5m20              | ~12                        |
+
+The right column is the price, not the prize: sharding trades billed minutes for
+wall-clock, and on a private repo each of those minutes costs ten.
 
 Two repos measured their suites at 165s and 16s of actual flow execution and
 both kept a single job — at those numbers a matrix makes the run slower _and_
