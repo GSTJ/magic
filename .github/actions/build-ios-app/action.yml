@@ -101,19 +101,18 @@ inputs:
       through `git ls-files -s`, so only tracked files count — which is the
       point: ios/ is gitignored, so Podfile.lock does not exist yet when the key
       has to be computed, and this list is what stands in for it.
+
+      Empty uses the built-in list, which the resolve step prints on every run
+      and the README spells out. It is empty rather than the list itself because
+      a caller that passes `""` — which is what e2e-ios.yml does when its own
+      input is unset — overrides an action default instead of falling back to
+      it, and a default nobody can reach is worse than no default.
+
+      Add to it rather than replacing it when a repo has an extra native input:
+      anything not listed can change without changing the key, and then the
+      cache serves an `ios/` tree built from different inputs.
     required: false
-    default: |
-      pnpm-lock.yaml
-      package-lock.json
-      yarn.lock
-      .nvmrc
-      patches/**
-      <app>/package.json
-      <app>/app.json
-      <app>/app.config.*
-      <app>/plugins/**
-      <app>/assets/**
-      <app>/ios/Podfile
+    default: ""
   cache-epoch:
     description: Bump to invalidate every cache this action keeps.
     required: false
@@ -183,6 +182,28 @@ runs:
       env:
         IN_APP_DIR: ${{ inputs.app-dir }}
         IN_NATIVE_CACHE_PATHS: ${{ inputs.native-cache-paths }}
+        # The canonical list, in the one place both a direct caller and
+        # e2e-ios.yml reach it. `env.js`/`env.ts` are here because the obytes
+        # Expo template computes BUNDLE_ID and NAME in one — editing it changes
+        # Info.plist while a key that ignored it happily serves the old ios/
+        # tree. Gemfile.lock pins CocoaPods, which decides what pod install
+        # writes. Everything JS-side stays out on purpose: the Xcode bundling
+        # phase is alwaysOutOfDate and rebuilds the bundle every time.
+        DEFAULT_NATIVE_CACHE_PATHS: |
+          pnpm-lock.yaml
+          package-lock.json
+          yarn.lock
+          .nvmrc
+          patches/**
+          Gemfile.lock
+          <app>/package.json
+          <app>/app.json
+          <app>/app.config.*
+          <app>/env.*
+          <app>/Gemfile.lock
+          <app>/plugins/**
+          <app>/assets/**
+          <app>/ios/Podfile
         IN_CACHE_EPOCH: ${{ inputs.cache-epoch }}
         IN_DERIVED_DATA: ${{ inputs.derived-data }}
         IN_DERIVED_DATA_PATH: ${{ inputs.derived-data-path }}
@@ -198,8 +219,18 @@ runs:
           exit 1
         fi
 
+        # An action default is only applied when the input is *absent*, and a
+        # reusable workflow forwarding its own unset input passes "" instead —
+        # so the fallback has to happen here, or every consumer that goes
+        # through e2e-ios.yml silently keys its caches on nothing.
+        pattern_source="$IN_NATIVE_CACHE_PATHS"
+        if [ -z "$(printf '%s' "$pattern_source" | tr -d '[:space:]')" ]; then
+          pattern_source="$DEFAULT_NATIVE_CACHE_PATHS"
+          echo "native-cache-paths is empty; using the built-in list."
+        fi
+
         # Globs, one per line, with <app> expanded. Whitespace-only and #
-        # comment lines are dropped so the default above can be commented.
+        # comment lines are dropped so the list can be commented.
         patterns=()
         while IFS= read -r line; do
           line="${line%%#*}"
@@ -211,8 +242,14 @@ runs:
           line="${line//<app>/$app_dir}"
           patterns+=("$line")
         done <<EOF
-        ${IN_NATIVE_CACHE_PATHS}
+        ${pattern_source}
         EOF
+
+        if [ ${#patterns[@]} -gt 0 ]; then
+          echo "::group::Native input patterns (${#patterns[@]})"
+          printf '  %s\n' "${patterns[@]}"
+          echo "::endgroup::"
+        fi
 
         # `git ls-files -s` prints mode, blob sha and path for every tracked
         # file matching the pathspecs, already sorted. That is a content hash of
