@@ -183,6 +183,25 @@ on:
         type: string
         required: false
         default: magic-e2e
+      checkout-clean:
+        description: >
+          auto | true | false, passed to actions/checkout's `clean`. auto is
+          false off a GitHub-hosted runner and true on one.
+
+          `clean: true` runs `git clean -ffdx`, which deletes every ignored
+          file — including the two directories that make a repeat build cheap.
+          On a machine that keeps its disk that is pure loss twice over: the
+          run pays to restore `ios/` from a cache it already had, and the
+          reinstalled `node_modules` makes React Native's codegen re-emit
+          `ios/build/generated/**`. That output is byte-for-byte identical and
+          carries a new mtime, which is all Xcode needs to recompile
+          ReactCodegen and every pod whose headers come from it.
+
+          Left alone, `pnpm install --frozen-lockfile` finishes in under a
+          second with "Already up to date" and moves nothing.
+        type: string
+        required: false
+        default: auto
       node-version-file:
         description: "Where the Node version comes from, relative to app-dir."
         type: string
@@ -463,6 +482,10 @@ jobs:
     steps:
       - name: 🏗 Checkout
         uses: actions/checkout@v7
+        with:
+          # See checkout-clean: `git clean -ffdx` deletes node_modules and
+          # ios/, which is what makes the caches below buy nothing.
+          clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
       # Referenced by owner/repo, never `./`: inside a called workflow a `./`
       # path resolves against the caller's checkout.
@@ -645,6 +668,10 @@ jobs:
 
       - name: 🏗 Checkout
         uses: actions/checkout@v7
+        with:
+          # See checkout-clean: `git clean -ffdx` deletes node_modules and
+          # ios/, which is what makes the caches below buy nothing.
+          clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
       - name: 🏗 Setup Node + pnpm
         uses: GSTJ/magic/.github/actions/setup@v1
@@ -761,6 +788,10 @@ jobs:
 
       - name: 🏗 Checkout
         uses: actions/checkout@v7
+        with:
+          # See checkout-clean: `git clean -ffdx` deletes node_modules and
+          # ios/, which is what makes the caches below buy nothing.
+          clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
       - name: 📥 Download the .app
         uses: actions/download-artifact@v7

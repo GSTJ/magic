@@ -696,12 +696,30 @@ repos went from 44m25 and 22m04 to 19m13 and 8m32 on hosted runners, and one to
 | Device picked from the runtime's own list       | Choosing the newest runtime and the newest iPhone independently pairs combinations `simctl create` rejects.                                                |
 | `maestro --device <udid>`                       | Without it Maestro drives whichever simulator is booted. On a Mac mini that is the owner's, not yours.                                                     |
 | No ccache                                       | CocoaPods wires it through `CC`/`CXX`, which Xcode 26 does not use to compile. An instrumented launcher logged zero calls.                                 |
+| Workspace kept off a hosted runner              | `git clean -ffdx` deletes `node_modules` and `ios/`, and the reinstall makes RN's codegen re-emit 84 identical files with new mtimes. See below.           |
 | One simulator, kept between runs                | Its UDID is in `-destination`, so it is in the build description. A new device per run invalidates the whole incremental build. See below.                 |
 | pnpm hardlinks off a hosted runner              | A cloned `node_modules` is a new inode and a new mtime per file, and Xcode decides what is stale by timestamp. See below.                                  |
 
 ### What actually makes a warm DerivedData warm
 
-Two things, and the second one hides the first.
+Three things, and each one hides the next. Any one of them left alone makes the
+other two worth nothing, which is why fixing them one at a time changed the
+measured build time by zero seconds twice in a row.
+
+**The workspace has to survive.** `actions/checkout` defaults to
+`clean: true`, which runs `git clean -ffdx` and deletes every ignored file —
+`node_modules` and `ios/` included. On a runner that keeps its disk that is
+loss twice over. The run pays to restore `ios/` from a cache of a directory it
+already had, and the reinstalled `node_modules` makes React Native's codegen
+re-emit `ios/build/generated/**`: 84 files, byte-for-byte identical, every one
+with a new mtime. Xcode reads mtimes, so `ReactCodegen` recompiles and so does
+every pod whose headers come from it — `RNScreens`, `RNSVG`,
+`RNGestureHandler`, `react-native-safe-area-context`. Left alone,
+`pnpm install --frozen-lockfile` finishes in 194 ms with "Already up to date"
+and moves nothing at all. So `checkout-clean` is `false` off a hosted runner,
+and `ios/` is then reused straight from the workspace with a key stamp beside
+it, rather than restored over itself — extracting the archive on top would put
+the archive's mtimes back and undo exactly what this bought.
 
 **The simulator has to be the same simulator.** `-destination` carries the
 device UDID, the UDID is part of the build description, and changing it
@@ -932,6 +950,7 @@ needs it.
 | `cache-maestro`                                                 | `auto`                          | Hosted only; see below                     |
 | `simulator-device` / `simulator-runtime`                        | newest available                | Pin only if a flow needs a screen size     |
 | `reuse-device` / `device-name`                                  | `auto` / `magic-e2e`            | One simulator kept between runs; see above |
+| `checkout-clean`                                                | `auto`                          | Keep the workspace off a hosted runner     |
 | `prebuild-command` / `install-command` / `node-version-file`    | Expo + pnpm defaults            | Bare RN, npm, a pinned Node                |
 | `package-import-method`                                         | `auto`                          | Hardlink off a hosted runner; see above    |
 | `native-cache-paths` / `cache-epoch` / `cold`                   | the list below / `v1` / `false` | Cache keying and cache busting             |

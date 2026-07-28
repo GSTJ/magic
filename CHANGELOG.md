@@ -6,7 +6,7 @@ together and most of what a consumer needs to know spans more than one of them.
 ## 2026-07-28 — CI: what the first iOS E2E adoption found
 
 No npm package changed. Everything here is in `.github/`. The round shipped as
-`v1.7.0` and `v1.7.1`; `v1` moves onto the latter.
+`v1.7.0`, `v1.7.1` and `v1.7.2`; `v1` moves onto the last of them.
 
 `would-you-rather` adopted `e2e-ios.yml@v1` the day it shipped and found seven
 things, all of them by running into them. Every fix below has the run that
@@ -87,9 +87,27 @@ self-hosted Mac it is the login user's own Maestro install with their run
 history under it. `auto` now means hosted-only. A runner that keeps its disk
 does not need a cache of a directory it already has.
 
-### Fixed: a warm DerivedData was never being used, and the cause was the simulator
+### Fixed: a warm DerivedData was never being used — three causes, all of them
 
-The headline of this round. Off a GitHub-hosted runner this action created a
+The headline of this round, and it took three fixes because each cause hid the
+next one. Fixing them one at a time moved the measured build time by zero
+seconds, twice, before the third landed.
+
+**1. The workspace was thrown away every run.** `actions/checkout` defaults to
+`clean: true`, which is `git clean -ffdx` — `node_modules` and `ios/` deleted.
+The run then paid to restore `ios/` from a cache of a directory it had just
+had, and the reinstalled `node_modules` made React Native's codegen re-emit
+`ios/build/generated/**`: 84 files, identical byte for byte, each with a fresh
+mtime. Xcode reads mtimes, so `ReactCodegen` recompiled and with it every pod
+whose headers come from it. Left alone, `pnpm install --frozen-lockfile`
+finishes in 194 ms with "Already up to date" and moves nothing.
+
+`checkout-clean` is now `false` off a GitHub-hosted runner, and an `ios/` that
+survives is reused from the workspace under a key stamp instead of being
+restored over itself — the restore would put the archive's mtimes back and undo
+the fix.
+
+**2. The simulator changed every run.** Off a GitHub-hosted runner this action created a
 simulator per run and deleted it afterwards. The UDID goes into `-destination`,
 `-destination` goes into the build description, and a build description that
 changed every run invalidated every target — so the persistent DerivedData was
@@ -109,7 +127,10 @@ the device differing.
 fresh one and keeps only its identity. The stale-device sweep still runs — it
 now keeps one instead of removing them all, which is what it was really for.
 
-### New: `package-import-method`, the other half of the same problem
+**3. The install handed back different files.** See `package-import-method`
+below.
+
+### New: `package-import-method`, the third cause
 
 pnpm's default `auto` clones (APFS copy-on-write), and a clone is a **new inode
 with a new mtime** for every file. `actions/checkout` cleans ignored files, so
@@ -119,9 +140,9 @@ on its own, independent of the simulator. `auto` now means `hardlink` off a
 GitHub-hosted runner — same inodes, same mtimes — and pnpm's own default on one,
 where nothing survives the job anyway.
 
-This one was found first and fixed first, and on its own it changed nothing:
-the simulator churn above was invalidating the build before the install ever
-got a chance to. Both had to go.
+This one was found first and fixed first, and on its own it changed nothing —
+the simulator churn was already invalidating the build, and behind that the
+workspace wipe was regenerating codegen. All three had to go.
 
 Set in the environment for the install step only; nothing writes an `.npmrc`.
 Which variable does the work depends on the pnpm version, measured by counting

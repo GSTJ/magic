@@ -311,6 +311,22 @@ runs:
           esac
         fi
 
+        # An ios/ that survived the last run is better than the cache copy of
+        # itself, and not only because restoring it is slower: extracting the
+        # archive over a live tree gives every file the archive's mtime, and
+        # Xcode reads mtimes. So when the workspace still has one built from
+        # this exact key — which only happens where the checkout did not clean —
+        # it is used as it stands, and neither the restore nor prebuild runs.
+        mkdir -p "$store"
+        ios_stamp="$store/ios-dir.key"
+        ios_persistent=false
+        if [ "$IN_COLD" = "true" ]; then
+          rm -rf "$app_dir/ios" "$ios_stamp"
+        elif [ -d "$app_dir/ios" ] && [ -f "$ios_stamp" ] && [ "$(cat "$ios_stamp")" = "$key" ]; then
+          ios_persistent=true
+          echo "Reusing the ios/ already in the workspace ($(du -sh "$app_dir/ios" 2>/dev/null | cut -f1)); it is on $key."
+        fi
+
         # The persistent half of the switch. One tree per (repo, app-dir), with
         # the key it was built from in a stamp beside it; a mismatch wipes it
         # rather than accumulating a tree per key until the disk fills. Nothing
@@ -339,12 +355,15 @@ runs:
           echo "derived-data=$derived_data"
           echo "store=$store"
           echo "dd-hit=$dd_hit"
+          echo "ios-persistent=$ios_persistent"
           echo "use-cache=$([ "$IN_COLD" = "true" ] && echo false || echo true)"
         } >> "$GITHUB_OUTPUT"
 
     - name: ♻️ Restore prebuilt ios/ (Pods included)
       id: ios-cache
-      if: inputs.cache-ios-dir == 'true' && steps.resolve.outputs.use-cache == 'true'
+      if: >-
+        inputs.cache-ios-dir == 'true' && steps.resolve.outputs.use-cache == 'true'
+        && steps.resolve.outputs.ios-persistent != 'true'
       uses: actions/cache/restore@v6
       with:
         path: ${{ steps.resolve.outputs.app-dir }}/ios
@@ -359,7 +378,7 @@ runs:
         key: magic-dd-${{ steps.resolve.outputs.key }}
 
     - name: 🛠 Expo prebuild + pod install
-      if: steps.ios-cache.outputs.cache-hit != 'true'
+      if: steps.ios-cache.outputs.cache-hit != 'true' && steps.resolve.outputs.ios-persistent != 'true'
       shell: bash
       working-directory: ${{ steps.resolve.outputs.app-dir }}
       env:
@@ -500,6 +519,7 @@ runs:
       if: >-
         always() && inputs.save-caches == 'true' && inputs.cache-ios-dir == 'true'
         && steps.ios-cache.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
+        && steps.resolve.outputs.ios-persistent != 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ steps.resolve.outputs.app-dir }}/ios
@@ -514,16 +534,21 @@ runs:
         path: ${{ steps.resolve.outputs.derived-data }}
         key: magic-dd-${{ steps.resolve.outputs.key }}
 
-    - name: 💾 Stamp persistent DerivedData
-      if: always() && steps.resolve.outputs.strategy == 'persistent' && steps.build.outcome == 'success'
+    - name: 💾 Stamp the persistent trees
+      if: always() && steps.build.outcome == 'success'
       shell: bash
       env:
         STORE: ${{ steps.resolve.outputs.store }}
         KEY: ${{ steps.resolve.outputs.key }}
+        STRATEGY: ${{ steps.resolve.outputs.strategy }}
       run: |
         set -euo pipefail
         mkdir -p "$STORE"
-        printf '%s' "$KEY" > "$STORE/derived-data.key"
+        # ios/ is stamped whatever the DerivedData strategy is: it is only ever
+        # read back when the directory itself survived, and where it does not,
+        # a stale stamp costs nothing because the check requires both.
+        printf '%s' "$KEY" > "$STORE/ios-dir.key"
+        [ "$STRATEGY" != "persistent" ] || printf '%s' "$KEY" > "$STORE/derived-data.key"
 
     - name: 📊 Build stats
       if: always()
