@@ -165,6 +165,24 @@ on:
         type: string
         required: false
         default: ""
+      reuse-device:
+        description: >
+          auto | true | false. Keep one dedicated simulator between runs off a
+          GitHub-hosted runner, erased before each, instead of creating and
+          deleting one per run. Its UDID is in `-destination` and therefore in
+          the build description, so a new one every run invalidates the whole
+          incremental build — 24s and 4 compile tasks became 69s and 310 on the
+          machine this was measured on.
+        type: string
+        required: false
+        default: auto
+      device-name:
+        description: >
+          Name of that dedicated simulator. Give two suites on one machine two
+          names, or they take turns erasing each other's device.
+        type: string
+        required: false
+        default: magic-e2e
       node-version-file:
         description: "Where the Node version comes from, relative to app-dir."
         type: string
@@ -476,6 +494,8 @@ jobs:
           cache-maestro: ${{ inputs.cache-maestro }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
+          reuse-device: ${{ inputs.reuse-device }}
+          device-name: ${{ inputs.device-name }}
           working-directory: ${{ inputs.app-dir }}
           boot: "false"
           install-cocoapods: auto
@@ -654,6 +674,8 @@ jobs:
           maestro-version: ${{ inputs.maestro-version }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
+          reuse-device: ${{ inputs.reuse-device }}
+          device-name: ${{ inputs.device-name }}
           working-directory: ${{ inputs.app-dir }}
           boot: "false"
           create-device: "false"
@@ -776,6 +798,8 @@ jobs:
           cache-maestro: ${{ inputs.cache-maestro }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
+          reuse-device: ${{ inputs.reuse-device }}
+          device-name: ${{ inputs.device-name }}
           working-directory: ${{ inputs.app-dir }}
           boot: "true"
           install-cocoapods: "false"

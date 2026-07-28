@@ -696,21 +696,46 @@ repos went from 44m25 and 22m04 to 19m13 and 8m32 on hosted runners, and one to
 | Device picked from the runtime's own list       | Choosing the newest runtime and the newest iPhone independently pairs combinations `simctl create` rejects.                                                |
 | `maestro --device <udid>`                       | Without it Maestro drives whichever simulator is booted. On a Mac mini that is the owner's, not yours.                                                     |
 | No ccache                                       | CocoaPods wires it through `CC`/`CXX`, which Xcode 26 does not use to compile. An instrumented launcher logged zero calls.                                 |
-| pnpm hardlinks off a hosted runner              | A cloned `node_modules` is a new inode and a new mtime per file, so a warm DerivedData recompiles everything anyway. See below.                            |
+| One simulator, kept between runs                | Its UDID is in `-destination`, so it is in the build description. A new device per run invalidates the whole incremental build. See below.                 |
+| pnpm hardlinks off a hosted runner              | A cloned `node_modules` is a new inode and a new mtime per file, and Xcode decides what is stale by timestamp. See below.                                  |
 
-### The install method decides whether a warm build is warm
+### What actually makes a warm DerivedData warm
 
-`package-import-method` defaults to `auto`, which is `hardlink` off a
-GitHub-hosted runner and pnpm's own default on one.
+Two things, and the second one hides the first.
+
+**The simulator has to be the same simulator.** `-destination` carries the
+device UDID, the UDID is part of the build description, and changing it
+invalidates every target. Measured on one Mac — same sources, same settings,
+same warm 2.0 GB DerivedData, only the device differing:
+
+| Build                  | Wall | Compile tasks |
+| ---------------------- | ---- | ------------- |
+| repeat, same UDID      | 24s  | 4             |
+| repeat, different UDID | 69s  | 310           |
+
+Creating a device per run, which is what this action used to do off a hosted
+runner, therefore cancelled the DerivedData cache on every single run — the
+cache was restored, reported as a hit, and then not used for anything. So
+`reuse-device` defaults to keeping one device named `magic-e2e` between runs
+off a hosted runner. It is erased before use, so it starts as clean as a fresh
+one; what it keeps is its identity. On a hosted runner nothing survives the
+job, so nothing changes there.
+
+If you pin `simulator-device` to a name whose runtime the image later drops,
+the device is recreated and that one run pays the full build. That is the same
+trade as any cache key.
+
+**The install has to hand back the same files.** `package-import-method`
+defaults to `auto`, which is `hardlink` off a GitHub-hosted runner and pnpm's
+own default on one.
 
 pnpm's own `auto` clones — APFS copy-on-write — and a clone is a **new inode
-with a new mtime** for every file it materialises. So a second run that changed
-no dependency still hands Xcode a `node_modules` where every file is newer than
-the object files built from it, and a DerivedData tree that was kept at some
-expense buys nothing: React Native's pods compile from `node_modules`, and Xcode
-decides what is stale by timestamp. Hardlinking reuses the store's inodes,
-mtimes included. On a hosted runner nothing survives the job, so there is no
-warm anything to protect and pnpm's default stays.
+with a new mtime** for every file it materialises. `actions/checkout` cleans
+ignored files, so `node_modules` is reinstalled every run; with a clone, every
+file in it comes back newer than the object files built from it. React Native's
+pods compile out of `node_modules`, so that is a full recompile on its own.
+Hardlinking reuses the store's inodes, mtimes included: the reinstalled tree is
+byte-for-byte the same files, with the same timestamps, and nothing looks stale.
 
 It is set in the environment for the install step only. Nothing writes an
 `.npmrc`, so no developer's checkout changes and no later command inherits it.
@@ -765,9 +790,9 @@ jobs:
 ```
 
 `runner-heartbeat` has to be passed in: a called workflow cannot read the
-caller's variables for you. On a self-hosted runner the workflow also creates
-its own simulator and deletes it afterwards, because a machine that is not
-destroyed after the job accumulates one full disk image per run; it keeps
+caller's variables for you. On a self-hosted runner the workflow also keeps one
+dedicated simulator between runs and erases it before each, rather than driving
+whatever the machine's owner has booted or minting a new device every time; it keeps
 DerivedData at a fixed path instead of round-tripping it through the cache
 service; it hardlinks the pnpm install rather than cloning it; and it leaves
 `~/.maestro` alone, because on a machine somebody uses that is their install
@@ -906,6 +931,7 @@ needs it.
 | `xcode-version` / `maestro-version`                             | `latest` / `2.7.0`              | Toolchain pins                             |
 | `cache-maestro`                                                 | `auto`                          | Hosted only; see below                     |
 | `simulator-device` / `simulator-runtime`                        | newest available                | Pin only if a flow needs a screen size     |
+| `reuse-device` / `device-name`                                  | `auto` / `magic-e2e`            | One simulator kept between runs; see above |
 | `prebuild-command` / `install-command` / `node-version-file`    | Expo + pnpm defaults            | Bare RN, npm, a pinned Node                |
 | `package-import-method`                                         | `auto`                          | Hardlink off a hosted runner; see above    |
 | `native-cache-paths` / `cache-epoch` / `cold`                   | the list below / `v1` / `false` | Cache keying and cache busting             |

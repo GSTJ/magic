@@ -65,16 +65,33 @@ inputs:
     default: "240"
   create-device:
     description: >
-      auto | true | false. true creates a dedicated device from the newest
-      runtime's own supportedDeviceTypes — the only pairing `simctl create`
-      accepts — after deleting any left over from an earlier run under the same
-      name. auto is true off a GitHub-hosted runner and false on one: a hosted
-      runner is destroyed after the job, so creating there only costs a boot,
-      while a self-hosted Mac accumulates one full disk image per run.
+      auto | true | false. true uses a dedicated device named device-name,
+      creating it from the newest runtime's own supportedDeviceTypes — the only
+      pairing `simctl create` accepts — when it is not there yet. auto is true
+      off a GitHub-hosted runner and false on one: a hosted runner is destroyed
+      after the job, so creating there only costs a boot, while a self-hosted
+      Mac is somebody's desktop and picking whatever is booted drives their
+      simulator.
+    required: false
+    default: auto
+  reuse-device:
+    description: >
+      auto | true | false. Keep the dedicated device between runs instead of
+      creating and deleting one each time, so its UDID does not change.
+
+      The UDID is not cosmetic. It goes into `-destination` and therefore into
+      the build description, and changing it invalidates the whole incremental
+      build: measured on one machine, same sources, same settings, only the
+      device differing — 24s and 4 compile tasks became 69s and 310. A
+      per-run device silently cancels every DerivedData cache this repo keeps.
+
+      The device is erased before use, so a reused one starts as clean as a
+      fresh one; what it keeps is its identity. auto is true off a GitHub-hosted
+      runner and false on one, where nothing survives the job to be reused.
     required: false
     default: auto
   device-name:
-    description: Name for the created device. Also what the stale-device sweep matches on.
+    description: Name for the dedicated device. Also what the stale-device sweep matches on.
     required: false
     default: magic-e2e
   install-cocoapods:
@@ -296,6 +313,7 @@ runs:
         SIM_RUNTIME: ${{ inputs.simulator-runtime }}
         SIM_FALLBACK: ${{ inputs.simulator-fallback }}
         SIM_CREATE: ${{ inputs.create-device }}
+        SIM_REUSE: ${{ inputs.reuse-device }}
         SIM_NAME: ${{ inputs.device-name }}
       run: |
         set -euo pipefail
@@ -304,28 +322,61 @@ runs:
         if [ "$create" = "auto" ]; then
           if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]; then create=false; else create=true; fi
         fi
+        reuse="$SIM_REUSE"
+        if [ "$reuse" = "auto" ]; then
+          if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]; then reuse=false; else reuse=true; fi
+        fi
 
         if [ "$create" = "true" ]; then
-          # A self-hosted Mac is not destroyed after the job, and a device from
-          # an earlier run is still sitting there with a full disk image behind
-          # it. Sweep before creating, so a cancelled run cannot leave the
-          # machine slowly filling up; the caller tears this one down on the way
-          # out, and this sweep only ever has to catch runs that were killed.
-          stale_list="${RUNNER_TEMP:-/tmp}/magic-stale-simulators.txt"
+          # Every device already carrying this name, as `udid|label`.
+          existing="${RUNNER_TEMP:-/tmp}/magic-existing-simulators.txt"
           xcrun simctl list devices --json | python3 -c '
-        import json, os, sys
+        import json, os, re, sys
         want = os.environ["SIM_NAME"]
-        for entries in json.load(sys.stdin)["devices"].values():
+        for runtime, entries in json.load(sys.stdin)["devices"].items():
+            match = re.search(r"iOS-(\d+)(?:-(\d+))?", runtime)
+            label = f"iOS {match.group(1)}" if match else runtime
             for device in entries:
                 if device.get("name") == want and device.get("udid"):
-                    print(device["udid"])
-        ' > "$stale_list"
-          while read -r stale; do
-            [ -n "$stale" ] || continue
-            echo "Removing leftover simulator $stale"
-            xcrun simctl shutdown "$stale" 2>/dev/null || true
-            xcrun simctl delete "$stale" 2>/dev/null || true
-          done < "$stale_list"
+                    print(device["udid"], f"{want} ({label})", sep="|")
+        ' > "$existing"
+
+          # Reuse the first one and delete the rest. Keeping the UDID is the
+          # whole point — it is in `-destination`, so it is in the build
+          # description, and a new one every run invalidates every incremental
+          # build on the machine. Deleting the rest is what stops a killed run
+          # from leaving disk images behind, which is what the old sweep was
+          # for; it just no longer takes the useful device with them.
+          keep=""
+          keep_name=""
+          if [ "$reuse" = "true" ]; then
+            IFS='|' read -r keep keep_name < "$existing" || true
+          fi
+          while IFS='|' read -r found found_name; do
+            [ -n "$found" ] || continue
+            [ "$found" != "$keep" ] || continue
+            echo "Removing leftover simulator $found_name — $found"
+            xcrun simctl shutdown "$found" 2>/dev/null || true
+            xcrun simctl delete "$found" 2>/dev/null || true
+          done < "$existing"
+
+          if [ -n "$keep" ]; then
+            # Erased, not just reused: a device that keeps its identity must not
+            # also keep the last run's data, or "reuse" quietly means "start
+            # from whatever the previous suite left behind".
+            udid="$keep"
+            xcrun simctl shutdown "$udid" 2>/dev/null || true
+            xcrun simctl erase "$udid"
+            echo "Reusing $keep_name — $udid"
+            {
+              echo "udid=$udid"
+              echo "name=$keep_name"
+              # Not ours to delete: it is meant to outlive this run, which is
+              # the only reason its UDID is stable.
+              echo "created=false"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Pick the runtime first, then a device type that runtime actually
           # lists. Choosing the newest runtime and the newest iPhone
@@ -398,6 +449,10 @@ runs:
           udid=$(xcrun simctl create "$SIM_NAME" "$device_type" "$runtime_id")
           name="$device_name ($runtime_name)"
           echo "Created $SIM_NAME: $name — $udid"
+          # With reuse on, the device we just made is the one the *next* run
+          # keeps, so it must survive this one — the caller only deletes what
+          # this step reports as created.
+          if [ "$reuse" = "true" ]; then create=false; fi
         else
           selection=$(xcrun simctl list devices available --json | python3 -c '
         import json, os, re, sys

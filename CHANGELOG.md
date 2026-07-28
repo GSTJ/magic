@@ -5,9 +5,8 @@ together and most of what a consumer needs to know spans more than one of them.
 
 ## 2026-07-28 — CI: what the first iOS E2E adoption found
 
-No npm package changed. Everything here is in `.github/`. The repo tag for this
-round is `v1.7.0` — a minor, because `e2e-ios.yml` grows four inputs and the
-job topology changes shape — and `v1` moves onto it.
+No npm package changed. Everything here is in `.github/`. The round shipped as
+`v1.7.0` and `v1.7.1`; `v1` moves onto the latter.
 
 `would-you-rather` adopted `e2e-ios.yml@v1` the day it shipped and found seven
 things, all of them by running into them. Every fix below has the run that
@@ -88,14 +87,41 @@ self-hosted Mac it is the login user's own Maestro install with their run
 history under it. `auto` now means hosted-only. A runner that keeps its disk
 does not need a cache of a directory it already has.
 
-### New: `package-import-method`, or why a warm DerivedData was not warm
+### Fixed: a warm DerivedData was never being used, and the cause was the simulator
+
+The headline of this round. Off a GitHub-hosted runner this action created a
+simulator per run and deleted it afterwards. The UDID goes into `-destination`,
+`-destination` goes into the build description, and a build description that
+changed every run invalidated every target — so the persistent DerivedData was
+restored, reported as a hit, and then recompiled from scratch, every time, for
+as long as it has existed.
+
+Measured on one Mac: same sources, same settings, same warm 2.0 GB tree, only
+the device differing.
+
+| Build                  | Wall | Compile tasks |
+| ---------------------- | ---- | ------------- |
+| repeat, same UDID      | 24s  | 4             |
+| repeat, different UDID | 69s  | 310           |
+
+`reuse-device` (auto: on off a hosted runner) keeps one device named
+`magic-e2e` between runs and erases it before each, so it starts as clean as a
+fresh one and keeps only its identity. The stale-device sweep still runs — it
+now keeps one instead of removing them all, which is what it was really for.
+
+### New: `package-import-method`, the other half of the same problem
 
 pnpm's default `auto` clones (APFS copy-on-write), and a clone is a **new inode
-with a new mtime** for every file. A second run that changed no dependency still
-handed Xcode a `node_modules` where everything was newer than the object files
-built from it, so the DerivedData tree kept at some expense bought nothing.
-`auto` now means `hardlink` off a GitHub-hosted runner — same inodes, same
-mtimes — and pnpm's own default on one, where nothing survives the job anyway.
+with a new mtime** for every file. `actions/checkout` cleans ignored files, so
+`node_modules` is reinstalled every run and every file in it came back newer
+than the object files built from it — a full recompile of React Native's pods
+on its own, independent of the simulator. `auto` now means `hardlink` off a
+GitHub-hosted runner — same inodes, same mtimes — and pnpm's own default on one,
+where nothing survives the job anyway.
+
+This one was found first and fixed first, and on its own it changed nothing:
+the simulator churn above was invalidating the build before the install ever
+got a chance to. Both had to go.
 
 Set in the environment for the install step only; nothing writes an `.npmrc`.
 Which variable does the work depends on the pnpm version, measured by counting
