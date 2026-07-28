@@ -699,10 +699,44 @@ consumers breaks this repo's own build first.
   is upstream; vendoring the two rules actually used into `magic-oxlint-plugin`
   would end it permanently and is the better long-term answer.
 
-  Mitigated for now by documenting `peerDependencyRules.ignoreMissing: ["eslint"]`
-  in the README's pnpm section, and by no longer claiming in the first paragraph
-  that "ESLint and Prettier are gone" — they do not run, which is a different and
-  true statement.
+  This repo now applies the source fix locally, via `packageExtensions` in
+  `pnpm-workspace.yaml`, marking the `eslint` peer optional on both plugins.
+  Install drops from 187 resolved packages to 101 and the eslint tree leaves the
+  lockfile entirely; `pnpm run check` is unchanged at 83/83, including the two
+  expectations that assert `safe-jsx(jsx-explicit-boolean)` and the
+  `eslint-plugin-react-native` jsPlugin still load and fire. The README hands
+  consumers the same stanza. It is still worth publishing safe-jsx 1.3.1 and
+  vendoring the two react-native rules into `magic-oxlint-plugin`, because a
+  `packageExtensions` entry is per-repo and every consumer has to add it.
+
+  What forced the issue: Dependabot GHSA-mh99-v99m-4gvg (CVE-2026-14257,
+  unbounded expansion length in `brace-expansion`, CVSS 7.5). The only vulnerable
+  copy in this lockfile was `brace-expansion@1.1.16` under `minimatch@3.1.5`,
+  reached exclusively through auto-installed eslint 9 — so it rooted in
+  `magic-oxlint-config`'s real `dependencies`, which is why Dependabot scored it
+  `runtime` rather than dev-only. There is no upgrade: 1.1.16 is the tip of the v1
+  line and fixes a different bug (stack exhaustion in the `{a},b}` rewrite), the
+  backports landed on 2.1.3, 3.0.3/3.0.4/3.0.5 and 5.0.8, and `minimatch@3.1.5`
+  pins `^1.1.7`. Overriding across the major is not available either: 3.x and 5.x
+  export a namespace rather than the function, so `minimatch@3`'s
+  `var expand = require('brace-expansion'); expand(pattern)` dies with
+  `TypeError: expand is not a function`. Verified all four locally against
+  `minimatch@3.1.5`: 1.1.16 matches correctly but kills the process on
+  `'{a,b}'.repeat(1500)` with an out-of-memory abort, exit 1 under a 256 MB heap;
+  2.1.3 matches correctly and survives the same input in 196 ms; 3.0.5 and 5.0.8
+  `require()` fine but throw the `TypeError` the moment minimatch calls `expand`,
+  which is inside the `Minimatch` constructor. Removing eslint removes the copy,
+  which is the honest close.
+
+  Also corrected: the README used to recommend
+  `peerDependencyRules.ignoreMissing: ["eslint"]` for this. It does not work. On
+  pnpm 11.17.0 it only suppresses the missing-peer warning; `autoInstallPeers`
+  still installs eslint, and a minimal repro (one dependency on
+  `eslint-plugin-react-native@5.0.0`) produces a byte-identical lockfile with the
+  stanza and without it.
+
+  The first paragraph also no longer claims "ESLint and Prettier are gone" — they
+  do not run, which is a different and true statement.
 
 - **`eslint-plugin-safe-jsx`'s autofix destroys narrowing.**
   `safe-jsx/jsx-explicit-boolean` rewrites `{toast && <Toast {...toast} />}` to

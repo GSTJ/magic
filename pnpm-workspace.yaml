@@ -14,3 +14,19 @@ minimumReleaseAgeExclude:
   - eslint-plugin-safe-jsx@1.3.0
   - turbo@2.10.7
   - "@turbo/*"
+# The two JS plugins `magic-oxlint-config` bundles declare a **required**
+# `eslint` peer that nothing ever calls — oxlint loads them through its own
+# jsPlugin host. `autoInstallPeers` honours the peer anyway and drags in eslint
+# 9, which is where the unpatchable `minimatch@3 -> brace-expansion@1` tail
+# comes from. Marking the peer optional is the fix DECISIONS.md §4 wants made
+# upstream; until those two packages ship it, do it here. `peerDependencyRules:
+# ignoreMissing` does NOT do this — it only silences the warning.
+packageExtensions:
+  eslint-plugin-safe-jsx:
+    peerDependenciesMeta:
+      eslint:
+        optional: true
+  eslint-plugin-react-native:
+    peerDependenciesMeta:
+      eslint:
+        optional: true
