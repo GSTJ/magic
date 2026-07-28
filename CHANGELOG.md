@@ -3,6 +3,41 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — Dropping the unused eslint tree
+
+No npm package changed. The round ships as `v1.8.1`; `v1` moves onto it.
+
+### Fixed: `brace-expansion` GHSA-mh99-v99m-4gvg is out of the lockfile
+
+CVE-2026-14257, unbounded expansion length, CVSS 7.5. The one vulnerable copy
+was `brace-expansion@1.1.16` under `minimatch@3.1.5`, and it arrived through
+eslint 9, which `autoInstallPeers` installs to satisfy the required `eslint`
+peer on the two JS plugins `magic-oxlint-config` bundles. Nothing calls it:
+oxlint loads both plugins through its own jsPlugin host.
+
+There was no version to move to. `minimatch@3.1.5` pins `^1.1.7`; 1.1.16 is the
+tip of the v1 line and its only change over 1.1.15 turns the `{a},b}` rewrite's
+recursion into a loop, with no `maxLength` bound, so it still aborts at exit 134
+on the advisory's own `'{a,b}'.repeat(1500)`. The backports went to 2.1.3,
+3.0.3/3.0.4/3.0.5 and 5.0.8, and 3.x/5.x export a namespace instead of the
+function, so `minimatch@3`'s `expand(pattern)` throws
+`TypeError: expand is not a function` under either.
+
+A `packageExtensions` block in `pnpm-workspace.yaml` marks the `eslint` peer
+optional on both plugins instead. DECISIONS.md section 4 asks for that same fix
+at the source; this applies it locally. The install goes from 187 resolved
+packages to 101 and `brace-expansion` is left at 5.0.8 under ts-morph.
+`pnpm run check` holds at 83/83, `safe-jsx(jsx-explicit-boolean)` and the
+`eslint-plugin-react-native` jsPlugin both still load and fire.
+
+### Changed: the README's pnpm recommendation
+
+It said `peerDependencyRules.ignoreMissing: ["eslint"]`. On pnpm 11.17.0 that
+silences the missing-peer warning and installs eslint anyway; a repro with one
+dependency on `eslint-plugin-react-native@5.0.0` gives a byte-identical lockfile
+with the block and without it. The README hands consumers the
+`packageExtensions` block above now.
+
 ## 2026-07-28 — CI: the check job can go to the Mac too
 
 No npm package changed. Everything here is in `.github/workflows/ci.yml` and the

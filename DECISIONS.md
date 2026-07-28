@@ -722,11 +722,13 @@ consumers breaks this repo's own build first.
   `var expand = require('brace-expansion'); expand(pattern)` dies with
   `TypeError: expand is not a function`. Verified all four locally against
   `minimatch@3.1.5`: 1.1.16 matches correctly but kills the process on
-  `'{a,b}'.repeat(1500)` with an out-of-memory abort, exit 1 under a 256 MB heap;
-  2.1.3 matches correctly and survives the same input in 196 ms; 3.0.5 and 5.0.8
-  `require()` fine but throw the `TypeError` the moment minimatch calls `expand`,
-  which is inside the `Minimatch` constructor. Removing eslint removes the copy,
-  which is the honest close.
+  `'{a,b}'.repeat(1500)` with `FATAL ERROR: JavaScript heap out of memory` under a
+  256 MB heap, which is a `SIGABRT`, so the shell sees **exit 134** and not a
+  catchable throw; 2.1.3 matches correctly and survives the same input in under
+  200 ms; 3.0.5 and 5.0.8 `require()` fine but throw the `TypeError` the moment
+  minimatch calls `expand`, which is `Minimatch.braceExpand` reached from the
+  `Minimatch` constructor. Removing eslint removes the copy, which is the honest
+  close.
 
   Also corrected: the README used to recommend
   `peerDependencyRules.ignoreMissing: ["eslint"]` for this. It does not work. On
