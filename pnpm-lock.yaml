@@ -4,8 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-packageExtensionsChecksum: sha256-uSZ68ZfgPunTHvzVPylGuwHeRKSIygyGjbqpfQ7w6Ns=
-
 importers:
 
   .:
@@ -142,8 +140,8 @@ importers:
   packages/oxlint-config:
     dependencies:
       eslint-plugin-safe-jsx:
-        specifier: ^1.3.0
-        version: 1.3.0
+        specifier: ^1.3.3
+        version: 1.3.5
       magic-oxlint-plugin:
         specifier: workspace:^
         version: link:../oxlint-plugin
@@ -837,8 +835,8 @@ packages:
     resolution: {integrity: sha512-/veY75JbMK4j1yjvuUxuVsiS/hr/4iHs9FTT6cgTexxdE0Ly/glccBAkloH/DofkjRbZU3bnoj38mOmhkZ0lHw==}
     engines: {node: '>=12'}
 
-  eslint-plugin-safe-jsx@1.3.0:
-    resolution: {integrity: sha512-6IvENBEMjHLxp8TOtSHwZ2qmlsZ1XQEyyO9EVDBze37rLvXyPXmqs0wjFNbXFQpF+oTJhEg7hr/x9qMthqezrw==}
+  eslint-plugin-safe-jsx@1.3.5:
+    resolution: {integrity: sha512-06Z/xVJbuj31TWUJM9r0aEjqJbtgqqE/7+Nr9bJUmCMtoo9Du9CZKa9397lCm+KsSAT+VjPr0kE7dLJ20l3eGw==}
     engines: {node: '>=4.0'}
     peerDependencies:
       eslint: ^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9 || ^10
@@ -1948,7 +1946,7 @@ snapshots:
 
   escape-string-regexp@5.0.0: {}
 
-  eslint-plugin-safe-jsx@1.3.0: {}
+  eslint-plugin-safe-jsx@1.3.5: {}
 
   estree-util-attach-comments@3.0.0:
     dependencies:

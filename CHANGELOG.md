@@ -71,6 +71,13 @@ consumer had to add their own. Now there is nothing to add.
 `eslint-plugin-safe-jsx@1.3.2` shipped the same fix upstream on the other arm,
 so `^1.3.0` picks it up on any fresh resolve.
 
+The safe-jsx floor moved to `^1.3.3` with it. 1.3.2 is the first release
+carrying the optional peer, so a range that still admitted 1.3.0 would let an
+existing consumer lockfile keep installing eslint. This repo's own
+`pnpm-workspace.yaml` no longer carries a `packageExtensions` block at all,
+which is the check that "nothing for a consumer to add" is true rather than
+aspirational.
+
 ## 2026-07-28 — No native oxlint cover for the react-native rules
 
 No npm package changed. The round ships as `v1.8.3`; `v1` moves onto it.

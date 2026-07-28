@@ -604,6 +604,30 @@ process.stdout.write(
       .length === 0,
     codes(r, "unused-styles-no-component.tsx").join(", ") || "none",
   );
+
+  // The entry name is `key.name` verbatim. A computed *identifier* key still
+  // has one; a string-literal or template-literal key does not, and upstream's
+  // `Array#join` renders the missing name as the empty string — so those report
+  // as `styles.` with nothing after the dot. Interpolating the raw value writes
+  // `styles.undefined` instead, which is the one divergence the differential
+  // corpus against eslint-plugin-react-native@5.0.0 caught. Asserted on the
+  // whole message, not a suffix, because the suffix is what went wrong.
+  const keyless = diag(
+    r,
+    "unused-styles-keyless.tsx",
+    "react-native(no-unused-styles)",
+  );
+  const keylessMessages = keyless.map((d) => d.message).sort();
+  check(
+    "a computed identifier key keeps its name; a literal key reports as `styles.`",
+    keylessMessages.join(" | ") ===
+      [
+        "Unused style detected: styles.",
+        "Unused style detected: styles.",
+        "Unused style detected: styles.key",
+      ].join(" | "),
+    keylessMessages.join(" | ") || "none",
+  );
 }
 
 // ---------------------------------------------------------------- next ----

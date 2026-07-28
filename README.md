@@ -506,6 +506,14 @@ empty project:
 | `npm audit`                     | 5 high                      | 0        |
 
 No `packageExtensions` stanza, no `overrides`, nothing for a consumer to add.
+This repo carries none either, which is the check that the claim is true: its own
+lockfile has no `eslint` entry and no `brace-expansion` at all.
+
+The safe-jsx floor is `^1.3.3` rather than `^1.3.0` on purpose. 1.3.2 is the
+first release with the optional peer, so a `^1.3.0` range would let an existing
+consumer lockfile stay resolved on 1.3.0 and keep installing eslint. The floor
+makes the row above hold for anyone who installs or updates, not only for a
+clean resolution.
 
 **If you are still on 1.2.0**, the mitigations below still apply. On pnpm, mark
 the peer optional:

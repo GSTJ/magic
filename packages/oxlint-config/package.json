@@ -51,7 +51,7 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
-    "eslint-plugin-safe-jsx": "^1.3.0",
+    "eslint-plugin-safe-jsx": "^1.3.3",
     "magic-oxlint-plugin": "workspace:^"
   },
   "peerDependencies": {

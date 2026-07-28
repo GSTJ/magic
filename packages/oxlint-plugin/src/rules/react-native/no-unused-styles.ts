@@ -46,6 +46,22 @@ import {
 
 const MESSAGE_ID = "unusedStyle";
 
+/**
+ * The key name to put in the message.
+ *
+ * Upstream builds the whole string with
+ * `["Unused style detected: ", sheet, ".", node.key.name].join("")`, and
+ * `Array#join` renders a missing name as the empty string. Computed and
+ * string-literal StyleSheet keys have no `key.name`, so upstream reports
+ * `styles.` with nothing after the dot. Interpolating `String(undefined)` here
+ * would write `styles.undefined` instead, which is a different message for the
+ * same code.
+ */
+const entryName = (property: Node): string => {
+  const name = (property.key as Node | undefined)?.name;
+  return typeof name === "string" ? name : "";
+};
+
 export const noUnusedStyles: EslintRuleModule = defineOxlintRule({
   meta: {
     type: "problem",
@@ -131,7 +147,13 @@ export const noUnusedStyles: EslintRuleModule = defineOxlintRule({
               messageId: MESSAGE_ID,
               data: {
                 sheet,
-                entry: String((property.key as Node | undefined)?.name),
+                // Upstream builds this message with
+                // `[..., key, ".", node.key.name].join("")`, and `Array#join`
+                // renders a missing name as the empty string. A computed or
+                // string-literal StyleSheet key has no `key.name`, so upstream
+                // reports `styles.` with nothing after the dot. `String()`
+                // would write `styles.undefined` instead.
+                entry: entryName(property),
               },
             });
           }

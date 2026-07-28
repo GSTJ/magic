@@ -854,9 +854,38 @@ properties of null (reading 'expression')`). Guarded.
   `npm i magic-oxlint-config@1.2.0` added 90 packages, eslint 9.39.5,
   `minimatch@3.1.5`, `brace-expansion@1.1.16` and 5 high `npm audit` findings.
   The 2.0.0 tarball adds 3 packages, no eslint, no `brace-expansion`, 0 findings.
-  On pnpm, 90 `.pnpm` directories to 3. No `packageExtensions`, no `overrides`,
-  nothing for a consumer to add — which was the whole objection to the
-  `packageExtensions` fix in the first place.
+  On pnpm, 90 `.pnpm` directories to 3, 14 MB to 688 KB. No `packageExtensions`,
+  no `overrides`, nothing for a consumer to add — which was the whole objection
+  to the `packageExtensions` fix in the first place. This repo's own
+  `pnpm-workspace.yaml` no longer carries the stanza either; that is the check
+  that the claim is true rather than aspirational.
+
+  The safe-jsx dependency floor is `^1.3.3`, not `^1.3.0`. 1.3.2 is the first
+  release carrying the optional peer, and a range that still admits 1.3.0 lets an
+  existing consumer lockfile stay on the version that installs eslint. The floor
+  is what makes "nothing for a consumer to add" true on an update and not only on
+  a clean resolution. It costs a `minimumReleaseAgeExclude` entry until 1.3.5
+  clears the three-day window, which is the same hand-vetting 1.3.0 got.
+
+  **Verified end to end, not inferred.** Two consumer directories, each a real
+  `pnpm add` of a real `pnpm pack` tarball — 1.2.0 in one, 2.0.0 in the other —
+  linting the same 52-file corpus with the same `oxlint.config.mts`. Every
+  diagnostic compared on filename, line, column, byte offset, span length, code,
+  severity and message text, across every rule the preset enables and not only
+  the four: 118 of 119 identical. The one difference is 1.2.0 reporting
+  `Error running JS plugin … Cannot read properties of null (reading 'expression')`
+  on `<View style />`, where the upstream rule throws and the port does not.
+  The 55 `react-native/*` diagnostics match exactly, as does `--fix` output over
+  the whole corpus and the `settings["react-native/style-sheet-object-names"]`
+  path.
+
+  That corpus also caught the one thing the port got wrong. `no-unused-styles`
+  built its message with `String(node.key.name)`, so a string-literal or
+  template-literal StyleSheet key reported as `Unused style detected:
+styles.undefined` where upstream's `Array#join` renders the missing name as the
+  empty string and reports `styles.` with nothing after the dot. A computed
+  _identifier_ key does have a `.name` and reports it, so the three shapes differ
+  and all three are now pinned in `fixtures/adversarial/react-native`.
 
   **There is no native shortcut either, as of oxlint 1.76.0.** Checked against
   oxlint's own `configuration_schema.json`, the same source `validate-rules.mjs`
