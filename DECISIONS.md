@@ -705,7 +705,7 @@ consumers breaks this repo's own build first.
   lockfile entirely; `pnpm run check` is unchanged at 83/83, including the two
   expectations that assert `safe-jsx(jsx-explicit-boolean)` and the
   `eslint-plugin-react-native` jsPlugin still load and fire. The README hands
-  consumers the same stanza. It is still worth publishing safe-jsx 1.3.1 and
+  consumers the same stanza. It is still worth publishing safe-jsx 1.3.2 and
   vendoring the two react-native rules into `magic-oxlint-plugin`, because a
   `packageExtensions` entry is per-repo and every consumer has to add it.
 
@@ -739,6 +739,48 @@ consumers breaks this repo's own build first.
 
   The first paragraph also no longer claims "ESLint and Prettier are gone" — they
   do not run, which is a different and true statement.
+
+  **Which of the two plugins carries the advisory, measured.**
+  `eslint-plugin-react-native@5.0.0` caps its `eslint` peer at `^9`, and eslint 9
+  is the last major that still depends on `@eslint/eslintrc` and resolves
+  `@eslint/config-array` onto `minimatch@3`, which is the whole
+  `brace-expansion@1` tail. `eslint-plugin-safe-jsx@1.3.1` allows `^10`.
+  Installed alone into an empty npm project, safe-jsx resolves eslint 10.8.0,
+  `minimatch@10.2.6` and the patched `brace-expansion@5.0.8`. react-native alone
+  resolves eslint 9.39.5, `minimatch@3.1.5` and `brace-expansion@1.1.16`.
+  Together the `^9` cap wins and the whole install sits on the vulnerable copy.
+  The safe-jsx optional-peer publish is therefore a weight fix, taking a
+  consumer install of that plugin from 59 packages to 1. Dropping the
+  react-native dependency is the security fix. They are separate problems.
+
+  Consumers therefore have a working mitigation today without either publish. On
+  npm, `"overrides": { "eslint": "^10" }` (yarn: `resolutions`) takes a fresh
+  `npm i magic-oxlint-config@1.2.0` from 78 packages and `brace-expansion@1.1.16`
+  to 62 and `5.0.8`. On pnpm the `packageExtensions` stanza is better still: 92
+  `.pnpm` directories to 6, with eslint absent and no `brace-expansion` at all.
+  Both are in the README.
+
+  **Vendoring the react-native rules, assessed.** The standing suggestion above
+  says "vendoring the two rules actually used". Four run at `error` in the
+  `react-native` preset: `no-inline-styles`, `no-color-literals`,
+  `no-single-element-style-arrays` and `no-unused-styles`. The rule bodies come
+  to 231 lines. Three of the four import `lib/util/stylesheet` (492 lines) and
+  `lib/util/Components` (407 lines), and `no-unused-styles` gates its whole
+  `Program:exit` on `components.all()` being non-empty, so `Components` has to
+  come along entire. With `lib/util/variable` (99 lines) that is about 1230 lines
+  of third-party MIT code to carry.
+
+  The `jsPlugins` specifier is what stops it. §1 established that oxlint resolves
+  those specifiers relative to the _consumer's_ config file. The JS entry points
+  therefore resolve to absolute paths, and the five emitted JSON variants fall
+  back to bare specifiers that already fail under pnpm's non-hoisted layout.
+  Vendored code needs a new specifier that resolves from a consumer's config
+  directory across the pnpm, npm and hoisted layouts. Getting it wrong does not
+  throw: oxlint carries on and the four rules silently stop reporting across
+  eleven repos that just migrated. That is the same worst-failure-shape argument
+  behind the `App.tsx` exemption above. Revisit it if upstream stays dormant, and
+  prove it with fixtures asserting identical diagnostics on real consumer code
+  before shipping.
 
 - **`eslint-plugin-safe-jsx`'s autofix destroys narrowing.**
   `safe-jsx/jsx-explicit-boolean` rewrites `{toast && <Toast {...toast} />}` to
