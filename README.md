@@ -46,17 +46,12 @@ shell, section primitives, clipboard button, scoped CSS, and GSAP effects into
 the consumer repo. Each package supplies its product demo, examples, history,
 and copy.
 
-Review the PR branch without writing files:
-
-```sh
-pnpm dlx shadcn@latest add GSTJ/magic/docs-landing#agent/docs-landing-registry --dry-run
-```
-
-The default-branch address becomes the regular install command after merge:
-
 ```sh
 pnpm dlx shadcn@latest add GSTJ/magic/docs-landing
 ```
+
+Add `--dry-run` to see the file list without writing anything, and
+`#some-branch` to install from a branch instead of `main`.
 
 ```text
 components/docs-landing/
@@ -69,9 +64,16 @@ components/docs-landing/
 The CLI resolves `@components` from `components.json` and installs
 `gsap@3.15.0`.
 
-`public/r/registry.json` and `public/r/docs-landing.json` are the flat payloads
-built by shadcn. `pnpm run validate-registry` checks their metadata, file list,
-and embedded source against `registry.json` and the four files above.
+The GitHub address reads `registry.json` and the source files straight from the
+repo. `public/r/registry.json` and `public/r/docs-landing.json` are the flat
+payloads built by shadcn, for the HTTPS address the Registry Directory will
+need. `pnpm run validate-registry` checks their metadata, file list, and
+embedded source against `registry.json` and the four files above.
+
+Nothing here is a package, so nothing compiles it as a side effect of a build.
+`registry/tsconfig.json` extends `magic-tsconfig/nextjs` and `pnpm run
+typecheck` runs it, which is what stops these four files rotting between
+releases.
 
 ### Registry Directory status
 
