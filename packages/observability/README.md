@@ -232,6 +232,8 @@ cannot be matched to the source maps that were uploaded for it.
 **`app/_layout.tsx`**:
 
 ```tsx
+import type { BoundaryFallbackProps } from "magic-observability/expo";
+
 import { PostHogProvider } from "posthog-react-native";
 import {
   ObservabilityBoundary,
