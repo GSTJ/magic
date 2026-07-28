@@ -16,6 +16,21 @@ name: 🛠️ CI
 # The required-check name a called workflow reports is always
 # `<caller job> / <called job>`, so it can never be a bare context. Set
 # `job-name` when a ruleset needs a particular second half.
+#
+# The check contexts a consumer gets:
+#
+#   <job-name>   the checks. Always. This is the one rulesets name.
+#   🧭 Route     only with hosted-fallback-labels. Advice, never a gate — with
+#                routing off the job is skipped, and a skipped job's conclusion
+#                is neutral, so it can satisfy nothing and block nothing.
+#
+# Routing is the same shape as e2e-ios.yml's, deliberately: same input names,
+# same beacon, same continue-on-error router, same
+# `needs.route.outputs.labels || <base labels>` read downstream. The lesson
+# behind that read is worth repeating here — on a repo whose Actions billing has
+# lapsed *no* `ubuntu-latest` job can start, so a router that hard-gates the work
+# is a router that stops the work. This one cannot: kill it and the job still
+# runs, on `runner-labels`.
 
 on:
   workflow_call:
@@ -87,27 +102,127 @@ on:
         required: false
         default: ""
       turbo-cache:
-        description: "Enable the GitHub Actions cache backend for turbo."
+        description: >
+          Enable the GitHub Actions cache backend for turbo. On by default
+          everywhere, self-hosted included: turbo reads its own local cache
+          first and only reaches the backend on a miss, so a warm machine never
+          pays for it, and a workspace that some other workflow cleaned still
+          gets its outputs back.
         type: boolean
         required: false
         default: true
+      pnpm-store-cache:
+        description: >
+          auto | true | false. Round-trip the pnpm store through the Actions
+          cache service. auto is true on a GitHub-hosted runner and false
+          anywhere else — a persistent machine already has the store on disk,
+          and restoring one over it is a download and a repack in exchange for
+          nothing.
+        type: string
+        required: false
+        default: auto
       job-name:
         description: "Second half of the required-check context this workflow reports as."
         type: string
         required: false
         default: "👮 Lint, Format, Typecheck"
-      runs-on:
+      runner-labels:
+        description: >
+          Runner for the check job: a bare label like `ubuntu-latest`, or a JSON
+          array like '["self-hosted","macos-local"]'.
         type: string
         required: false
         default: "ubuntu-latest"
+      hosted-fallback-labels:
+        description: >
+          Labels to fall back to when runner-labels names a self-hosted runner
+          and its heartbeat is stale. Empty disables routing entirely, and the
+          🧭 Route job with it.
+        type: string
+        required: false
+        default: ""
+      runner-heartbeat:
+        description: >
+          Unix timestamp the self-hosted runner last published, normally the
+          repo variable MAC_RUNNER_HEARTBEAT. It has to be an input: a called
+          workflow cannot read the caller's variables for you. Why a beacon and
+          not a live lookup — `gh api repos/{repo}/actions/runners` needs the
+          `administration` permission, which GITHUB_TOKEN cannot hold under any
+          `permissions:` block. It answers 403 and always will.
+        type: string
+        required: false
+        default: ""
+      heartbeat-max-age-seconds:
+        description: "How stale the heartbeat may be before the run goes hosted."
+        type: number
+        required: false
+        default: 600
+      runs-on:
+        description: >
+          Deprecated single-label alias for runner-labels, kept because callers
+          already pass it. Empty means "use runner-labels"; anything else
+          replaces runner-labels as the base the router starts from. Its default
+          changed from "ubuntu-latest" to "", which changes nothing: with
+          neither input set the base is runner-labels, and that is ubuntu-latest.
+        type: string
+        required: false
+        default: ""
     secrets:
       NPM_TOKEN:
         description: "Optional. Pass it only when the install needs a private registry — it is what switches registry-url on."
         required: false
 
 jobs:
+  # Advice, not a gate — see the header. The beacon, not a live lookup: a
+  # self-hosted Mac publishes a timestamp to a repo variable from a timer that
+  # has already confirmed the runner is listening, and a stale one means asleep,
+  # offline or dead. Repo variables are readable for free and hold nothing
+  # secret. Byte-for-byte the router from e2e-ios.yml, because two dialects for
+  # one decision is how the fleet ends up with two bugs.
+  route:
+    name: 🧭 Route
+    if: inputs.hosted-fallback-labels != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    outputs:
+      labels: ${{ steps.route.outputs.labels }}
+    steps:
+      - name: 🧭 Route
+        id: route
+        env:
+          IN_LABELS: ${{ inputs.runs-on != '' && inputs.runs-on || inputs.runner-labels }}
+          IN_FALLBACK: ${{ inputs.hosted-fallback-labels }}
+          IN_HEARTBEAT: ${{ inputs.runner-heartbeat }}
+          IN_MAX_AGE: ${{ inputs.heartbeat-max-age-seconds }}
+        run: |
+          set -euo pipefail
+          labels="$IN_LABELS"
+          verdict="🏷 $labels"
+          if [ -z "$IN_HEARTBEAT" ]; then
+            labels="$IN_FALLBACK"
+            verdict="☁️ $labels — no heartbeat published"
+          else
+            age=$(( $(date -u +%s) - IN_HEARTBEAT ))
+            if [ "$age" -ge 0 ] && [ "$age" -lt "$IN_MAX_AGE" ]; then
+              verdict="🖥️ $labels — heartbeat ${age}s old"
+            else
+              labels="$IN_FALLBACK"
+              verdict="☁️ $labels — heartbeat stale (${age}s)"
+            fi
+          fi
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          echo "$verdict"
+          echo "$verdict" >> "$GITHUB_STEP_SUMMARY"
+
   checkup:
     name: ${{ inputs.job-name }}
+    needs: [route]
+    # `!cancelled()`, so a skipped or failed `route` cannot skip the checks —
+    # that is the whole point of routing being its own continue-on-error job.
+    # The `name:` above is a plain input, never a matrix expression, so it
+    # renders identically whatever `route` did.
+    if: ${{ !cancelled() }}
     # Job-level on purpose: GitHub ignores workflow-level `concurrency` in a
     # workflow that only ever runs via `workflow_call` — it applies to workflow
     # *runs*, and this file never runs standalone. At the job level it takes
@@ -115,7 +230,23 @@ jobs:
     concurrency:
       group: magic-ci-${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
-    runs-on: ${{ inputs.runs-on }}
+    # Read in three parts: the router's verdict if it produced one, else the
+    # deprecated `runs-on` alias, else `runner-labels`. `fromJSON` is what lets
+    # one input carry either form — a JSON array goes through as a list of
+    # labels, and a bare label is quoted into a JSON string first, so the
+    # no-input path resolves to exactly the string `ubuntu-latest` this job has
+    # always used. A router that failed leaves the output empty and falls out of
+    # the chain, which is the case the whole shape exists for.
+    #
+    # Every line of the fold sits at one indentation on purpose: a
+    # more-indented line in a `>-` scalar keeps its newline instead of folding
+    # to a space, and this value has to end up as one line of expression.
+    runs-on: >-
+      ${{ fromJSON(
+      startsWith(needs.route.outputs.labels || inputs.runs-on || inputs.runner-labels, '[')
+      && (needs.route.outputs.labels || inputs.runs-on || inputs.runner-labels)
+      || format('"{0}"', needs.route.outputs.labels || inputs.runs-on || inputs.runner-labels)
+      ) }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -141,6 +272,13 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           install-command: ${{ inputs.install-command }}
           turbo-cache: ${{ inputs.turbo-cache }}
+          # See pnpm-store-cache. On a persistent machine the store is already
+          # there and shared with every other workflow on it, so the cache step
+          # is a download over a store that had the packages, plus a repack at
+          # the end. `hardlink` (the setup action's own off-hosted default) is
+          # what makes that store cheap to install from; the cache service adds
+          # nothing to it. Hosted keeps the cache, where the disk is new.
+          cache: ${{ inputs.pnpm-store-cache == 'true' || (inputs.pnpm-store-cache == 'auto' && runner.environment == 'github-hosted') }}
           # Only written when there is a token to put in it. Setting it
           # unconditionally leaves an .npmrc holding a literal
           # ${NODE_AUTH_TOKEN}, which the package-manager probes behind `cache:`
