@@ -3,6 +3,80 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-07-28 — A breaking major could automerge itself into every repo
+
+No npm package changed. The round ships as `v1.12.0`; `v1` moves onto it. Every
+repo extending `github>GSTJ/magic` picks the fix up on its next Renovate run.
+
+### Fixed: `default.json` granted automerge on majors instead of denying it
+
+The rule described as "Non-major bumps automerge everywhere. Majors always get a
+human" matched `["minor", "patch", "pin", "digest"]`. That matcher cannot match
+a major, so the rule granted automerge to everything else and denied it to
+nothing. Nothing else in the file denied majors as a class either.
+
+Renovate evaluates every entry in `packageRules` and the last one to set a key
+wins, so three later rules decided it: `magic-{/,}**`, the posthog group and
+`matchManagers: ["github-actions"]` all set `automerge: true` with no
+`matchUpdateTypes`, which covers majors. `matchDepTypes: ["devDependencies"]` is
+the first rule and nothing after it touched `automerge` for a plain dev
+dependency, so its `true` survived to the end and carried those majors on its
+own.
+
+Measured with Renovate 43.286.0's own `applyPackageRules`, four of five major
+cases automerged with no human:
+
+| Update                               | Before    | After |
+| ------------------------------------ | --------- | ----- |
+| `magic-oxlint-config` 1.2.0 -> 2.0.0 | automerge | human |
+| `chalk` 4.1.2 -> 5.0.0 (dev dep)     | automerge | human |
+| `posthog-js` 1.x -> 2.0.0            | automerge | human |
+| `actions/checkout` v4 -> v7          | automerge | human |
+| `typescript` 7 -> 8                  | human     | human |
+
+`typescript` was already held by a rule of its own, which is why it is the one
+row that did not change.
+
+`magic-oxlint-config@2.0.0` is the live one. It is breaking, it removed three
+rule names, and oxlint treats an unknown rule name as a fatal config error and
+exits 1. It is sitting in the three-day
+`minimumReleaseAge` quarantine in at least one consumer right now, and before
+this fix it would have merged itself when the quarantine expired.
+
+The gate is one rule, `{ "matchUpdateTypes": ["major"], "automerge": false }`,
+and it is the last entry in `packageRules`. Being last is what makes it hold:
+anything above it is overridden, and anything appended below it wins instead.
+
+### Changed: dev-scope majors need a human too
+
+The old reasoning was that dev dependencies are not shipped to users, so they
+can merge themselves. That bounds the runtime blast radius and says nothing
+about the operational one. A devDependency major is exactly how a breaking lint
+or TypeScript change reaches every repo on the same morning, which is what
+`magic-oxlint-config@2.0.0` would have done. Non-major dev bumps still merge
+themselves once CI is green.
+
+The devDependencies rule itself is unchanged, and stays unrestricted on purpose.
+Adding `matchUpdateTypes` to it looked like the tidy fix and quietly dropped
+`rollback`, `replacement`, `pinDigest` and `lockFileMaintenance` out of
+automerge along with the majors, because those are update types too. Swept every
+type through `applyPackageRules` to confirm the shipped version moves exactly
+one: `major`, true to false. The other nine are untouched.
+
+### New: `validate-renovate`
+
+`pnpm run validate-renovate` fails the build if the major gate is missing,
+narrowed by a `match*` key, no longer last, or duplicated, if any other rule
+grants automerge on a major, if a rule has no description, or if
+`minimumReleaseAge` drifts off three days. Twelve tests, and it fails against
+the version of `default.json` that shipped in `v1.11.0`.
+
+It checks structure and not behaviour on purpose. Re-implementing Renovate's
+matchers to assert what the preset does would be the same defect the preset
+already had: a check that believes a claim nobody verified against the tool.
+The behavioural before-and-after runs through Renovate's real
+`applyPackageRules` and is attached to the PR.
+
 ## 2026-07-28 — The docs landing ships as a shadcn item
 
 No npm package changed. The round ships as `v1.11.0`; `v1` moves onto it. New:

@@ -1246,6 +1246,22 @@ That resolves to `default.json` at the root of this repo, which is where the
 preset lives. Renovate deprecated serving a preset from `renovate.json`; this
 repo's own `renovate.json` just extends the preset like everyone else's.
 
+### What automerges
+
+| Update                               | Automerges |
+| ------------------------------------ | ---------- |
+| minor, patch, pin, digest            | yes        |
+| dev dependency, non-major            | yes        |
+| grouped GitHub Actions, non-major    | yes        |
+| **any major, anywhere**              | **no**     |
+| `oxlint`, `oxfmt`, `oxlint-tsgolint` | no         |
+| `fumadocs*`                          | no         |
+
+Majors are denied by the final rule in `packageRules`, and it has to stay final.
+Renovate evaluates every rule and the last one that sets a key wins, so a rule
+appended after it takes majors back. `pnpm run validate-renovate` fails the
+build when the gate moves, is narrowed, or disappears.
+
 ---
 
 ## Local overrides

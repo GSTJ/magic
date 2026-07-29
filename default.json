@@ -16,12 +16,12 @@
   },
   "packageRules": [
     {
-      "description": "Dev dependencies are not shipped to users; let them merge themselves once CI is green.",
+      "description": "Dev dependencies are not shipped to users, so let them merge themselves once CI is green. Dev-scope MAJORS are not covered: the last rule in this list takes them back, because a devDependency major is how a breaking tooling change reaches every repo at once. magic-oxlint-config@2.0.0 removed three rule names and oxlint treats an unknown rule name as a fatal config error, so that one bump exits 1 in every consumer on the same morning. Not shipping to users bounds the runtime blast radius, not the operational one. This rule stays unrestricted so rollback, replacement, pinDigest and lockFileMaintenance keep automerging; narrowing it with matchUpdateTypes silently drops those.",
       "matchDepTypes": ["devDependencies"],
       "automerge": true
     },
     {
-      "description": "Non-major bumps automerge everywhere. Majors always get a human.",
+      "description": "Minor, patch, pin and digest bumps automerge everywhere. This rule cannot grant a major: majors are denied by the last rule in this list.",
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
       "automerge": true
     },
@@ -92,6 +92,11 @@
       "description": "react-test-renderer must match the installed react exactly or @testing-library/react-native refuses to run. React's version comes from the Expo SDK.",
       "matchPackageNames": ["react-test-renderer"],
       "enabled": false
+    },
+    {
+      "description": "Majors always get a human. This rule is last on purpose. Renovate evaluates every packageRule in order and the last match wins, so this overrides the automerge: true that the magic tooling, posthog sdks and github actions rules above would otherwise grant on a major. A rule appended below this line silently takes majors back, so scripts/validate-renovate.mjs fails the build when this is not the final entry.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     }
   ]
 }
