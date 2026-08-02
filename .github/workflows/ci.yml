@@ -252,7 +252,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - name: 🏗 Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # See checkout-clean. This job does not care about leftover ignored
           # files, but the runner directory is shared with every other workflow

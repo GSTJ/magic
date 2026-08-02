@@ -88,7 +88,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - name: 🏗 Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # release tooling needs history to find the last tag.
           fetch-depth: 0
@@ -110,15 +110,20 @@ jobs:
 
       - name: 🏗 Build
         if: inputs.build-command != ''
-        run: ${{ inputs.build-command }}
+        env:
+          BUILD_COMMAND: ${{ inputs.build-command }}
+        run: bash -euo pipefail -c "$BUILD_COMMAND"
 
       - name: 🚀 Release
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT || github.token }}
+          GIT_USER_EMAIL: ${{ inputs.git-user-email }}
+          GIT_USER_NAME: ${{ inputs.git-user-name }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RELEASE_COMMAND: ${{ inputs.release-command }}
         run: |
-          git config --global user.email "${{ inputs.git-user-email }}"
-          git config --global user.name "${{ inputs.git-user-name }}"
+          git config --global user.email "$GIT_USER_EMAIL"
+          git config --global user.name "$GIT_USER_NAME"
           npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          ${{ inputs.release-command }}
+          bash -euo pipefail -c "$RELEASE_COMMAND"

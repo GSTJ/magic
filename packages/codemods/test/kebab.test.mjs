@@ -222,6 +222,15 @@ describe("kebab helpers", () => {
     assert.equal(isKebabCase("a--b.ts"), true);
   });
 
+  it("handles long underscore runs without regex backtracking", () => {
+    const underscores = "_".repeat(100_000);
+    assert.equal(isKebabCase(`${underscores}foo${underscores}.ts`), true);
+    assert.equal(
+      kebabifyStem(`${underscores}Foo${underscores}`),
+      `${underscores}foo${underscores}`,
+    );
+  });
+
   it("preserves everything after the stem when renaming", () => {
     assert.equal(
       kebabifyBasename("MyComponent.test.tsx"),

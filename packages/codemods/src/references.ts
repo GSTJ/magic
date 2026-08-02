@@ -1,7 +1,13 @@
 import type { Rename } from "./plan.ts";
 import type { ManualReview } from "./rewrite.ts";
 
-import { readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 
 import { isLintable, stemOf } from "./kebab.ts";
@@ -69,12 +75,26 @@ export const findStaleReferences = (
   });
 
   const readScannable = (relativePath: string): string => {
+    let descriptor: number | undefined;
     try {
       const absolute = join(root, relativePath);
-      if (statSync(absolute).size > 2 * 1024 * 1024) return "";
-      return readFileSync(absolute, "utf8");
+      descriptor = openSync(absolute, "r");
+      const opened = fstatSync(descriptor);
+      const named = lstatSync(absolute);
+      if (
+        !opened.isFile() ||
+        !named.isFile() ||
+        opened.dev !== named.dev ||
+        opened.ino !== named.ino ||
+        opened.size > 2 * 1024 * 1024
+      ) {
+        return "";
+      }
+      return readFileSync(descriptor, "utf8");
     } catch {
       return "";
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
     }
   };
 

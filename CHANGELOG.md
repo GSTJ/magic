@@ -3,6 +3,42 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-08-02 - Harden the shared tooling security boundaries
+
+The release publishes `magic-codemods@1.1.1`, `magic-docs@1.0.1`,
+`magic-observability@1.0.1`, and `magic-oxfmt-config@1.2.1`. The repo release is
+`v1.12.1`, and `v1` moves onto it.
+
+### Fixed: Cookie parsing stays linear on attacker-controlled headers
+
+`distinctIdFromCookieHeader` used a reluctant wildcard to find PostHog's cookie.
+A header with repeated `ph_phc_` prefixes could make that expression backtrack
+quadratically. The parser now walks semicolon-delimited cookies once and matches
+the PostHog name directly.
+
+### Fixed: File writes cannot follow a raced symlink
+
+The docs and oxfmt initializer CLIs checked a destination before writing it.
+Another process could replace the checked path with a symlink in that gap and
+make `--force` overwrite the symlink target. Forced writes now replace the path
+atomically, while new files use exclusive creation. The codemod's reference
+scanner also reads through a validated file descriptor, so a path swap cannot
+redirect it outside the repository.
+
+### Fixed: Reusable release inputs no longer enter shell source directly
+
+Release commands and Git identity inputs now cross into the shell through the
+environment. External GitHub Actions are pinned to full commit SHAs, and
+`validate-workflows` prevents mutable external refs from coming back. The iOS
+setup downloads Maestro's versioned release archive directly and verifies its
+SHA-256 before extracting it; the mutable remote installer no longer executes
+inside consumer CI.
+
+### Fixed: Filename handling avoids pathological regular expressions
+
+Long leading or trailing underscore runs now use bounded character scans. Path
+alias targets now replace every wildcard in malformed input.
+
 ## 2026-07-28 — A breaking major could automerge itself into every repo
 
 No npm package changed. The round ships as `v1.12.0`; `v1` moves onto it. Every

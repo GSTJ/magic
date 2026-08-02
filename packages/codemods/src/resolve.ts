@@ -122,7 +122,7 @@ const expandPathsEntry = (
     specifier.length - suffix.length,
   );
   return targets.map((target) =>
-    resolvePath(base, target.replace("*", middle)),
+    resolvePath(base, target.replaceAll("*", middle)),
   );
 };
 

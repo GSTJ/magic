@@ -364,7 +364,7 @@ runs:
       if: >-
         inputs.cache-ios-dir == 'true' && steps.resolve.outputs.use-cache == 'true'
         && steps.resolve.outputs.ios-persistent != 'true'
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ steps.resolve.outputs.app-dir }}/ios
         key: magic-ios-dir-${{ steps.resolve.outputs.key }}
@@ -372,7 +372,7 @@ runs:
     - name: ♻️ Restore DerivedData
       id: dd-cache
       if: steps.resolve.outputs.strategy == 'cache' && steps.resolve.outputs.use-cache == 'true'
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ steps.resolve.outputs.derived-data }}
         key: magic-dd-${{ steps.resolve.outputs.key }}
@@ -520,7 +520,7 @@ runs:
         always() && inputs.save-caches == 'true' && inputs.cache-ios-dir == 'true'
         && steps.ios-cache.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
         && steps.resolve.outputs.ios-persistent != 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ steps.resolve.outputs.app-dir }}/ios
         key: magic-ios-dir-${{ steps.resolve.outputs.key }}
@@ -529,7 +529,7 @@ runs:
       if: >-
         always() && inputs.save-caches == 'true' && steps.resolve.outputs.strategy == 'cache'
         && steps.dd-cache.outputs.cache-hit != 'true' && steps.build.outcome == 'success'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ steps.resolve.outputs.derived-data }}
         key: magic-dd-${{ steps.resolve.outputs.key }}

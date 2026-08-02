@@ -18,6 +18,14 @@ describe("distinctIdFromCookieHeader", () => {
     assert.equal(distinctIdFromCookieHeader(header), "user-42");
   });
 
+  it("skips a long cookie name with repeated PostHog prefixes", () => {
+    const decoy = `${"ph_phc_".repeat(50_000)}nope=value`;
+    assert.equal(
+      distinctIdFromCookieHeader(`${decoy}; ${cookieFor("user-42")}`),
+      "user-42",
+    );
+  });
+
   it("accepts the array form Node hands over for repeated headers", () => {
     assert.equal(
       distinctIdFromCookieHeader(["theme=dark", cookieFor("user-42")]),

@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -66,6 +73,24 @@ describe("magic-docs-init", () => {
       assert.equal(replaced.status, 0, replaced.stderr);
       assert.match(replaced.stdout, /replaced/);
       assert.deepEqual(readFileSync(path), sourceTheme);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces a forced symlink without overwriting its target", () => {
+    const directory = mkdtempSync(join(tmpdir(), "magic-docs-init-"));
+    try {
+      const sentinel = join(directory, "sentinel.css");
+      const path = join(directory, "magic-docs.css");
+      writeFileSync(sentinel, "/* keep */\n");
+      symlinkSync(sentinel, path);
+
+      const replaced = run(directory, ["--force", "--no-pages-marker"]);
+      assert.equal(replaced.status, 0, replaced.stderr);
+      assert.equal(readFileSync(sentinel, "utf8"), "/* keep */\n");
+      assert.deepEqual(readFileSync(path), sourceTheme);
+      assert.equal(lstatSync(path).isSymbolicLink(), false);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

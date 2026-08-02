@@ -47,8 +47,23 @@ export const stemOf = (basename: string): string =>
  * Leading and trailing underscore runs are stripped before the check, so
  * `_private.ts` and `__mocks__.ts` pass while `foo_bar.ts` does not.
  */
-const trimUnderscores = (stem: string): string =>
-  stem.replace(/^_+/u, "").replace(/_+$/u, "");
+const leadingUnderscoreLength = (value: string): number => {
+  let index = 0;
+  while (value[index] === "_") index += 1;
+  return index;
+};
+
+const trailingUnderscoreLength = (value: string): number => {
+  let index = value.length;
+  while (index > 0 && value[index - 1] === "_") index -= 1;
+  return value.length - index;
+};
+
+const trimUnderscores = (stem: string): string => {
+  const start = leadingUnderscoreLength(stem);
+  const end = stem.length - trailingUnderscoreLength(stem);
+  return stem.slice(start, Math.max(start, end));
+};
 
 /**
  * True when oxlint would leave this basename alone.
@@ -82,9 +97,11 @@ export const isKebabCase = (basename: string): boolean => {
  * when a human disagrees.
  */
 export const kebabifyStem = (stem: string): string => {
-  const leading = /^_*/u.exec(stem)?.[0] ?? "";
+  const leadingLength = leadingUnderscoreLength(stem);
+  const leading = stem.slice(0, leadingLength);
   const rest = stem.slice(leading.length);
-  const trailing = /_*$/u.exec(rest)?.[0] ?? "";
+  const trailingLength = trailingUnderscoreLength(rest);
+  const trailing = rest.slice(rest.length - trailingLength);
   const core = rest.slice(0, rest.length - trailing.length);
 
   // Unicode property escapes, not `[a-z]`/`[A-Z]`. oxlint is Rust and asks

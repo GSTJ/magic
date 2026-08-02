@@ -1,11 +1,12 @@
 import {
-  copyFileSync,
-  existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
+  renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type MaterializeThemeOptions = {
@@ -26,6 +27,24 @@ export type MaterializePagesMarkerResult = {
 
 const sourceTheme = fileURLToPath(new URL("../theme.css", import.meta.url));
 
+const errorCode = (error: unknown): string | undefined =>
+  typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : undefined;
+
+const replaceAtomically = (target: string, contents: Buffer): void => {
+  const directory = dirname(target);
+  mkdirSync(directory, { recursive: true });
+  const temporaryDirectory = mkdtempSync(join(directory, ".magic-docs-"));
+  const temporary = join(temporaryDirectory, "theme.css");
+  try {
+    writeFileSync(temporary, contents, { flag: "wx" });
+    renameSync(temporary, target);
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+};
+
 /**
  * Copy the exact published theme into a consumer. This is deliberately
  * idempotent, and refuses to replace a locally customized copy without an
@@ -35,11 +54,16 @@ export const materializeTheme = (
   options: MaterializeThemeOptions,
 ): MaterializeThemeResult => {
   const target = resolve(options.cwd, options.out ?? "magic-docs.css");
+  const expected = readFileSync(sourceTheme);
+  let current: Buffer | undefined;
 
-  if (existsSync(target)) {
-    const current = readFileSync(target);
-    const expected = readFileSync(sourceTheme);
+  try {
+    current = readFileSync(target);
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
 
+  if (current !== undefined) {
     if (current.equals(expected)) {
       return { path: target, status: "unchanged" };
     }
@@ -51,9 +75,23 @@ export const materializeTheme = (
   }
 
   mkdirSync(dirname(target), { recursive: true });
-  const status = existsSync(target) ? "replaced" : "created";
-  copyFileSync(sourceTheme, target);
-  return { path: target, status };
+  if (current === undefined) {
+    try {
+      writeFileSync(target, expected, { flag: "wx" });
+    } catch (error) {
+      if (errorCode(error) === "EEXIST") {
+        throw new Error(
+          `magic-docs-init: ${target} appeared while it was being created; rerun the command`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+    return { path: target, status: "created" };
+  }
+
+  replaceAtomically(target, expected);
+  return { path: target, status: "replaced" };
 };
 
 /**
@@ -65,11 +103,14 @@ export const materializePagesMarker = (
   publicDirectory = "public",
 ): MaterializePagesMarkerResult => {
   const target = resolve(cwd, publicDirectory, ".nojekyll");
-  if (existsSync(target)) {
-    return { path: target, status: "unchanged" };
-  }
-
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, "");
-  return { path: target, status: "created" };
+  try {
+    writeFileSync(target, "", { flag: "wx" });
+    return { path: target, status: "created" };
+  } catch (error) {
+    if (errorCode(error) === "EEXIST") {
+      return { path: target, status: "unchanged" };
+    }
+    throw error;
+  }
 };

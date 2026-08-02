@@ -147,6 +147,11 @@ on:
         type: string
         required: false
         default: "2.7.0"
+      maestro-sha256:
+        description: "Expected SHA-256 for the pinned Maestro release archive."
+        type: string
+        required: false
+        default: ""
       cache-maestro:
         description: >
           auto | true | false. Cache ~/.maestro. auto is true on a GitHub-hosted
@@ -394,7 +399,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: 🏗 Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # A quarantine entry is a borrowing facility with a maturity date. The
       # lint is what makes it one: three fields, and an age. Past the age
@@ -481,7 +486,7 @@ jobs:
       result: ${{ steps.maestro.outputs.result }}
     steps:
       - name: 🏗 Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # See checkout-clean: `git clean -ffdx` deletes node_modules and
           # ios/, which is what makes the caches below buy nothing.
@@ -514,6 +519,7 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
+          maestro-sha256: ${{ inputs.maestro-sha256 }}
           cache-maestro: ${{ inputs.cache-maestro }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
@@ -667,7 +673,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 🏗 Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # See checkout-clean: `git clean -ffdx` deletes node_modules and
           # ios/, which is what makes the caches below buy nothing.
@@ -699,6 +705,7 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
+          maestro-sha256: ${{ inputs.maestro-sha256 }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
           reuse-device: ${{ inputs.reuse-device }}
@@ -733,7 +740,7 @@ jobs:
           ls -lh "$RUNNER_TEMP/magic-app/app.tgz"
 
       - name: 📤 Upload the .app
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: magic-ios-app-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/magic-app/app.tgz
@@ -787,14 +794,14 @@ jobs:
           PY
 
       - name: 🏗 Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # See checkout-clean: `git clean -ffdx` deletes node_modules and
           # ios/, which is what makes the caches below buy nothing.
           clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
       - name: 📥 Download the .app
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: magic-ios-app-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/magic-app
@@ -826,6 +833,7 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
+          maestro-sha256: ${{ inputs.maestro-sha256 }}
           cache-maestro: ${{ inputs.cache-maestro }}
           simulator-device: ${{ inputs.simulator-device }}
           simulator-runtime: ${{ inputs.simulator-runtime }}
