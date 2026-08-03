@@ -1,10 +1,9 @@
 /**
  * Guard the two ways the CI half of this repo breaks consumers silently.
  *
- * 1. Refs. Everything under `.github/` and every consumption snippet in the docs
- *    has to name a tag. `@main` is what the fleet was on before this round: it
- *    reruns every consumer's CI on an unreviewed merge, and it makes "which
- *    version of the tooling produced this red build" unanswerable.
+ * 1. Refs. Third-party actions under `.github/` use immutable commit SHAs. This
+ *    repo's own reusable actions and every consumption snippet in the docs use
+ *    its moving major tag, which is the release channel consumers opted into.
  *
  * 2. Local action paths inside reusable workflows. `uses: ./.github/actions/x`
  *    in a `workflow_call` file resolves against the *caller's* checkout, not
@@ -61,18 +60,20 @@ const problemsWithUses = (value, { isReusable }) => {
     return [];
   }
 
-  if (!value.includes("@")) return [`"${value}" has no ref; pin a tag.`];
+  if (!value.includes("@")) return [`"${value}" has no ref.`];
 
   const problems = [];
   const ref = value.split("@").at(-1);
-  if (BRANCHY.has(ref)) {
-    problems.push(`"${value}" points at a branch; pin a tag.`);
-  } else if (!TAG.test(ref) && !SHA.test(ref)) {
-    problems.push(`"${value}" is neither a vN tag nor a full SHA.`);
-  }
-  if (value.startsWith(SELF) && ref !== MAJOR_TAG) {
+  if (value.startsWith(SELF)) {
+    if (ref !== MAJOR_TAG) {
+      problems.push(
+        `self-reference "${value}" must use the moving major tag ${MAJOR_TAG}, so a release reaches it.`,
+      );
+    }
+  } else if (!SHA.test(ref)) {
+    const kind = BRANCHY.has(ref) ? "branch" : "mutable tag";
     problems.push(
-      `self-reference "${value}" must use the moving major tag ${MAJOR_TAG}, so a release reaches it.`,
+      `third-party action "${value}" uses a ${kind}; pin its full commit SHA.`,
     );
   }
   return problems;
@@ -161,5 +162,5 @@ if (failures.length > 0) {
 
 process.stdout.write(
   `validate-workflows: OK — ${yamlFiles.length} workflow/action files and ${docs.length} READMEs, ` +
-    `every reference on a tag and every self-reference on ${MAJOR_TAG}.\n`,
+    `third-party actions pinned by SHA and every self-reference on ${MAJOR_TAG}.\n`,
 );

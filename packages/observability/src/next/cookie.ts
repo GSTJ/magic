@@ -10,7 +10,22 @@
  * The cookie is named `ph_<project token>_posthog`, which for a real token
  * always starts `ph_phc_`.
  */
-const COOKIE_PATTERN = /ph_phc_.*?_posthog=([^;]+)/;
+const posthogCookieValue = (cookies: string): string | null => {
+  for (const rawCookie of cookies.split(";")) {
+    const separator = rawCookie.indexOf("=");
+    if (separator !== -1) {
+      const name = rawCookie.slice(0, separator).trim();
+      const value = rawCookie.slice(separator + 1);
+      if (
+        name.startsWith("ph_phc_") &&
+        name.endsWith("_posthog") &&
+        value !== ""
+      )
+        return value;
+    }
+  }
+  return null;
+};
 
 /** Normalises the several shapes a cookie header arrives in. */
 const asCookieString = (
@@ -31,8 +46,7 @@ export const distinctIdFromCookieHeader = (
   const cookies = asCookieString(header);
   if (cookies === null) return null;
 
-  const match = COOKIE_PATTERN.exec(cookies);
-  const encoded = match?.[1];
+  const encoded = posthogCookieValue(cookies);
   if (!encoded) return null;
 
   try {

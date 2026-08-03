@@ -13,7 +13,7 @@
 import type { MagicOxfmtConfig } from "./index.ts";
 
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { base, expo, next, react, reactNative } from "./index.ts";
@@ -41,6 +41,27 @@ const OXFMT_CONFIG_FILES = [
   "oxfmt.config.ts",
   "oxfmt.config.mts",
 ];
+
+const errorCode = (error: unknown): string | undefined =>
+  typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : undefined;
+
+const replaceAtomically = async (
+  outPath: string,
+  contents: string,
+): Promise<void> => {
+  const temporaryDirectory = await mkdtemp(
+    join(dirname(outPath), ".magic-oxfmt-"),
+  );
+  const temporary = join(temporaryDirectory, ".oxfmtrc.json");
+  try {
+    await writeFile(temporary, contents, { encoding: "utf8", flag: "wx" });
+    await rename(temporary, outPath);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+};
 
 const usage = () =>
   `Usage: magic-oxfmt-init [variant] [--force] [--out <path>]\n\n` +
@@ -112,15 +133,21 @@ ${advice}`,
     return 1;
   }
 
-  if (existsSync(outPath) && !force) {
-    process.stderr.write(
-      `magic-oxfmt-init: ${outPath} already exists. Pass --force to overwrite.\n`,
-    );
-    return 1;
-  }
-
   const contents = { $schema: SCHEMA, ...variant };
-  await writeFile(outPath, `${JSON.stringify(contents, null, 2)}\n`, "utf8");
+  const serialized = `${JSON.stringify(contents, null, 2)}\n`;
+  if (force) {
+    await replaceAtomically(outPath, serialized);
+  } else {
+    try {
+      await writeFile(outPath, serialized, { encoding: "utf8", flag: "wx" });
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error;
+      process.stderr.write(
+        `magic-oxfmt-init: ${outPath} already exists. Pass --force to overwrite.\n`,
+      );
+      return 1;
+    }
+  }
   process.stdout.write(
     `magic-oxfmt-init: wrote ${variantName} config to ${outPath}\n` +
       `Note: this is a snapshot. Bumping magic-oxfmt-config will NOT update it — rerun this command.\n` +

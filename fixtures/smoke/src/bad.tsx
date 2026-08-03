@@ -4,12 +4,12 @@ import { useState } from "react";
 
 import { unusedHelper } from "./helpers";
 
-const API_KEY = process.env.API_KEY;
+const FIXTURE_VALUE = process.env.FIXTURE_VALUE;
 
 export const Bad = ({ items, tier }: { items: string[]; tier: number }) => {
   const [count, setCount] = useState(0);
 
-  console.log(API_KEY);
+  console.log(FIXTURE_VALUE);
 
   const label = tier > 2 ? (tier > 5 ? "gold" : "silver") : "bronze";
 

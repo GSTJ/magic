@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -327,5 +334,33 @@ describe("magic-oxfmt-init", () => {
 
     const forced = run({ ".oxfmtrc.json": "{}\n" }, ["base", "--force"]);
     assert.equal(forced.code, 0);
+  });
+
+  it("replaces a forced symlink without overwriting its target", () => {
+    const dir = mkdtempSync(join(tmpdir(), "magic-oxfmt-init-"));
+    try {
+      const sentinel = join(dir, "sentinel.json");
+      const output = join(dir, ".oxfmtrc.json");
+      writeFileSync(sentinel, '{"keep":true}\n');
+      symlinkSync(sentinel, output);
+
+      const stdout = execFileSync(
+        process.execPath,
+        [cliBin, "base", "--force"],
+        {
+          cwd: dir,
+          encoding: "utf8",
+        },
+      );
+      assert.match(stdout, /wrote base config/);
+      assert.equal(readFileSync(sentinel, "utf8"), '{"keep":true}\n');
+      assert.equal(
+        JSON.parse(readFileSync(output, "utf8")).$schema,
+        "./node_modules/oxfmt/configuration_schema.json",
+      );
+      assert.equal(lstatSync(output).isSymbolicLink(), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -27,7 +27,13 @@ inputs:
   maestro-version:
     description: Maestro version to install. Pinned, and cached at ~/.maestro.
     required: false
-    default: 2.6.0
+    default: 2.7.0
+  maestro-sha256:
+    description: >
+      Expected SHA-256 for maestro.zip. Empty uses the built-in digest for the
+      default version, or the release checksum for another version.
+    required: false
+    default: ""
   simulator-device:
     description: >
       Simulator device name. Empty takes the newest iPhone the chosen runtime
@@ -193,7 +199,7 @@ runs:
 
     - name: ☕️ Setup Java
       if: inputs.java-version != ''
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
       with:
         distribution: temurin
         java-version: ${{ inputs.java-version }}
@@ -236,7 +242,7 @@ runs:
       if: >-
         inputs.cache-maestro == 'true'
         || (inputs.cache-maestro == 'auto' && runner.environment == 'github-hosted')
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ~/.maestro
         key: maestro-${{ runner.os }}-${{ inputs.maestro-version }}
@@ -245,11 +251,44 @@ runs:
       id: maestro
       shell: bash
       env:
+        IN_MAESTRO_SHA256: ${{ inputs.maestro-sha256 }}
         MAESTRO_VERSION: ${{ inputs.maestro-version }}
       run: |
         set -euo pipefail
         if [ ! -x "$HOME/.maestro/bin/maestro" ]; then
-          curl -fsSL "https://get.maestro.mobile.dev" | MAESTRO_VERSION="$MAESTRO_VERSION" bash
+          stage=$(mktemp -d "${RUNNER_TEMP:-/tmp}/magic-maestro.XXXXXX")
+          archive="$stage/maestro.zip"
+          release="https://github.com/mobile-dev-inc/Maestro/releases/download/cli-$MAESTRO_VERSION"
+          curl --proto '=https' --tlsv1.2 --fail --location --retry 3 \
+            --output "$archive" "$release/maestro.zip"
+
+          expected="$IN_MAESTRO_SHA256"
+          if [ -z "$expected" ] && [ "$MAESTRO_VERSION" = "2.7.0" ]; then
+            expected="a4ccab6b604617e7aef6db4f885666056eabe5cfa32befaa3bc994041b8fcbb5"
+          fi
+          if [ -z "$expected" ]; then
+            checksum="$stage/checksums_sha256.txt"
+            curl --proto '=https' --tlsv1.2 --fail --location --retry 3 \
+              --output "$checksum" "$release/checksums_sha256.txt"
+            expected=$(awk '$2 == "maestro.zip" { print $1 }' "$checksum")
+          fi
+          if ! [[ "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::No valid SHA-256 found for Maestro $MAESTRO_VERSION."
+            exit 1
+          fi
+          actual=$(shasum -a 256 "$archive" | awk '{ print $1 }')
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Maestro $MAESTRO_VERSION checksum mismatch: expected $expected, got $actual."
+            exit 1
+          fi
+
+          unzip -q "$archive" -d "$stage"
+          if [ ! -x "$stage/maestro/bin/maestro" ]; then
+            echo "::error::Maestro $MAESTRO_VERSION archive has no executable bin/maestro."
+            exit 1
+          fi
+          mkdir -p "$HOME/.maestro"
+          cp -R "$stage/maestro/." "$HOME/.maestro/"
         fi
         echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
         # tail, not head: it drains its input, so the writer never takes a
@@ -268,7 +307,7 @@ runs:
 
     - name: 🗄 Cache CocoaPods specs and sources
       if: inputs.cache-pods == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: |
           ~/.cocoapods
@@ -278,7 +317,7 @@ runs:
 
     - name: 🗄 Cache DerivedData
       if: inputs.cache-derived-data == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ~/Library/Developer/Xcode/DerivedData
         key: ${{ runner.os }}-deriveddata-${{ steps.keys.outputs.hash }}
@@ -286,7 +325,7 @@ runs:
 
     - name: 💎 Setup Ruby
       if: inputs.ruby-version != '' && inputs.install-cocoapods != 'false'
-      uses: ruby/setup-ruby@v1
+      uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
       with:
         ruby-version: ${{ inputs.ruby-version }}
         bundler-cache: false
