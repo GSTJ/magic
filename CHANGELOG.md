@@ -3,6 +3,19 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v1.12.3
+
+`v1.12.3` moves the repository lockfile onto the patched brace expansion
+release. The moving `v1` tag advances with it.
+
+### Security
+
+`brace-expansion@5.0.9` replaces `5.0.8` under the two `ts-morph` dependency
+paths. The patch bounds intermediate arrays that could exhaust memory or block
+the event loop when expanding attacker-controlled patterns. Package manifests
+and package versions stay unchanged; fresh consumer installs already accept the
+patched version through `minimatch`'s existing range.
+
 ## 2026-08-03
 
 `v1.12.2` is a workflows-only release, and `v1` moves onto it. Every npm package
