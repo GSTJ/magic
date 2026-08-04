@@ -495,7 +495,7 @@ jobs:
       # Referenced by owner/repo, never `./`: inside a called workflow a `./`
       # path resolves against the caller's checkout.
       - name: 🏗 Setup Node + pnpm
-        uses: GSTJ/magic/.github/actions/setup@v1
+        uses: GSTJ/magic/.github/actions/setup@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           working-directory: ${{ inputs.app-dir }}
           node-version-file: ${{ inputs.node-version-file }}
@@ -515,7 +515,7 @@ jobs:
       # overlaps the compile below. run-maestro does the bounded wait.
       - name: 🍎 Setup Xcode, Maestro and the simulator
         id: ios
-        uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+        uses: GSTJ/magic/.github/actions/setup-ios-e2e@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
@@ -534,7 +534,7 @@ jobs:
 
       - name: 🏗 Build for the simulator
         id: build
-        uses: GSTJ/magic/.github/actions/build-ios-app@v1
+        uses: GSTJ/magic/.github/actions/build-ios-app@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           app-dir: ${{ inputs.app-dir }}
           configuration: ${{ inputs.build-profile == 'dev-client' && 'Debug' || 'Release' }}
@@ -547,7 +547,7 @@ jobs:
 
       - name: 🎬 Maestro
         id: maestro
-        uses: GSTJ/magic/.github/actions/run-maestro@v1
+        uses: GSTJ/magic/.github/actions/run-maestro@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           udid: ${{ steps.ios.outputs.udid }}
           app-path: ${{ steps.build.outputs.app-path }}
@@ -680,7 +680,7 @@ jobs:
           clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
       - name: 🏗 Setup Node + pnpm
-        uses: GSTJ/magic/.github/actions/setup@v1
+        uses: GSTJ/magic/.github/actions/setup@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           working-directory: ${{ inputs.app-dir }}
           node-version-file: ${{ inputs.node-version-file }}
@@ -701,7 +701,7 @@ jobs:
       # actool which runtime to thin assets for.
       - name: 🍎 Setup Xcode and the simulator
         id: ios
-        uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+        uses: GSTJ/magic/.github/actions/setup-ios-e2e@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
@@ -717,7 +717,7 @@ jobs:
 
       - name: 🏗 Build for the simulator
         id: build
-        uses: GSTJ/magic/.github/actions/build-ios-app@v1
+        uses: GSTJ/magic/.github/actions/build-ios-app@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           app-dir: ${{ inputs.app-dir }}
           configuration: ${{ inputs.build-profile == 'dev-client' && 'Debug' || 'Release' }}
@@ -829,7 +829,7 @@ jobs:
       # the wait may as well happen up front where the bound is enforced.
       - name: 🍎 Setup Maestro and the simulator
         id: ios
-        uses: GSTJ/magic/.github/actions/setup-ios-e2e@v1
+        uses: GSTJ/magic/.github/actions/setup-ios-e2e@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           xcode-version: ${{ inputs.xcode-version }}
           maestro-version: ${{ inputs.maestro-version }}
@@ -847,7 +847,7 @@ jobs:
 
       - name: 🎬 Maestro
         id: maestro
-        uses: GSTJ/magic/.github/actions/run-maestro@v1
+        uses: GSTJ/magic/.github/actions/run-maestro@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           udid: ${{ steps.ios.outputs.udid }}
           app-path: ${{ steps.app.outputs.path }}

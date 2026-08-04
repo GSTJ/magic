@@ -709,6 +709,13 @@ surprise (a release path, a repo you rarely look at); the Renovate preset groups
 those bumps with the `magic-*` npm packages into one PR and automerges it, so
 pinning costs a merge button, not a migration.
 
+The reusable workflows pin every `GSTJ/magic` composite action they call to a
+full release commit SHA. GitHub checks the complete chain when a caller requires
+immutable actions, so a workflow pinned by SHA is still rejected if one of its
+steps calls an action through `@v1`. Action code ships first, and a reviewed
+follow-up advances the workflow's SHA. Self CI exercises that remote pinned path
+before the follow-up can merge.
+
 Releases happen in [`self-release.yml`](.github/workflows/self-release.yml) on
 every push to `main`: it runs the full check chain, publishes any package whose
 version is not on npm yet, cuts `vX.Y.Z` from the conventional commits since the

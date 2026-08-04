@@ -1835,10 +1835,21 @@ all, rather than failing the way `setup-node` does when
 `uses: ./.github/actions/setup` inside a `workflow_call` file resolves against
 the **caller's** checkout, not this repo's, so it looks for the action in the
 consumer's repository and fails there. Reusable workflows must write
-`GSTJ/magic/.github/actions/setup@v1` in full. `self-ci.yml` and
+`GSTJ/magic/.github/actions/setup@<full-sha>` in full. `self-ci.yml` and
 `self-release.yml` are the only files here that may use `./`, because they only
 ever run in this repo. `scripts/validate-workflows.mjs` fails the build on the
 mistake, since it cannot be caught by testing in this repo.
+
+The remote self-reference uses a full release commit SHA. A moving `@v1` there
+makes the action chain mutable, and GitHub rejects the caller when repository
+policy requires immutable actions. This applies even when the caller pins the
+reusable workflow itself. `validate-workflows.mjs` rejects mutable remote refs
+and requires a readable version comment beside each SHA. Self CI calls the
+reusable workflow from each pull request. That job resolves the pinned commit
+and action before running the repo checks.
+
+An action change and the workflow pin that consumes it ship in separate
+releases. The action commit has to exist before a workflow can name its SHA.
 
 ### Versioning
 

@@ -3,6 +3,30 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-08-03
+
+`v1.12.2` is a workflows-only release, and `v1` moves onto it. Every npm package
+keeps its existing version.
+
+### Security
+
+The reusable CI, release, and iOS E2E workflows called this repo's composite
+actions through `@v1`. GitHub rejects that chain when a consumer requires full
+SHA references, even when the reusable workflow itself is pinned to a commit.
+
+All eleven self-action calls now point to the `v1.12.1` commit that contains the
+referenced actions. `validate-workflows` rejects mutable self-references and
+requires a readable version comment beside every remote action SHA.
+
+### Permissions
+
+Reusable CI now limits its token to `contents: read`, even when a caller grants
+more. The reusable release job no longer requests `pull-requests: write`; it
+publishes and pushes through `contents: write`. This repo's release job no longer
+requests an OIDC token while publishing through `NPM_TOKEN`. The reusable
+release keeps `id-token: write` for consumers that publish through npm trusted
+publishing.
+
 ## 2026-08-02 - Harden the shared tooling security boundaries
 
 The release publishes `magic-codemods@1.1.1`, `magic-docs@1.0.1`,
