@@ -1,14 +1,16 @@
 /**
  * Guard the two ways the CI half of this repo breaks consumers silently.
  *
- * 1. Refs. Third-party actions under `.github/` use immutable commit SHAs. This
- *    repo's own reusable actions and every consumption snippet in the docs use
- *    its moving major tag, which is the release channel consumers opted into.
+ * 1. Refs. Every remote action under `.github/`, including this repo's own
+ *    actions inside reusable workflows, uses an immutable commit SHA. Docs keep
+ *    the moving major tag because that is the release channel consumers opted
+ *    into.
  *
  * 2. Local action paths inside reusable workflows. `uses: ./.github/actions/x`
  *    in a `workflow_call` file resolves against the *caller's* checkout, not
  *    this repo's, so it silently looks for the action in the consumer's repo.
- *    Reusable workflows have to spell out `GSTJ/magic/.github/actions/x@<tag>`.
+ *    Reusable workflows have to spell out
+ *    `GSTJ/magic/.github/actions/x@<full-sha>`.
  *
  * Plus the install flag, because `pnpm install` without `--frozen-lockfile` in a
  * publishing path is how a lockfile drifts in CI and nowhere else.
@@ -19,9 +21,8 @@ import { join, relative } from "node:path";
 const repoRoot = join(import.meta.dirname, "..");
 
 /**
- * The major tag consumers point at, and therefore the only ref this repo may
- * use when it references itself. Bump it here, in the README snippets and in
- * the release workflow's tag-move step together, or not at all.
+ * The major tag consumers point at. Keep it aligned with the README snippets
+ * and the release workflow's tag-move step.
  */
 const MAJOR_TAG = "v1";
 
@@ -30,6 +31,7 @@ const BRANCHY = new Set(["main", "master", "develop", "HEAD"]);
 const TAG = /^v\d+(?:\.\d+){0,2}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const USES = /^\s*(?:-\s+)?uses:\s*(?<ref>\S+)/;
+const VERSION_COMMENT = /\s+#\s+v\d+(?:\.\d+){0,2}\s*$/;
 const DOC_REF = /GSTJ\/magic\/[\w./-]+@([\w.-]+)/g;
 
 const walk = (dir) =>
@@ -50,11 +52,11 @@ const exists = (path) => {
 const show = (file) => relative(repoRoot, file);
 
 /** Everything wrong with one `uses:` value, as sentences. */
-const problemsWithUses = (value, { isReusable }) => {
+export const problemsWithUses = (value, { isReusable, raw = "" }) => {
   if (value.startsWith("./")) {
     if (isReusable) {
       return [
-        `reusable workflows cannot use a local path — "${value}" would resolve inside the caller's repo. Use ${SELF}...@${MAJOR_TAG}.`,
+        `reusable workflows cannot use a local path: "${value}" would resolve inside the caller's repo. Use ${SELF}...@<full-sha>.`,
       ];
     }
     return [];
@@ -64,16 +66,17 @@ const problemsWithUses = (value, { isReusable }) => {
 
   const problems = [];
   const ref = value.split("@").at(-1);
-  if (value.startsWith(SELF)) {
-    if (ref !== MAJOR_TAG) {
-      problems.push(
-        `self-reference "${value}" must use the moving major tag ${MAJOR_TAG}, so a release reaches it.`,
-      );
-    }
-  } else if (!SHA.test(ref)) {
+  if (!SHA.test(ref)) {
     const kind = BRANCHY.has(ref) ? "branch" : "mutable tag";
+    const owner = value.startsWith(SELF)
+      ? "self-reference"
+      : "third-party action";
     problems.push(
-      `third-party action "${value}" uses a ${kind}; pin its full commit SHA.`,
+      `${owner} "${value}" uses a ${kind}; pin its full commit SHA.`,
+    );
+  } else if (!VERSION_COMMENT.test(raw)) {
+    problems.push(
+      `action "${value}" needs a readable version comment such as "# v1.2.3".`,
     );
   }
   return problems;
@@ -95,7 +98,7 @@ for (const file of yamlFiles) {
     const match = USES.exec(raw);
     if (match) {
       failures.push(
-        ...problemsWithUses(match.groups.ref, { isReusable }).map(
+        ...problemsWithUses(match.groups.ref, { isReusable, raw }).map(
           (problem) => `${show(file)}:${line}: ${problem}`,
         ),
       );
@@ -162,5 +165,5 @@ if (failures.length > 0) {
 
 process.stdout.write(
   `validate-workflows: OK — ${yamlFiles.length} workflow/action files and ${docs.length} READMEs, ` +
-    `third-party actions pinned by SHA and every self-reference on ${MAJOR_TAG}.\n`,
+    `remote actions pinned by SHA and consumer docs on ${MAJOR_TAG}.\n`,
 );

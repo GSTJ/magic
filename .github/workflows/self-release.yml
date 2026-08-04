@@ -9,14 +9,13 @@ name: 🏷 Release (this repo)
 #   3. cuts `vX.Y.Z` from the conventional commits since the last tag and moves
 #      the `vX` tag onto it.
 #
-# Step 3 is the one consumers feel: `GSTJ/magic/.github/workflows/ci.yml@v1` and
-# `GSTJ/magic/.github/actions/setup@v1` both resolve through that moving tag, so
-# a fix reaches every repo on its next run with no PR anywhere.
+# Step 3 is the one consumers feel: moving `v1` advances the reusable workflow.
+# Its references to this repo's composite actions stay pinned to an immutable
+# released commit and advance in reviewed changes like this one.
 #
-# It deliberately does not go through the reusable ci.yml: that file references
-# the composite action at @v1, which is the tag this workflow creates. Running
-# the check chain from the working tree here is also the only place a change to
-# the composite is exercised before it is tagged.
+# It deliberately does not go through the reusable ci.yml. Running the check
+# chain from the working tree here is the only place a change to the composite
+# is exercised before its immutable pin advances.
 
 on:
   push:
@@ -36,7 +35,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 concurrency:
   group: magic-self-release

@@ -172,6 +172,9 @@ on:
         description: "Optional. Pass it only when the install needs a private registry — it is what switches registry-url on."
         required: false
 
+permissions:
+  contents: read
+
 jobs:
   # Advice, not a gate — see the header. The beacon, not a live lookup: a
   # self-hosted Mac publishes a timestamp to a repo variable from a timer that
@@ -260,11 +263,11 @@ jobs:
           # the node_modules and ios/ that `git clean -ffdx` deletes.
           clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
-      # Referenced by owner/repo, not `./`: inside a called workflow a `./` path
-      # resolves against the *caller's* checkout, so `./.github/actions/setup`
-      # would look for the action in the consumer's repo and fail there.
+      # Referenced by owner/repo, because `./` resolves against the caller's
+      # checkout inside a reusable workflow. The immutable release commit also
+      # keeps SHA-enforced callers from inheriting a mutable transitive action.
       - name: 🏗 Setup Node + pnpm
-        uses: GSTJ/magic/.github/actions/setup@v1
+        uses: GSTJ/magic/.github/actions/setup@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
         with:
           node-version: ${{ inputs.node-version }}
           node-version-file: ${{ inputs.node-version-file }}
