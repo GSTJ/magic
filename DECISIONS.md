@@ -1845,8 +1845,8 @@ makes the action chain mutable, and GitHub rejects the caller when repository
 policy requires immutable actions. This applies even when the caller pins the
 reusable workflow itself. `validate-workflows.mjs` rejects mutable remote refs
 and requires a readable version comment beside each SHA. Self CI calls the
-reusable workflow from the pull request, which also proves GitHub can resolve
-the pinned commit and find the action there.
+reusable workflow from each pull request. That job resolves the pinned commit
+and action before running the repo checks.
 
 An action change and the workflow pin that consumes it ship in separate
 releases. The action commit has to exist before a workflow can name its SHA.

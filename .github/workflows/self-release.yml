@@ -11,7 +11,7 @@ name: 🏷 Release (this repo)
 #
 # Step 3 is the one consumers feel: moving `v1` advances the reusable workflow.
 # Its references to this repo's composite actions stay pinned to an immutable
-# released commit and advance in reviewed changes like this one.
+# released commit. A later workflow commit advances the SHA.
 #
 # It deliberately does not go through the reusable ci.yml. Running the check
 # chain from the working tree here is the only place a change to the composite
