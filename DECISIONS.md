@@ -2280,4 +2280,6 @@ human.
 
 `GSTJ/magic` is the sole repo-level exception. We own its release path and use
 it to distribute the policy, so its Renovate and pnpm age floors are both zero.
-Consumers do not inherit that local override.
+Consumers do not inherit that local override. They do exempt first-party
+`magic-*` packages and `GSTJ/magic` action tags, so our own tooling can propagate
+immediately without opening the gate for third-party releases.
