@@ -1,0 +1,206 @@
+---
+title: magic-observability
+description: PostHog init, captureError and an error boundary, per platform.
+---
+
+import { repositoryFileUrl } from "magic-docs";
+
+import { site } from "@/lib/site";
+
+Import the entry point for your platform, call its `init*` once, and mount `ObservabilityBoundary`
+around the tree. Every platform gets its own subpath so an Expo bundle can never pull in
+`posthog-js` and a browser chunk never touches `posthog-node`; `magic-observability/expo` and
+`magic-observability/web` cannot reach each other's SDK.
+
+| Import                         | Platform                                | You install                    |
+| ------------------------------ | --------------------------------------- | ------------------------------ |
+| `magic-observability/web`      | Browser: Next client bundle, Vite SPA   | `posthog-js`                   |
+| `magic-observability/react`    | Provider, boundary, hook                | `posthog-js`, `@posthog/react` |
+| `magic-observability/next`     | Next server: `onRequestError`, RSC, API | `posthog-node`                 |
+| `magic-observability/node`     | Workers, queue consumers, CLIs          | `posthog-node`                 |
+| `magic-observability/expo`     | Expo and bare React Native              | `posthog-react-native`         |
+| `magic-observability/boundary` | The error boundary on its own           | `react`                        |
+
+## Install
+
+```sh
+pnpm add magic-observability
+```
+
+Plus the one SDK your platform needs, from the table above. With no key resolved, every `init*`
+returns a no-op client: every method exists, nothing is sent, nothing is logged. A repo cloned
+without a `.env` boots and runs.
+
+## Next.js (App Router)
+
+```ts
+// instrumentation-client.ts, before hydration
+import { initWebAnalytics } from "magic-observability/web";
+
+initWebAnalytics({
+  environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",
+  release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
+});
+```
+
+```tsx
+// app/providers.tsx
+"use client";
+
+import { getWebClient } from "magic-observability/web";
+import {
+  ObservabilityBoundary,
+  ObservabilityProvider,
+} from "magic-observability/react";
+
+export const Providers = ({ children }: { children: React.ReactNode }) => (
+  <ObservabilityProvider>
+    <ObservabilityBoundary
+      client={getWebClient()}
+      fallback={<SomethingWentWrong />}
+    >
+      {children}
+    </ObservabilityBoundary>
+  </ObservabilityProvider>
+);
+```
+
+```ts
+// instrumentation.ts, at the project root
+import { createRequestErrorHandler } from "magic-observability/next";
+
+export const register = () => {};
+export const onRequestError = createRequestErrorHandler();
+```
+
+Route handlers, server actions and RSCs call `captureServerError` directly instead:
+
+```ts
+import { captureServerError } from "magic-observability/next";
+
+try {
+  await chargeCard(order);
+} catch (error) {
+  captureServerError(error, { orderId: order.id, distinctId: session.userId });
+  throw error;
+}
+```
+
+## Expo and bare React Native
+
+```ts
+// src/services/observability.ts, constructed once
+import { initExpo } from "magic-observability/expo";
+import * as Updates from "expo-updates";
+
+export const observability = initExpo({
+  environment: process.env.EXPO_PUBLIC_ENV ?? "development",
+  release: Updates.manifest?.metadata?.updateGroup,
+});
+```
+
+```tsx
+// app/_layout.tsx
+import {
+  ObservabilityBoundary,
+  getExpoPostHog,
+} from "magic-observability/expo";
+import { PostHogProvider } from "posthog-react-native";
+import { observability } from "@/services/observability";
+
+export default function RootLayout() {
+  const posthog = getExpoPostHog();
+  const tree = (
+    <ObservabilityBoundary client={observability} fallback={ErrorScreen}>
+      <Stack />
+    </ObservabilityBoundary>
+  );
+
+  // No key in this build: render the app without the provider.
+  return posthog ? (
+    <PostHogProvider client={posthog}>{tree}</PostHogProvider>
+  ) : (
+    tree
+  );
+}
+```
+
+The two-step, build the client with `initExpo` and hand it to `PostHogProvider` separately, is the
+only documented way to get both configured error tracking and the provider's own screen tracking:
+`<PostHogProvider apiKey options>` cannot configure `errorTracking`, and `new PostHog(...)` gives
+you no provider.
+
+## Vite / React SPA
+
+Vite does not populate `process.env` in the browser, so the key comes in explicitly:
+
+```tsx
+import { initWebAnalytics } from "magic-observability/web";
+import {
+  ObservabilityBoundary,
+  ObservabilityProvider,
+} from "magic-observability/react";
+
+const client = initWebAnalytics({
+  key: import.meta.env.VITE_POSTHOG_KEY,
+  host: import.meta.env.VITE_POSTHOG_HOST,
+});
+
+createRoot(document.getElementById("root")!).render(
+  <ObservabilityProvider client={client}>
+    <ObservabilityBoundary client={client} fallback={<SomethingWentWrong />}>
+      <App />
+    </ObservabilityBoundary>
+  </ObservabilityProvider>,
+);
+```
+
+## Node workers and CLIs
+
+```ts
+import { captureError, initNode, shutdownNode } from "magic-observability/node";
+
+initNode({
+  environment: process.env.NODE_ENV,
+  release: process.env.GIT_SHA,
+  globalHandlers: true,
+});
+
+try {
+  await drainQueue();
+} catch (error) {
+  captureError(error, { queue: "emails" });
+} finally {
+  await shutdownNode();
+}
+```
+
+`initNode` batches by default and turns on `posthog-node`'s own exception autocapture. Call
+`shutdownNode()` on the way out, a process that exits without it drops whatever was still queued.
+A handler that gets frozen the instant it returns (Lambda, a Vercel function) wants every event
+sent immediately instead: `initNode({ runtime: "serverless" })`.
+
+## captureError
+
+```ts
+captureError(error, {
+  distinctId: "user-42", // server only; routed positionally, not as a property
+  orderId: order.id,
+  request: { path: "/checkout", method: "POST" }, // becomes request.path, request.method
+});
+```
+
+Whatever was thrown is normalised to an `Error`. An error-shaped object (a string `message`,
+usually a `name` and `stack`) is rebuilt from those fields, which is what a serialised error
+crossing a worker or an RPC boundary looks like. Anything else becomes a `NonError`, searchable in
+PostHog, and tells you the throw site is wrong. Nested context is flattened to dotted keys three
+levels deep, because PostHog's property filters work on scalars.
+
+<Cards>
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/observability/README.md")}
+    title="Full reference"
+    description="Environment variables, source map uploads, the ObservabilityBoundary props, and manual PostHog project setup."
+  />
+</Cards>

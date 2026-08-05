@@ -11,6 +11,12 @@ import {
 } from "shiki";
 
 /**
+ * Re-exported so a package drawing its own media types its token state without
+ * depending on shiki itself; `magic-video/shiki` is the only door it needs.
+ */
+export type { ThemedToken };
+
+/**
  * One highlighter for the whole render, loaded with the actual published
  * theme JSON so every code shot is pixel-honest against a real editor.
  */

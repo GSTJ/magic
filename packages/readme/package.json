@@ -39,6 +39,9 @@
     "typecheck": "echo \"magic-readmes ships plain JS\"",
     "test": "node --test test/*.test.mjs"
   },
+  "devDependencies": {
+    "magic-video": "workspace:*"
+  },
   "engines": {
     "node": ">=22"
   }

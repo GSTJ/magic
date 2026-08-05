@@ -1,15 +1,19 @@
 import type { CSSProperties, FC } from "react";
 
-import { COLORS, PALETTE } from "../brand";
-import { FONTS } from "../fonts";
+// Every other package pulls these from the `magic-video` devDependency. This
+// one cannot: magic-video draws its colors from magic-theme, so declaring the
+// dependency back would make the workspace graph cyclic and turbo refuses to
+// plan it. Relative paths into the same source, no dependency edge.
+import { COLORS, PALETTE } from "../../video/src/brand";
+import { FONTS } from "../../video/src/fonts";
 import {
   BrandMark,
   CodePane,
   SceneBackground,
   Tagline,
   WindowFrame,
-} from "../primitives";
-import { useTokens } from "../shiki";
+} from "../../video/src/primitives";
+import { useTokens } from "../../video/src/shiki";
 
 const CENTERED: CSSProperties = {
   position: "absolute",

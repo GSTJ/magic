@@ -55,7 +55,9 @@
   "devDependencies": {
     "magic-oxlint-config": "workspace:*",
     "magic-tsconfig": "workspace:*",
+    "magic-video": "workspace:*",
     "oxlint": "1.75.0",
+    "remotion": "4.0.503",
     "typescript": "^7.0.2"
   },
   "engines": {

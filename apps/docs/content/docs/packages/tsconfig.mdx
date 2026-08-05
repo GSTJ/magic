@@ -1,0 +1,79 @@
+---
+title: magic-tsconfig
+description: TypeScript bases, one per project type.
+---
+
+Four bases, one extended per project. `base.json` carries the strict
+settings every project shares; the other three extend it and override only
+what their target needs. A project extends exactly one file and overrides
+locally, nothing more.
+
+## Bases
+
+| File                    | Use for                                                     |
+| ----------------------- | ----------------------------------------------------------- |
+| `base.json`             | Plain TypeScript, apps, anything without a framework preset |
+| `internal-package.json` | Workspace/publishable libraries that emit `.d.ts`           |
+| `nextjs.json`           | Next.js apps                                                |
+| `expo.json`             | Expo / React Native apps                                    |
+
+## Install
+
+```sh
+pnpm add -D magic-tsconfig
+```
+
+## Adopt
+
+```jsonc
+// tsconfig.json (publishable library)
+{
+  "extends": "magic-tsconfig/internal-package.json",
+  "include": ["src"],
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+}
+```
+
+```jsonc
+// tsconfig.json (Next.js)
+{
+  "extends": "magic-tsconfig/nextjs.json",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },
+}
+```
+
+```jsonc
+// tsconfig.json (Expo). expo/tsconfig.base has to come first so this one wins on conflicts.
+{
+  "extends": ["expo/tsconfig.base", "magic-tsconfig/expo.json"],
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+}
+```
+
+## Notes
+
+- `checkJs` is on. A project with untyped `.js` it can't fix yet should set
+  `"checkJs": false` locally rather than dropping the base.
+- `noUncheckedIndexedAccess` is on too, the single most valuable option
+  here. Add the guard the type system is asking for instead of turning it
+  off.
+- `module: Preserve` plus `moduleResolution: Bundler` hands module
+  resolution to the bundler (Metro, Turbopack, tsdown). A package published
+  to npm and resolved by Node should override both in its own tsconfig.
+
+<Callout title="Only nextjs.json sets incremental">
+  `base.json`, `internal-package.json`, and `expo.json` leave `incremental`
+  unset on purpose: with it on and no `tsBuildInfoFile`, tsc writes a
+  `.tsbuildinfo` next to the config instead of into `outDir`, so `rm -rf dist &&
+  tsc` emits nothing at all, exit 0, no error. `nextjs.json` has to set it:
+  `next build` writes its own suggested compiler options into `tsconfig.json`
+  whenever they're missing, and `incremental` is the only one this package would
+  otherwise leave out. It's safe there because `nextjs.json` is `noEmit`, and
+  Next keeps its own build cache in `.next/cache` anyway.
+</Callout>
+
+Keep `*.tsbuildinfo` in `.gitignore`. If `incremental` gets turned on
+anywhere else, pair it with a scoped `tsBuildInfoFile`
+(`"tsBuildInfoFile": "dist/.tsbuildinfo"`): a `tsBuildInfoFile` left behind
+without `incremental` throws `TS5069` on some type checkers.

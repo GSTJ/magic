@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "magic-tsconfig": "workspace:*",
+    "magic-video": "workspace:*",
     "oxfmt": "0.60.0",
     "typescript": "^7.0.2"
   },

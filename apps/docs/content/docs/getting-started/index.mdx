@@ -1,0 +1,240 @@
+---
+title: Getting started
+description: Install the shared configs, then copy the setup for your project type.
+---
+
+magic packages the lint, format, TypeScript and CI setup every repo here runs, as
+versioned npm packages and reusable GitHub Actions workflows instead of local config
+files. A repo picks the variant that matches its stack (plain TypeScript, Next.js,
+Expo, bare React Native or React web) and re-exports it from three small config
+files. From there, a rule change or a CI step lands once in this repo, and every
+consumer picks it up on its next dependency bump.
+
+## Install
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
+```
+
+Pin `oxlint` and `oxfmt` exactly. Both add and remove rules between minor versions,
+and an unknown rule name is a fatal config error. The shared Renovate preset groups
+them and never automerges them for that reason.
+
+<Callout title="Do not consume a preset through oxlint's extends">
+  `extends` drops the preset's `ignorePatterns`, which is how a repo ends up
+  linting `node_modules`, `ios/` and `android/` without noticing. Re-export the
+  preset instead, as every config below does, or use `extendConfig` for
+  repo-specific rules.
+</Callout>
+
+## Scripts
+
+Same for every project type below, so add these once:
+
+```json
+// package.json
+{
+  "scripts": {
+    "lint": "oxlint --report-unused-disable-directives",
+    "lint:fix": "oxlint --report-unused-disable-directives --fix",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt .",
+    "typecheck": "tsc --noEmit"
+  }
+}
+```
+
+`--report-unused-disable-directives` catches a stale `// eslint-disable` comment
+left behind after the rule it silenced got fixed. oxlint has no config key for that
+behavior, so the flag is the only way to turn it on.
+
+## Setup for your project type
+
+Every type follows the same shape: install, `oxlint.config.mts`, `oxfmt.config.mts`,
+`tsconfig.json`, verify.
+
+### Plain TypeScript / Node
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig @types/node
+```
+
+```ts
+// oxlint.config.mts
+export { default } from "magic-oxlint-config/base";
+```
+
+```ts
+// oxfmt.config.mts
+export { default } from "magic-oxfmt-config";
+```
+
+```jsonc
+// tsconfig.json
+{
+  "extends": "magic-tsconfig/base.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "types": ["node"],
+  },
+}
+```
+
+`magic-tsconfig/base.json` pulls in no global type packages, and this config shape
+doesn't auto-include `@types` packages either, so both the install and the explicit
+`"types": ["node"]` are needed before the first `process.env` or `node:fs` import
+typechecks.
+
+Verify:
+
+```sh
+pnpm run lint && pnpm run typecheck
+```
+
+### Next.js
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm remove eslint eslint-config-next @next/eslint-plugin-next prettier
+```
+
+```ts
+// oxlint.config.mts
+export { default } from "magic-oxlint-config/next";
+```
+
+```ts
+// oxfmt.config.mts
+export { next as default } from "magic-oxfmt-config";
+```
+
+```jsonc
+// tsconfig.json
+{
+  "extends": "magic-tsconfig/nextjs.json",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/*"] },
+    "types": ["node"],
+  },
+}
+```
+
+`magic-tsconfig/nextjs.json` turns on `incremental`, because `next build` writes any
+of its suggested compiler options that are missing from your resolved config
+straight back into `tsconfig.json`. Add `*.tsbuildinfo` to `.gitignore`, or a build
+dirties the working tree and the next `oxfmt --check` fails on a file nobody
+touched.
+
+Verify:
+
+```sh
+pnpm run lint && pnpm run typecheck
+```
+
+### Expo
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm remove eslint eslint-config-expo prettier
+```
+
+```ts
+// oxlint.config.mts
+export { default } from "magic-oxlint-config/expo";
+```
+
+```ts
+// oxfmt.config.mts
+export { expo as default } from "magic-oxfmt-config";
+```
+
+```jsonc
+// tsconfig.json (Expo's base first, so ours wins on conflicts)
+{
+  "extends": ["expo/tsconfig.base", "magic-tsconfig/expo.json"],
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+}
+```
+
+`ios/`, `android/` and `.expo/` stay ignored only because the config above
+re-exports the preset instead of extending it, same as the callout earlier on this
+page. That matters if the repo commits those directories instead of relying on
+`.gitignore` alone.
+
+Verify:
+
+```sh
+pnpm run lint && pnpm run typecheck
+```
+
+### Bare React Native
+
+Same shape as Expo: swap `expo` for `react-native` in both configs, and extend the
+plain `base.json` tsconfig with JSX turned on.
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
+```
+
+```ts
+// oxlint.config.mts
+export { default } from "magic-oxlint-config/react-native";
+```
+
+```ts
+// oxfmt.config.mts
+export { reactNative as default } from "magic-oxfmt-config";
+```
+
+```jsonc
+// tsconfig.json
+{
+  "extends": "magic-tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+  },
+}
+```
+
+Verify:
+
+```sh
+pnpm run lint && pnpm run typecheck
+```
+
+### React web (no framework)
+
+Same shape as Next.js: swap `next` for `react` in both configs, and extend
+`base.json` with JSX and the DOM libs turned on.
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
+```
+
+```ts
+// oxlint.config.mts
+export { default } from "magic-oxlint-config/react";
+```
+
+```ts
+// oxfmt.config.mts
+export { react as default } from "magic-oxfmt-config";
+```
+
+```jsonc
+// tsconfig.json
+{
+  "extends": "magic-tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+  },
+}
+```
+
+Verify:
+
+```sh
+pnpm run lint && pnpm run typecheck
+```

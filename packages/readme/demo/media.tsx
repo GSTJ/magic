@@ -1,8 +1,12 @@
 import type { CSSProperties, FC } from "react";
 
-import { COLORS } from "../brand";
-import { FONTS } from "../fonts";
-import { BrandMark, SceneBackground, WindowFrame } from "../primitives";
+import { COLORS } from "magic-video/brand";
+import { FONTS } from "magic-video/fonts";
+import {
+  BrandMark,
+  SceneBackground,
+  WindowFrame,
+} from "magic-video/primitives";
 
 const CENTERED: CSSProperties = {
   position: "absolute",

@@ -12,9 +12,9 @@
     "clean": "rm -rf .next out .turbo"
   },
   "dependencies": {
-    "fumadocs-core": "16.14.0",
+    "fumadocs-core": "catalog:",
     "fumadocs-mdx": "^15.2.2",
-    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.14.0",
+    "fumadocs-ui": "catalog:",
     "magic-docs": "workspace:*",
     "next": "^16.3.0",
     "react": "^19.2.8",

@@ -1,0 +1,84 @@
+---
+title: magic-oxlint-config
+description: oxlint presets, one per project type.
+---
+
+Five presets, one export away. `base` covers plain TypeScript, and every
+framework variant extends it: `react` adds JSX rules, `react-native` and
+`next` branch off `react`, and `expo` extends `react-native`. Pick the
+variant matching the stack and get the base plus that framework's additions,
+nothing hand-assembled.
+
+```
+base ─┬─ react ─┬─ react-native ── expo
+      │         └─ next
+```
+
+## Variants
+
+| Variant        | Import                             | For                          |
+| -------------- | ---------------------------------- | ---------------------------- |
+| `base`         | `magic-oxlint-config/base`         | Any TypeScript, no framework |
+| `react`        | `magic-oxlint-config/react`        | React web                    |
+| `react-native` | `magic-oxlint-config/react-native` | Bare React Native            |
+| `next`         | `magic-oxlint-config/next`         | Next.js                      |
+| `expo`         | `magic-oxlint-config/expo`         | Expo                         |
+
+## Install
+
+```sh
+pnpm add -D oxlint magic-oxlint-config
+```
+
+## Adopt
+
+Re-export the matching variant. `oxlint.config.mts` becomes one line:
+
+```ts
+// oxlint.config.mts
+export { default } from "magic-oxlint-config/react";
+```
+
+## Extending
+
+Layer repo-specific rules with `extendConfig`:
+
+```ts
+// oxlint.config.mts
+import { extendConfig } from "magic-oxlint-config";
+import react from "magic-oxlint-config/react";
+
+export default extendConfig(react, {
+  rules: { "no-console": "off" },
+});
+```
+
+<Callout title="Never consume this package through oxlint's extends">
+  `defineConfig({ extends: [react] })` replaces the preset's
+  `ignorePatterns` with whatever you pass locally, or drops it entirely if
+  you pass none. That field is what keeps a repo from linting
+  `node_modules`, `ios/`, and `android/`, so losing it means every one of
+  those gets linted with no warning. Re-export the variant, or add rules
+  with `extendConfig`.
+</Callout>
+
+If a tool only reads `.oxlintrc.json`, every variant also ships as a JSON
+mirror, generated from the same source at build time. JSON has no
+`extendConfig`, so `extends` is the only path there, and its
+`ignorePatterns` has to be copied in by hand since `extends` still drops it.
+Prefer `oxlint.config.mts` when the consumer allows it.
+
+## What's on
+
+`correctness`, `suspicious`, `pedantic`, `style`, and `perf` are all errors
+by default; `restriction` and `nursery` stay off. `react` and its
+descendants also wire in `eslint-plugin-safe-jsx`, which catches
+`items.length && <Row/>` rendering a literal `0`. `react-native` and `expo`
+add `magic-oxlint-plugin/react-native` on top for four ported React Native
+rules.
+
+Type-aware rules ship in every variant but sit dormant: oxlint only runs
+them with `--type-aware`, so they cost nothing until a repo opts in.
+
+Per-repo conventions (component wrappers, service boundaries, ORM access
+patterns) stay out. Add those in the consuming repo's own config.

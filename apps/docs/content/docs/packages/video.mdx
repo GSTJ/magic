@@ -1,0 +1,75 @@
+---
+title: magic-video
+description: Renders every still and clip the READMEs embed.
+---
+
+import { repositoryFileUrl } from "magic-docs";
+
+import { site } from "@/lib/site";
+
+Every hero image and demo clip in this repo's READMEs, including the ones on this page, comes out
+of `packages/video`. Remotion renders each composition into the repo's own `media/` folder, and
+READMEs point straight at the committed file. Nothing is hand-screenshotted.
+
+## In this repo
+
+Each package owns one composition under `src/compositions/`, built from shared primitives
+(windows, code panes, sparkles, backgrounds) and colors projected live from `magic-theme`'s
+published theme JSON. Render locally in the PR that changes a composition; nothing in CI
+regenerates these files, so whatever is committed in `media/` is what ships.
+
+```sh
+pnpm --filter magic-video dev          # Remotion Studio
+pnpm --filter magic-video render:all   # every asset into media/
+```
+
+## From another repo
+
+`magic-video` exports its brand kit as three subpaths, so a package outside this monorepo can
+build its own demo reel with the same look instead of starting from a blank Remotion project.
+
+```sh
+pnpm add -D magic-video magic-theme remotion
+```
+
+```tsx
+import { COLORS } from "magic-video/brand";
+import { FONTS } from "magic-video/fonts";
+import { SceneBackground, Tagline, WindowFrame } from "magic-video/primitives";
+
+export const Hero = () => (
+  <SceneBackground>
+    <WindowFrame title="my-package.ts" width={900} height={520}>
+      <Tagline color={COLORS.fgMuted}>
+        your own package, themed the same way
+      </Tagline>
+    </WindowFrame>
+  </SceneBackground>
+);
+```
+
+`magic-video/brand` re-derives its palette from `magic-theme`'s published theme JSON at import
+time, through the same `project()` call `magic-theme install` uses, so a consumer never copies a
+hex code that can drift from the theme.
+
+Register the composition in your own `root.tsx` the way Remotion expects, and render it with your
+own `remotion render` or `remotion still` call; `magic-video` supplies the pieces, not a CLI of
+its own.
+
+<Callout title="CodePane needs its own tokenizer">
+  `WindowFrame`, `SceneBackground`, `Tagline` and `BrandMark` render straight
+  from props. `CodePane` takes pre-tokenized `shiki` output instead of a plain
+  string, and the tokenizer this repo uses internally is not part of the
+  published subpaths. Add `shiki` yourself and tokenize against
+  `magic-theme/vscode/themes/magic-theme-color-theme.json` to get matching
+  syntax colors.
+</Callout>
+
+<Cards>
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/video/README.md")}
+    title="Full reference"
+    description="Every render script, each composition id, and how the demo reels are cut to GIF."
+  />
+</Cards>

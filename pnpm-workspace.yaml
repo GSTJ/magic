@@ -2,6 +2,15 @@ packages:
   - "packages/*"
   - "apps/*"
   - "fixtures/*"
+# `magic-docs` hands the docs site React components it imported from its own
+# copy of Fumadocs. Two copies means two `FrameworkContext` objects, the app's
+# provider fills neither of the other's, and every `Link` inside MDX silently
+# degrades to a bare `<a>` that Next never prefixes with `basePath`. Matching
+# version strings is not enough, a Renovate bump on one side reopens it, so
+# both sides resolve the same catalog entry.
+catalog:
+  fumadocs-core: 16.14.0
+  fumadocs-ui: npm:@fumadocs/base-ui@16.14.0
 # `posthog-js` pulls in core-js, whose postinstall script only prints a funding
 # banner. Denied, so `pnpm install` stops asking and CI stays quiet.
 allowBuilds:
