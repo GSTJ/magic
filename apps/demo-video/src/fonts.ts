@@ -11,15 +11,6 @@ loadFont({
 
 loadFont({
   display: "block",
-  family: "Instrument Serif",
-  format: "woff2",
-  style: "italic",
-  url: staticFile("fonts/instrument-serif-italic.woff2"),
-  weight: "400",
-});
-
-loadFont({
-  display: "block",
   family: "JetBrains Mono",
   format: "woff2",
   url: staticFile("fonts/jetbrains-mono-variable.woff2"),
@@ -33,5 +24,4 @@ loadFont({
 export const FONTS = {
   mono: "JetBrains Mono",
   sans: "Instrument Sans",
-  serif: "Instrument Serif",
 } as const;

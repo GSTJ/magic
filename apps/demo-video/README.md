@@ -3,9 +3,9 @@
 Remotion source for every image and GIF committed at the repo root's `media/`: one hero still per
 package README, the theme palette strip, the codemods demo GIF, and the repo social card. Nothing is
 hand-screenshotted. Colors come from `magic-theme`'s published VS Code theme through its own
-`project()`, fonts load from `public/fonts/` (Instrument Sans, Instrument Serif italic, JetBrains
-Mono), and code panels are shiki-tokenized with the real theme JSON, so every asset stays on brand
-by construction.
+`project()`, fonts load from `public/fonts/` (Instrument Sans, JetBrains Mono), the mark is inlined
+from `public/magic-mark.svg`, and code panels are shiki-tokenized with the real theme JSON, so every
+asset stays on brand by construction.
 
 ## Rendering
 

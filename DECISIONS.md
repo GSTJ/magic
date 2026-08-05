@@ -2305,3 +2305,26 @@ style law with a subset mechanical enough to automate.
 Prose quality stays a human concern. A checker that grades writing rejects good
 writing, so the validator stops structural drift and nothing else. It will not
 notice a hype tagline or a useless mechanism list; review still has to.
+
+## 15. The npm package is `magic-readmes`
+
+Added 2026-08-05. npm carries an unpublish record on `magic-readme` from July
+2019, so the published name went plural. The directory stays `packages/readme`
+and the bin key stays `magic-readme`: the CLI verb reads better singular, and
+npx runs a package's only bin whatever that bin is called.
+
+Badges are marketing. Package READMEs carry npm version and npm downloads, and
+the validator requires the version badge to name the package the README ships
+with, read from the adjacent `package.json`. Private packages have no npm page,
+so the root README skips the rule and carries no badge row at all. Stars and
+license came off every README here: the star count is zero and the license
+badge renders `unknown`, and both of those argue against installing. Nothing in
+the standard requires either, so a package can bring them back when the numbers
+help.
+
+`check` also rejects an exact `name@1.2.3` inside a fenced code block. Install
+snippets get copied years later, and a patch version in one is wrong the day
+after the next release. Moving tags like `@v1` and `@2` pass, and so do ranges,
+since both follow releases on their own. Exact versions in prose are just as
+stale, but the validator only reads code blocks and that half stays a human
+call.

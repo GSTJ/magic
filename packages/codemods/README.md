@@ -6,9 +6,6 @@
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-codemods"><img alt="npm version" src="https://shieldcn.dev/npm/magic-codemods.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-codemods"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-codemods/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -39,7 +36,7 @@ pnpm add -D magic-codemods
 
 `magic-oxlint-config` enables `unicorn/filename-case` at `kebabCase` in `base`, so every repo
 adopting the preset has a pile of `Button.tsx` and `formatDate.ts` to deal with at once. Doing
-that by hand is a large, boring, error-prone diff in the middle of a migration that is already
+that by hand is a large, error-prone diff in the middle of a migration that is already
 changing everything else. Doing it with `find | xargs mv` breaks every import in the repo and, on
 macOS, silently does nothing at all for the case-only renames.
 
@@ -72,26 +69,11 @@ easiest possible job. Mixing a refactor into the same commit is what breaks hist
 
 ### Options
 
-```
---write               Apply the plan: rewrite specifiers, then git mv the files.
---dry-run             Explicit form of the default. Mutually exclusive with --write.
---detect <mode>       oxlint (default) | builtin
---root <dir>          Where to start looking for the repo. Default: cwd.
---tsconfig <path>     tsconfig whose `paths` drive alias rewriting. Repeatable.
-                      Default: every tsconfig.json / tsconfig.base.json /
-                      jsconfig.json at the repo root and in each workspace
-                      package, merged.
---rename <old=new>    Override one target basename. Repeatable. Keys are FULL
-                      basenames, extension included; `S3=s3` is an error.
---allow-dirty         Skip the clean-tree check.
---strict              Exit 1 if anything needs manual review.
---json                Emit the whole result as JSON.
-```
-
-Positional arguments scope the run: `magic-kebab --dry-run src/components`.
+`magic-kebab --help` lists every flag. Positional arguments scope the run:
+`magic-kebab --dry-run src/components`.
 
 Exit codes: `0` success, `1` refused (dirty tree, bad arguments, a `--rename` that matched
-nothing) or the plan has conflicts, or `--strict` and something needs review.
+nothing), the plan has conflicts, or `--strict` finds something to review.
 
 ### `--rename` keys are full basenames
 
@@ -128,9 +110,9 @@ that repo's exemptions, so it reports more, which is where the skip list below c
 `test/kebab.test.mjs` generates a corpus, runs the real binary over it, and fails if the two
 ever disagree on a single name.
 
-Do **not** try to speed the default up with `oxlint -A all -D unicorn/filename-case`. Verified
-on 1.75.0: `-D <rule>` re-enables the rule with its _default_ options and throws away the
-config's `ignore` list, so a run scoped that way reports every `[postId].tsx` in the repo.
+Do **not** try to speed the default up with `oxlint -A all -D unicorn/filename-case`. `-D <rule>`
+re-enables the rule with its _default_ options and throws away the config's `ignore` list, so a
+run scoped that way reports every `[postId].tsx` in the repo.
 
 ## What it rewrites
 
@@ -231,7 +213,7 @@ const result = runKebabCodemod({
   write: false,
   allowDirty: false,
   detect: "oxlint",
-  tsconfig: undefined,
+  tsconfigs: [],
   overrides: new Map(),
 });
 

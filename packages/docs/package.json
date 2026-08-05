@@ -1,6 +1,6 @@
 {
   "name": "magic-docs",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "GSTJ's reusable Fumadocs foundation: site contract, layout and MDX presets, TypeScript API docs, static export helpers, and visual theme.",
   "keywords": [
     "documentation",

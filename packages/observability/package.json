@@ -1,6 +1,6 @@
 {
   "name": "magic-observability",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Shared PostHog layer for GSTJ projects: per-platform init with error tracking on, one captureError shape, a React/RN error boundary, and a no-op client when the key is absent.",
   "keywords": [
     "analytics",

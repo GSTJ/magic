@@ -2,12 +2,7 @@
   <img alt="The magic social card: the sparkle mark and wordmark on the theme's night background" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-social.png" />
 </p>
 
-<p align="center">Lint, format, TypeScript, CI, and Renovate settings in one place. Twelve repos stop each having their own slightly-wrong version.</p>
-
-<p align="center">
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
-</p>
+<p align="center">Change a lint rule or a CI step once. Every repo importing this one picks it up on its next run.</p>
 
 ## How it works
 
@@ -21,34 +16,32 @@
 ## Install
 
 ```sh
-pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
 ```
 
 Pin `oxlint` and `oxfmt` exactly: both add and remove rules between minors, and an unknown rule
-name is a fatal config error. Then follow the
+name is a fatal config error. Next, follow the
 [setup for your project type](.github/workflows/README.md#setup-by-project-type) in the adoption
-guide: four steps, with copy-paste blocks for Next.js, Expo, bare React Native, React web, and
-plain TypeScript.
+guide: four steps, with a copy-paste block for your project type.
 
 ## Packages
 
 Each one has its own README with the full detail.
 
-- [`magic-oxlint-config`](packages/oxlint-config) is the oxlint presets: `base`, `react`,
-  `react-native`, `next`, `expo`.
+- [`magic-oxlint-config`](packages/oxlint-config) is the oxlint presets, one per project type (see
+  the package README).
 - [`magic-oxfmt-config`](packages/oxfmt-config) is the oxfmt config, import sort order included.
-- [`magic-oxlint-plugin`](packages/oxlint-plugin) is eight opt-in lint rules with no oxlint
-  equivalent.
-- [`magic-tsconfig`](packages/tsconfig) is the TypeScript bases: `base`, `internal-package`,
-  `nextjs`, `expo`.
+- [`magic-oxlint-plugin`](packages/oxlint-plugin) is opt-in lint rules with no oxlint equivalent.
+- [`magic-tsconfig`](packages/tsconfig) is the TypeScript bases, one per project type (see the
+  package README).
 - [`magic-codemods`](packages/codemods) is `magic-kebab`, the kebab-case filename migration.
 - [`magic-observability`](packages/observability) is PostHog init, `captureError`, and an error
   boundary, per platform.
-- [`magic-docs`](packages/docs) is the Fumadocs theme, layout and MDX presets, the TypeScript
-  reference, and the Pages deploy.
-- [`magic-theme`](packages/theme) is Magic Theme for Cursor / VS Code, Warp, Ghostty, and
-  Alacritty.
-- [`magic-readme`](packages/readme) is the README standard as code: a template, an `init`
+- [`magic-docs`](packages/docs) is the Fumadocs setup end to end, theme through Pages deploy (see
+  the package README for the pieces).
+- [`magic-theme`](packages/theme) is Magic Theme, ported across editors and terminals (see the
+  package README for which ones).
+- [`magic-readmes`](packages/readme) is the README standard as code: a template, an `init`
   scaffold, and the `check` validator this repo runs on itself.
 - `GSTJ/magic/docs-landing` is the editable shadcn block for dark package landing pages; see
   [its section in the adoption guide](.github/workflows/README.md#docs-landing-block).
@@ -58,12 +51,10 @@ Remotion app that draws from `magic-theme`'s own palette; nothing is hand-screen
 
 ## CI and automation
 
-`.github/workflows` ships reusable `workflow_call` jobs ([`ci.yml`](.github/workflows/ci.yml),
-[`release.yml`](.github/workflows/release.yml), [`e2e-ios.yml`](.github/workflows/e2e-ios.yml))
-and the composite actions they are built from, consumed by tag (`@v1`). Adoption
-per project type, the Mac-runner routing, the measured iOS E2E defaults, the Renovate policy, the
-pnpm 11 migration notes, and every gotcha live in the
-[adoption guide](.github/workflows/README.md).
+`.github/workflows` ships the reusable CI jobs ([`ci.yml`](.github/workflows/ci.yml),
+[`release.yml`](.github/workflows/release.yml), [`e2e-ios.yml`](.github/workflows/e2e-ios.yml)) and
+the composite actions they are built from, consumed by tag (`@v1`). Every adoption detail and
+gotcha lives in the [adoption guide](.github/workflows/README.md).
 
 ## Development
 
@@ -88,7 +79,5 @@ from `/expo`, `posthog-node` from `/web`). That split is the package's whole rea
 five entry points, nothing in TypeScript enforces it, and it would otherwise break in a
 consumer's bundler weeks later.
 
-`pnpm run adversarial` runs `fixtures/adversarial`, end-to-end expected-outcome checks against
-the real binaries: every emitted variant on a clean file, the opt-in plugin rules, the
-restricted-imports snippet from the adoption guide, safe-jsx's autofix convergence, and oxfmt's
-import-sort edge cases.
+`pnpm run adversarial` runs `fixtures/adversarial`, end-to-end expected-outcome checks against the
+real binaries. See the fixture files for exactly what's covered.
