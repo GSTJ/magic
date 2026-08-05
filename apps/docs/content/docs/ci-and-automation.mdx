@@ -3,7 +3,7 @@ title: CI and automation
 description: Reusable CI jobs consumed by tag, and the shared Renovate policy.
 ---
 
-Three GitHub Actions workflows and one Renovate preset live here. A consuming repo calls them by
+Four GitHub Actions workflows and one Renovate preset live here. A consuming repo calls them by
 tag, so a fix or a rule change lands in this repo once and reaches every caller on its next run.
 
 ## ci.yml
@@ -60,6 +60,24 @@ jobs:
 That's the whole adoption for a repo with an Expo app and a `.maestro` directory next to it.
 Self-hosted Mac routing, sharding, quarantining flaky flows, and flake statistics are all opt-in
 inputs on top of this default.
+
+## render-media.yml
+
+Rebuilds a repo's `media` folder from source and publishes it to an R2 bucket, then reads every
+object back over HTTPS to confirm the CDN serves what the render just built. A caller supplies
+`r2-prefix` and the two Cloudflare secrets on top of the default render command; this repo's own
+`media.yml` is the reference caller.
+
+```yaml
+jobs:
+  media:
+    uses: GSTJ/magic/.github/workflows/render-media.yml@v1
+    with:
+      r2-prefix: your-repo-name
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
 
 ## Versions
 
