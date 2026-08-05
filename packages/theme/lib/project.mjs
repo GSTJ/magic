@@ -22,18 +22,20 @@ const ANSI_KEYS = [
 ];
 
 /** @param {Record<string, string | undefined>} colors */
-function pick(colors, keys, fallback) {
+const pick = (colors, keys, fallback) => {
   for (const k of keys) {
     const v = colors[k];
     if (v) return v.length === 9 ? v.slice(0, 7) : v;
   }
   return fallback;
-}
+};
 
 /** @param {string} name */
-function slugify(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
+const slugify = (name) =>
+  name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-|-$/g, "");
 
 /** @param {{ name?: string, type?: string, colors: Record<string, string>, tokenColors?: unknown[] }} theme */
 export function project(theme) {
@@ -48,13 +50,33 @@ export function project(theme) {
     slug: slugify(name),
     bg: pick(c, ["editor.background", "terminal.background"], "#141414"),
     fg: pick(c, ["editor.foreground", "foreground"], "#f8f8f2"),
-    fgMuted: pick(c, ["descriptionForeground", "editorLineNumber.foreground"], "#6e6e76"),
+    fgMuted: pick(
+      c,
+      ["descriptionForeground", "editorLineNumber.foreground"],
+      "#6e6e76",
+    ),
     accent: pick(c, ["activityBarBadge.background", "focusBorder"], "#bd93f9"),
     border: pick(c, ["panel.border", "sideBar.border"], "#2e2e2e"),
-    selection: pick(c, ["editor.selectionBackground", "list.activeSelectionBackground"], "#1c1c1c"),
-    cursor: pick(c, ["editorCursor.foreground", "terminalCursor.foreground"], "#f8f8f2"),
-    success: pick(c, ["testing.iconPassed", "gitDecoration.addedResourceForeground"], ansi[2]),
-    error: pick(c, ["errorForeground", "gitDecoration.deletedResourceForeground"], ansi[1]),
+    selection: pick(
+      c,
+      ["editor.selectionBackground", "list.activeSelectionBackground"],
+      "#1c1c1c",
+    ),
+    cursor: pick(
+      c,
+      ["editorCursor.foreground", "terminalCursor.foreground"],
+      "#f8f8f2",
+    ),
+    success: pick(
+      c,
+      ["testing.iconPassed", "gitDecoration.addedResourceForeground"],
+      ansi[2],
+    ),
+    error: pick(
+      c,
+      ["errorForeground", "gitDecoration.deletedResourceForeground"],
+      ansi[1],
+    ),
     warning: pick(c, ["editorWarning.foreground"], ansi[3]),
     ansi,
     tokenColors: theme.tokenColors ?? [],

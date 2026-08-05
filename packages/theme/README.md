@@ -24,23 +24,23 @@ magic-theme install cursor warp
 
 ## Layout
 
-| Path | Role |
-| ---- | ---- |
-| `vscode/themes/magic-dracula-color-theme.json` | colors + syntax |
-| `lib/project.mjs` | bg / fg / ANSI roles from that theme |
-| `lib/formats.mjs` | Warp, Ghostty, Alacritty |
-| `bin/magic-theme.mjs` | write into each app's config dir |
+| Path                                           | Role                                 |
+| ---------------------------------------------- | ------------------------------------ |
+| `vscode/themes/magic-dracula-color-theme.json` | colors + syntax                      |
+| `lib/project.mjs`                              | bg / fg / ANSI roles from that theme |
+| `lib/formats.mjs`                              | Warp, Ghostty, Alacritty             |
+| `bin/magic-theme.mjs`                          | write into each app's config dir     |
 
 Edit the VS Code theme, re-run install.
 
 ## Elsewhere
 
-| App | After install |
-| --- | ------------- |
-| Cursor / VS Code | theme **Magic Dracula** |
-| Warp / Orca | Themes UI |
-| Ghostty | `theme = magic-dracula` |
-| Alacritty | import the generated toml |
+| App              | After install                              |
+| ---------------- | ------------------------------------------ |
+| Cursor / VS Code | theme **Magic Dracula**                    |
+| Warp / Orca      | Themes UI                                  |
+| Ghostty          | `theme = magic-dracula`                    |
+| Alacritty        | import the generated toml                  |
 | Windows Terminal | `toWindowsTerminal()` in `lib/formats.mjs` |
 
 Broader multi-app projection from a VS Code theme:
