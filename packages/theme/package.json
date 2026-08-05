@@ -1,0 +1,50 @@
+{
+  "name": "magic-theme",
+  "version": "0.1.0",
+  "description": "Dracula 141414 — shared editor + terminal theme for GSTJ (Cursor, VS Code, Warp, Ghostty, Alacritty).",
+  "keywords": [
+    "alacritty",
+    "cursor",
+    "dracula",
+    "ghostty",
+    "theme",
+    "vscode",
+    "warp"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/theme#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/theme"
+  },
+  "bin": {
+    "magic-theme": "./bin/magic-theme.mjs"
+  },
+  "files": [
+    "bin",
+    "palette.json",
+    "terminals",
+    "vscode",
+    "NOTICE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "oxlint",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt .",
+    "typecheck": "echo \"magic-theme ships JSON/YAML and a JS installer\"",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

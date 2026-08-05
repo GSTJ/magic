@@ -1,0 +1,28 @@
+# Dracula 141414 — magic-theme
+[colors.primary]
+background = "#141414"
+foreground = "#f8f8f2"
+
+[colors.cursor]
+text = "#141414"
+cursor = "#f8f8f2"
+
+[colors.normal]
+black = "#21222c"
+red = "#ff5555"
+green = "#50fa7b"
+yellow = "#f1fa8c"
+blue = "#b08ae8"
+magenta = "#ee71b8"
+cyan = "#7ed3e6"
+white = "#f8f8f2"
+
+[colors.bright]
+black = "#6272a4"
+red = "#ff6e6e"
+green = "#69ff94"
+yellow = "#ffffa5"
+blue = "#c8a1f1"
+magenta = "#ee87d1"
+cyan = "#96e8ed"
+white = "#ffffff"
