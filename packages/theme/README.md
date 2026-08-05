@@ -1,13 +1,9 @@
 # magic-theme
 
-Dracula 141414 for Cursor / VS Code and terminals. `#141414` chrome, quieter
-blues, slightly softened cyan/magenta ANSI.
-
-Edit `palette.json` and rebuild editor and terminal files from it.
+Dracula 141414 for editors, terminals, Claude Code, and Codex. Install projects
+the VS Code theme JSON into each tool.
 
 ## Install
-
-From this repo:
 
 ```sh
 pnpm --filter magic-theme exec magic-theme install
@@ -19,44 +15,43 @@ Or after publish:
 npx magic-theme install
 ```
 
-Default targets: apps we already have on the machine (`cursor`, `vscode`, `warp`,
-`ghostty`, `alacritty`, `orca`). Pass names to limit:
+Default targets: apps we already have (`cursor`, `vscode`, `warp`, `ghostty`,
+`alacritty`, `orca`, `claude`, `codex`). Pass names to limit:
 
 ```sh
-magic-theme install cursor warp
-magic-theme uninstall cursor
+magic-theme install cursor claude codex warp
 ```
 
-## Editors
+## Layout
 
-After install, pick **Dracula 141414** in the color theme picker. Reload the
-window if it does not show up.
+| Path | Role |
+| ---- | ---- |
+| `vscode/themes/dracula-141414-color-theme.json` | colors + syntax |
+| `lib/project.mjs` | bg / fg / ANSI roles from that theme |
+| `lib/formats.mjs` | Warp, Ghostty, Alacritty, Claude, TextMate |
+| `bin/magic-theme.mjs` | write into each app's config dir |
 
-Extension path:
+Edit the VS Code theme, re-run install.
 
-```text
-~/.cursor/extensions/gstj.magic-theme-<version>
-~/.vscode/extensions/gstj.magic-theme-<version>
-```
+## Claude Code
 
-## Terminals
+Install writes `~/.claude/themes/dracula-141414.json` and sets
+`theme: "custom:dracula-141414"` in settings. Confirm in `/theme`.
 
-| App        | File after install                                      | Enable |
-| ---------- | ------------------------------------------------------- | ------ |
-| Warp       | `~/.warp/themes/dracula-141414.yaml`                    | Themes UI |
-| Ghostty    | `~/.config/ghostty/themes/dracula-141414`               | `theme = dracula-141414` |
-| Alacritty  | `~/.config/alacritty/themes/dracula-141414.toml`        | `import` that file |
-| Orca       | `~/.config/orca/themes/dracula-141414.yaml`             | Themes UI |
-| Windows Terminal | `terminals/windows-terminal.json` (copy into settings) | Color schemes |
+## Codex
 
-## Rebuild
+Install writes `~/.codex/themes/dracula-141414.tmTheme` and sets `[tui] theme`.
+Confirm in `/theme`.
 
-When `palette.json` changes and the official Dracula VS Code extension is
-installed locally:
+## Elsewhere
 
-```sh
-pnpm --filter magic-theme run build
-```
+| App | After install |
+| --- | ------------- |
+| Cursor / VS Code | theme **Dracula 141414** |
+| Warp / Orca | Themes UI |
+| Ghostty | `theme = dracula-141414` |
+| Alacritty | import the generated toml |
+| Windows Terminal | `toWindowsTerminal()` in `lib/formats.mjs` |
 
-That rewrites the VS Code theme and terminal files. Syntax tokens still come
-from Dracula (see `NOTICE`).
+Broader multi-app projection from a VS Code theme:
+[monotheme](https://github.com/eduwass/monotheme).

@@ -1,12 +1,12 @@
 {
   "name": "magic-theme",
-  "version": "0.1.0",
-  "description": "Dracula 141414 — shared editor + terminal theme for GSTJ (Cursor, VS Code, Warp, Ghostty, Alacritty).",
+  "version": "0.2.0",
+  "description": "Dracula 141414 from one VS Code theme into Cursor, terminals, Claude Code, and Codex.",
   "keywords": [
-    "alacritty",
+    "claude",
+    "codex",
     "cursor",
     "dracula",
-    "ghostty",
     "theme",
     "vscode",
     "warp"
@@ -27,8 +27,7 @@
   },
   "files": [
     "bin",
-    "palette.json",
-    "terminals",
+    "lib",
     "vscode",
     "NOTICE",
     "README.md"
@@ -37,11 +36,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "node scripts/build.mjs",
     "lint": "oxlint",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
-    "typecheck": "echo \"magic-theme ships JSON/YAML and a JS installer\"",
+    "typecheck": "echo \"magic-theme ships JS + JSON\"",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {
