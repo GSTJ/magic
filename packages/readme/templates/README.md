@@ -2,13 +2,19 @@
   <img alt="<what the image shows>" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/<pkg>.png" />
 </p>
 
-<p align="center"><One sentence stating the mechanism.></p>
+<!-- Tagline: say what the reader does with the package, in concrete verbs, at
+     most two short clauses. "Mount one portal. Open a modal from any async flow
+     and await a typed result on Expo, React Native, or the web." Never an
+     abstract noun that drives or powers a list of features. -->
+
+<p align="center"><What you do with it, in one or two short clauses.></p>
+
+<!-- npm version and downloads are the badges that sell a package: they say it
+     exists and people use it. Stars and license join only when those numbers
+     help too. -->
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/<pkg>"><img alt="npm version" src="https://shieldcn.dev/npm/<pkg>.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/<pkg>"><img alt="npm downloads" src="https://shieldcn.dev/npm/<pkg>/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -22,6 +28,10 @@
 ```
 
 ## Install
+
+<!-- No exact versions in the snippet. A copied `<pkg>@1.2.3` is wrong the day
+     after the next release, and `check` fails on it. Moving tags like @v1 are
+     fine. -->
 
 ```sh
 npm install <pkg>

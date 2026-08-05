@@ -1,7 +1,7 @@
 {
-  "name": "magic-readme",
+  "name": "magic-readmes",
   "version": "1.0.0",
-  "description": "The GSTJ README standard as code: a skeleton to start from and a mechanical check.",
+  "description": "Scaffold a README from the GSTJ standard and check any file back against it.",
   "keywords": [
     "cli",
     "docs",
@@ -36,7 +36,7 @@
     "lint": "oxlint",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
-    "typecheck": "echo \"magic-readme ships plain JS\"",
+    "typecheck": "echo \"magic-readmes ships plain JS\"",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {

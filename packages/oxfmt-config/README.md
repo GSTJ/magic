@@ -2,13 +2,10 @@
   <img alt="Before and after code panes: messy imports on the left, the same file formatted and sorted into import groups on the right, with the react group highlighted" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxfmt-config.png" />
 </p>
 
-<p align="center">Prettier's house style plus the ported import order, shared as a JavaScript import because oxfmt has no extends.</p>
+<p align="center">Import one file. Format and sort imports in one pass, no separate plugin needed.</p>
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-oxfmt-config"><img alt="npm version" src="https://shieldcn.dev/npm/magic-oxfmt-config.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-oxfmt-config"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-oxfmt-config/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -31,8 +28,11 @@ export default base;
 ## Install
 
 ```sh
-pnpm add -D oxfmt@0.60.0 magic-oxfmt-config
+pnpm add -D oxfmt magic-oxfmt-config
 ```
+
+Pin `oxfmt` to an exact version in your own lockfile. A minor bump can change formatting output and
+reflow every file in the repo at once.
 
 ## Variants
 
@@ -69,8 +69,8 @@ export default withoutIgnorePatterns(base, ["**/CHANGELOG.md"]);
 where unknown keys and unmatched patterns both fail open, a typo that silently kept the ignore in
 place would never surface downstream.
 
-oxfmt 0.60.0 also treats a fully excluded path list as an error. It exits 2 when every path it was
-handed is excluded:
+oxfmt also treats a fully excluded path list as an error. It exits 2 when every path it was handed
+is excluded:
 
 ```sh
 $ oxfmt CHANGELOG.md
@@ -103,19 +103,15 @@ config first, or `--out` the snapshot elsewhere.
 
 ## House style
 
-Prettier's defaults, which is what the incumbent `@magic/prettier-config` used (it set no
-formatting overrides at all), so existing repos already look like this.
+Prettier's defaults: the incumbent `@magic/prettier-config` set no overrides, so existing repos
+already match this. The full set of values lives in
+[`src/index.ts`](https://github.com/GSTJ/magic/blob/main/packages/oxfmt-config/src/index.ts); two
+are worth calling out because they diverge from oxfmt's own defaults:
 
-| Option           | Value      | Note                                     |
-| ---------------- | ---------- | ---------------------------------------- |
-| `printWidth`     | `80`       | oxfmt defaults to 100, so set explicitly |
-| `singleQuote`    | `false`    | double quotes                            |
-| `semi`           | `true`     |                                          |
-| `trailingComma`  | `"all"`    |                                          |
-| `arrowParens`    | `"always"` |                                          |
-| `tabWidth`       | `2`        |                                          |
-| `bracketSpacing` | `true`     |                                          |
-| `endOfLine`      | `"lf"`     | oxfmt has no `"auto"`                    |
+- `printWidth: 80`. oxfmt defaults to 100; left unset, the first run reflows every file in the
+  repo.
+- `singleQuote: false`. Matches oxfmt's default too, stated explicitly because it's the one
+  house-style question that comes up.
 
 The MM mobile reference repo uses 120 columns and single quotes. We went with the incumbent
 instead, so migrating repos don't get a whole-tree reflow on top of everything else changing.

@@ -13,13 +13,18 @@ const repoRoot = join(import.meta.dirname, "..");
 
 const show = (file) => relative(repoRoot, file);
 
-/** The package name problems are reported under, from the adjacent package.json. */
+/**
+ * The npm package a README ships with, from the adjacent package.json. The
+ * root manifest is private, so the root README comes back null and skips the
+ * npm badge rule.
+ */
 const nameFor = (file) => {
   const sibling = join(dirname(file), "package.json");
   try {
-    return JSON.parse(readFileSync(sibling, "utf8")).name;
+    const manifest = JSON.parse(readFileSync(sibling, "utf8"));
+    return manifest.private ? null : (manifest.name ?? null);
   } catch {
-    return show(file);
+    return null;
   }
 };
 

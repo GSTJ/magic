@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { validateReadme } from "../lib/validate.mjs";
 
@@ -33,17 +33,20 @@ const init = (dir) => {
 };
 
 /**
- * The package name a README belongs to, for problem messages: the adjacent
- * package.json's name when there is one, the directory's name otherwise.
+ * The npm package a README ships with, taken from the adjacent package.json.
+ * Private packages and loose files get null, which exempts them from the badge
+ * rule: there is no npm page for a badge to point at.
  *
  * @param {string} file
+ * @returns {string | null}
  */
 const nameFor = (file) => {
   const sibling = join(dirname(file), "package.json");
   try {
-    return JSON.parse(readFileSync(sibling, "utf8")).name;
+    const manifest = JSON.parse(readFileSync(sibling, "utf8"));
+    return manifest.private ? null : (manifest.name ?? null);
   } catch {
-    return basename(dirname(file));
+    return null;
   }
 };
 

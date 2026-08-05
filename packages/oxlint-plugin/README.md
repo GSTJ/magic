@@ -2,13 +2,10 @@
   <img alt="Editor window with a lone wrapping if flagged by the magic/prefer-early-return diagnostic" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxlint-plugin.png" />
 </p>
 
-<p align="center">Twelve oxlint rules with no usable built-in equivalent: eight opt-in policies under magic/*, and the four react-native/* ports the presets turn on.</p>
+<p align="center">Add one oxlint plugin. Opt into eight rules by hand, or use the react-native ones your preset already turns on.</p>
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-oxlint-plugin"><img alt="npm version" src="https://shieldcn.dev/npm/magic-oxlint-plugin.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-oxlint-plugin"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-oxlint-plugin/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -46,8 +43,8 @@ pnpm add -D magic-oxlint-plugin
 
 ## Rules
 
-All eight `magic/*` rules are opt-in. They're policies rather than bug detectors, or they're
-stack-specific, and both kinds of rule should be a deliberate choice per repo.
+All eight `magic/*` rules are opt-in. Each one is either a policy call or specific to a
+particular stack, so enabling it is a deliberate per-repo decision.
 
 ### `magic/prefer-early-return`
 
@@ -73,12 +70,12 @@ const handle = (ok: boolean) => {
 
 Options: `maximumStatements` (default `0`), how many statements may sit inside
 the lone `if` before it's reported. Upstream defaults this to `1`; `0` is what
-the incumbent GSTJ ESLint config passed, so that's the default here. It is the
+the incumbent GSTJ ESLint config passed, so that's the default here, and the
 only deliberate divergence.
 
 A braceless consequent counts only when it's an expression statement, matching
-upstream. `() => { if (done) return; }` and `() => { if (bad) throw e; }` are
-already the shape this rule asks for and are never reported.
+upstream, so `() => { if (done) return; }` and `() => { if (bad) throw e; }`
+are already the shape this rule asks for and are never reported.
 
 Not auto-fixable. Inverting a condition correctly means understanding `&&`/`||`
 precedence; a blind `!(...)` wrapper reads worse than the original.
@@ -119,16 +116,16 @@ Port of `@shopify/react-require-autocomplete`. An autofillable `<input>` with no
 managers fill an address into a one-time-code box. `autoComplete="off"` is a
 fine answer; the rule wants the decision made.
 
-`jsx-a11y/autocomplete-valid` is not a substitute. It checks that an
-`autoComplete` value is legal, and says nothing when the attribute is missing
-(verified against oxlint 1.75.0).
+`jsx-a11y/autocomplete-valid` is not a substitute: it checks that an
+`autoComplete` value is legal, but says nothing when the attribute is missing
+entirely.
 
 Options: `inputComponents` (component names that render an `<input>` and
 forward props).
 
-Two divergences from upstream, both to cut false positives: an element with a
-spread attribute is skipped (`autoComplete` may be in the spread), and a
-computed `type={kind}` is skipped (upstream falls back to treating it as text).
+An element with a spread attribute is skipped (`autoComplete` may be in the
+spread), and a computed `type={kind}` is skipped (upstream falls back to
+treating it as text) - both cut false positives against upstream.
 
 ### `magic/react-hooks-strict-return`
 
@@ -201,104 +198,45 @@ has to be removed by hand. A rename alone produces code that doesn't compile.
 
 ### `magic/no-manual-classname`
 
-Bans composing a `className` by hand. The attribute's value has to be a plain
-string or a call: `cn()` to merge, `cva()` / `tv()` to declare variants.
+Bans composing a `className` by hand. The value has to be a plain string or a
+call: `cn()` to merge, `cva()` / `tv()` to declare variants.
 
 ```tsx
 // reported
 <div className={`ws-base${SIDE_CLASS[side]}`} />;
-<div className={"p-2 " + extra} />;
 <div className={active ? "bg-accent p-2" : "bg-muted p-2"} />;
-<div className={active && "bg-accent"} />;
-
-// reported too: one line up is still by hand
-const classes = `p-2 ${active ? "bg-accent" : "bg-muted"}`;
-<div className={classes} />;
 
 // fine
 <div className="p-2 text-sm" />;
 <div className={cn("p-2", active && "bg-accent")} />;
-<div className={button({ size })} />;
 ```
 
 Two Tailwind classes that set the same property both survive a `${}` or a `+`,
-and which one wins comes down to their order in the generated stylesheet. That's
-what `tailwind-merge` resolves, and `cn()` is the two-line wrapper around it
-that shadcn's `components.json` already generates into `@/lib/utils` in four of
-the GSTJ repos. A conditional in the attribute has a separate problem: every
-branch repeats the classes the branches share, so they drift.
-
-The shape it was written for is `gabriel-taveira-portfolio`'s `marginalia.tsx`:
-
-```tsx
-const SIDE_CLASS: Record<Side, string> = {
-  left: " ws-marginalia-left",
-  right: " ws-marginalia-right",
-  inline: "",
-};
-const className = `ws-marginalia${SIDE_CLASS[side]}`;
-```
-
-The leading spaces are what hold the concatenation together, so a template
-literal reading from an object of class strings gets a message naming `cva`/`tv`
-instead of the generic one. And the splice sits in a `const` above the JSX, so
-the rule follows a same-file `const` into the attribute.
+and which one wins comes down to their order in the generated stylesheet.
+`cn()` is the `tailwind-merge` wrapper that resolves that. A conditional in the
+attribute has a separate problem: every branch repeats the classes the
+branches share, so they drift.
 
 Options:
 
 - `attributes`: default `["className", "class"]`. NativeWind's extra class
   props (`contentContainerClassName`, `indicatorClassName`) go here.
-- `composers`: default `["cn", "cva", "twMerge", "clsx", "cx"]`, in descending
-  order of how often each appears across the GSTJ repos: `cn` 457 call sites,
-  `cva` 20, and `twMerge`/`clsx`/`cx` only inside the six `cn` definitions
-  those repos have between them. It picks the name the diagnostics tell you to
-  reach for, so a repo whose helper is `tw()` gets usable advice. It gates nothing: a call in
-  `className` is never reported, whatever it calls, because only the shape of
-  the value is inspected. That's also why `cn(cond ? a : b)` passes, and why
-  there's no `allowTernaryInCn` option; the argument was never in scope.
+- `composers`: default `["cn", "cva", "twMerge", "clsx", "cx"]`, the order the
+  GSTJ repos reach for them in. It gates nothing: a call in `className` is
+  never reported, whatever it calls, so `cn(cond ? a : b)` passes and there's
+  no `allowTernaryInCn` option, the argument was never in scope.
 
-  `tv` is missing from the default list because `tailwind-variants` isn't a
-  dependency of any GSTJ repo. It still appears in the messages, and
-  `className={tv(...)()}` passes either way.
+Not auto-fixable: wrapping the expression in `cn()` renders the identical class
+string, and picking which piece resolves which conflict is a judgement call a
+fixer can't make safely.
 
-What it doesn't catch:
-
-- `element.className = ...` outside JSX. Real, in
-  `invest-radar/sources/browser-ext/entrypoints/popup/main.ts`, but that's a
-  DOM property assignment in a package with no `cn` to route it through.
-- A `let`, or a name bound twice in the file. A `className` prop next to a
-  hand-built `const className` is that collision, and it's a common one; the
-  rule stops rather than guess which binding reaches the JSX.
-- Composition behind a function or module boundary, like
-  `className={buildClasses(side)}`. The helper may use `cn` already.
-- `||` and `??`. In an attribute those read as a default
-  (`className={own ?? "p-2"}`), the inverse of what `&&` does.
-
-A lookup table imported from another module is still caught, just less
-specifically: without the object literal in view, the generic `template` message
-fires instead of the `cva`/`tv` one.
-
-Not auto-fixable. Wrapping the expression in `cn()` renders the identical class
-string; the value is in splitting it into arguments, so falsy pieces drop out
-and conflicts merge. A fixer would have to decide which piece belongs where, and
-it'd get that wrong in the rendered output without failing anything.
-`magic/prefer-early-return` and `magic/prefer-suspense-query` are off-limits to
-`--fix` for the same kind of reason.
-
-The name describes what's banned. `prefer-cn` would name one of two right
-answers, since a variant axis wants `cva`/`tv`, and `no-classname-concat` covers
-`+` alone. See [DECISIONS.md](../../DECISIONS.md) section 10 for
-the evidence behind the defaults.
-
-Measured before shipping, over the repos themselves: 22 reports in
-`gabriel-taveira-portfolio`, 11 in `chatmode`, 6 in `invest-radar`, 1 in
-`padrinhos-ana-julia-gabriel`, and 0 in `e-card`, `pegada` and
-`would-you-rather`, which already route every composition through `cn`.
+Full rationale, the evidence behind the defaults, and the known gaps are in
+[DECISIONS.md](../../DECISIONS.md) section 10.
 
 ## React Native
 
-Four rules ported from `eslint-plugin-react-native@5.0.0` (MIT, see
-[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)). They ship from a separate
+Four rules ported from `eslint-plugin-react-native` (MIT license, version pinned
+in [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)). They ship from a separate
 entry point under the `react-native` namespace, and `magic-oxlint-config`'s
 `react-native` and `expo` variants enable all four at `error`, so a repo on
 either preset gets them without doing anything:
@@ -385,8 +323,6 @@ are consumed elsewhere stays silent.
 
 ### Divergences from upstream
 
-Three, all recorded in the rule files:
-
 - A valueless `<View style />` no longer crashes the linter. Upstream's
   `no-single-element-style-arrays` reads `node.value.expression` unguarded. Under
   oxlint that TypeError aborts the JS plugin host for the whole file, so every
@@ -397,12 +333,11 @@ Three, all recorded in the rule files:
   parser has emitted the node since ESTree renamed it to `PropertyDefinition`,
   so the branch never runs upstream either.
 
-Everything else matches, message strings included. Parity was measured by
-running both plugins over the same 13-file corpus under oxlint 1.75.0: 40
-diagnostics each, identical rule, byte offset, span length and message, plus
-identical `--fix` output. A fourteenth file holds the crash case, which only one
-of the two survives. `fixtures/adversarial/react-native` keeps the
-behaviour pinned.
+Everything else matches, message strings included. All three divergences are recorded in the rule
+files. Parity was measured by running both plugins over the same 13-file corpus: 40 diagnostics
+each, identical rule, byte offset, span length and message, plus identical `--fix` output. A
+fourteenth file holds the crash case, which only one of the two survives.
+`fixtures/adversarial/react-native` keeps the behaviour pinned.
 
 ### Not ported
 
@@ -426,15 +361,15 @@ that matters (the root README has the snippet).
 These have a real oxlint rule behind them, so there's nothing to port. Wire them
 in the consuming repo's config.
 
-| ESLint rule                         | oxlint replacement                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| `@shopify/no-namespace-imports`     | `import/no-namespace` with `ignore` globs (already on in `magic-oxlint-config`)            |
-| `@shopify/restrict-full-import`     | `no-restricted-imports` with `importNames: ["default"]`, plus `import/no-namespace`        |
-| `@shopify/jsx-no-hardcoded-content` | `react/jsx-no-literals` (snippet below)                                                    |
-| `react/jsx-no-leaked-render`        | `safe-jsx/jsx-explicit-boolean` for the `&&` case; the oxlint rule was removed before 1.75 |
-| `prefer-arrow-functions/*`          | `func-style: ["error", "expression"]`                                                      |
-| `unused-imports/no-unused-imports`  | `no-unused-vars` already reports unused imports                                            |
-| `import/order`                      | `oxfmt` sorts imports, so it never reaches lint                                            |
+| ESLint rule                         | oxlint replacement                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| `@shopify/no-namespace-imports`     | `import/no-namespace` with `ignore` globs (already on in `magic-oxlint-config`)       |
+| `@shopify/restrict-full-import`     | `no-restricted-imports` with `importNames: ["default"]`, plus `import/no-namespace`   |
+| `@shopify/jsx-no-hardcoded-content` | `react/jsx-no-literals` (snippet below)                                               |
+| `react/jsx-no-leaked-render`        | `safe-jsx/jsx-explicit-boolean` for the `&&` case; the native oxlint rule was removed |
+| `prefer-arrow-functions/*`          | `func-style: ["error", "expression"]`                                                 |
+| `unused-imports/no-unused-imports`  | `no-unused-vars` already reports unused imports                                       |
+| `import/order`                      | `oxfmt` sorts imports, so it never reaches lint                                       |
 
 `restrict-full-import` is per-repo config, since which packages are off-limits
 is a project decision:
@@ -446,7 +381,7 @@ is a project decision:
 ]}]
 ```
 
-Verified on oxlint 1.75.0: this reports both `import lodash from "lodash"` and
+This reports both `import lodash from "lodash"` and
 `import { default as lodash } from "lodash"`, and leaves
 `import { debounce } from "lodash"` alone. The namespace half
 (`import * as _ from "lodash"`) is `import/no-namespace`'s job. Upstream also
@@ -469,8 +404,7 @@ When you want it:
 `{ "noStrings": false }` reads like it should work and does nothing. And
 `restrictedAttributes` does not narrow checking to the attributes you list: it
 reports every string attribute and just uses a different message for the listed
-ones, so `ignoreProps: true` is the way to stay on children only. Both verified
-against 1.75.0.
+ones, so `ignoreProps: true` is the way to stay on children only.
 
 ## Rules considered and dropped
 
@@ -489,12 +423,12 @@ architecture-specific anyway, so it belongs in the consuming repo:
 ]}]
 ```
 
-Verified on 1.75.0: reports `../components/Card/internal/thing`, leaves
-`../components/Card` alone.
+This reports `../components/Card/internal/thing`, leaves `../components/Card`
+alone.
 
 ## Porting vs loading `@shopify/eslint-plugin`
 
-Measured under oxlint 1.75.0, with `@shopify/eslint-plugin@50.0.0` loaded as
+Measured with `@shopify/eslint-plugin` loaded as
 `{ name: "shopify", specifier: "@shopify/eslint-plugin" }`:
 
 | Rule                           | Result under oxlint                     |
@@ -509,11 +443,11 @@ Measured under oxlint 1.75.0, with `@shopify/eslint-plugin@50.0.0` loaded as
 | `strict-component-boundaries`  | Fails: `unable to load resolver "node"` |
 
 Compatibility mostly holds; the blocker is weight. `@shopify/eslint-plugin`
-pulls in 262 transitive packages and ~97 MB, a second copy of the ESLint
-ecosystem (`eslint-plugin-import-x`, `eslint-plugin-jest`,
-`eslint-plugin-jsx-a11y`, `typescript-eslint`, `prettier`), landing in every
-consumer of a config whose entire point is that oxlint replaced all of it.
-Porting the four rules worth keeping is a few hundred lines with tests.
+drags in a second copy of the ESLint ecosystem (`eslint-plugin-import-x`,
+`eslint-plugin-jest`, `eslint-plugin-jsx-a11y`, `typescript-eslint`,
+`prettier`) into every consumer of a config whose entire point is that oxlint
+replaced all of it. Porting the four rules worth keeping is a few hundred lines
+with tests.
 
 ## Authoring notes
 

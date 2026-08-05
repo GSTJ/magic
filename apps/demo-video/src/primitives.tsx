@@ -66,13 +66,14 @@ export const Sparkle: FC<{
 };
 
 /**
- * The mark: a big sparkle in the theme's accent with a small companion in its
- * terminal magenta. Drawn from theme colors rather than shipped as an asset,
- * so a retheme restyles the brand with everything else.
+ * The magic mark, inlined from `public/magic-mark.svg` so it stays vector at
+ * any render size. Its colors are the brand's own and hold steady when the
+ * theme changes; only the lift under it is themed.
  */
 export const BrandMark: FC<{ size?: number }> = ({ size = 64 }) => (
   <svg
-    viewBox="0 0 32 32"
+    fill="none"
+    viewBox="0 0 48 48"
     style={{
       width: size,
       height: size,
@@ -80,12 +81,38 @@ export const BrandMark: FC<{ size?: number }> = ({ size = 64 }) => (
       filter: `drop-shadow(0 ${size * 0.12}px ${size * 0.3}px ${COLORS.accent}44)`,
     }}
   >
-    <g transform="translate(1 7) scale(0.76)">
-      <path d={SPARKLE_PATH} fill={COLORS.accent} />
-    </g>
-    <g transform="translate(21.5 1.5) scale(0.3)">
-      <path d={SPARKLE_PATH} fill={COLORS.pink} />
-    </g>
+    <rect fill="#151411" height="44" rx="13" width="44" x="2" y="2" />
+    <path
+      d="m23.5 6.5-4.2 14.1 10.1-5.1-5.9-9Z"
+      fill="#9DF7C7"
+      stroke="#151411"
+      strokeLinejoin="round"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M16.2 20.3c2.9-3.1 6.8-4.5 10.8-3.7 5.7 1.1 9.1 6.2 8 11.8-.9 4.7-5 8.1-9.9 8.1h-9.3c-1.6 0-2.8-1.3-2.8-2.8v-5.4c0-3 .9-5.8 3.2-8Z"
+      fill="#FFFDF7"
+    />
+    <path
+      d="m17.1 21.1-5.2-3.4 1.2 7.1"
+      fill="#FF4FA3"
+      stroke="#151411"
+      strokeLinejoin="round"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M16.1 22.1c-2.3 2.3-3.4 5.2-3.1 8.9l4.7-2.2-2.1 5.3 5-1.6-1.1 4h5.6c-4-4.2-3.7-10.6-9-14.4Z"
+      fill="#7C5CFF"
+    />
+    <circle cx="29.8" cy="24.8" fill="#151411" r="1.35" />
+    <path
+      d="M39 7.5c.45 2.55 1.95 4.05 4.5 4.5-2.55.45-4.05 1.95-4.5 4.5-.45-2.55-1.95-4.05-4.5-4.5 2.55-.45 4.05-1.95 4.5-4.5Z"
+      fill="#FF4FA3"
+    />
+    <path
+      d="M38.2 28.8c.28 1.6 1.2 2.52 2.8 2.8-1.6.28-2.52 1.2-2.8 2.8-.28-1.6-1.2-2.52-2.8-2.8 1.6-.28 2.52-1.2 2.8-2.8Z"
+      fill="#9DF7C7"
+    />
   </svg>
 );
 
@@ -199,7 +226,10 @@ export const CodePane: FC<{
   </div>
 );
 
-/** One serif italic line, the voice the brand uses for asides. */
+/**
+ * One muted line for asides. Sits below a heading or a mark, so it stays
+ * lighter and tighter than the sans headings around it.
+ */
 export const Tagline: FC<{
   children: ReactNode;
   color?: string;
@@ -207,10 +237,10 @@ export const Tagline: FC<{
 }> = ({ children, color = COLORS.fgMuted, fontSize = 30 }) => (
   <div
     style={{
-      fontFamily: FONTS.serif,
-      fontStyle: "italic",
+      fontFamily: FONTS.sans,
+      fontWeight: 400,
       fontSize,
-      letterSpacing: -0.4,
+      letterSpacing: -0.6,
       color,
     }}
   >

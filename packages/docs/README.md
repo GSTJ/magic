@@ -2,22 +2,18 @@
   <img alt="A rendered magic-docs page: sidebar navigation, content column, and a generated type table" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-docs.png" />
 </p>
 
-<p align="center">One validated site contract drives the Fumadocs layout, theme, type tables, llms.txt output, and GitHub Pages export.</p>
+<p align="center">Define your site once. Ship a themed docs site with generated type tables and agent-readable llms.txt.</p>
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-docs"><img alt="npm version" src="https://shieldcn.dev/npm/magic-docs.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-docs"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-docs/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
 
 1. `defineMagicDocs` validates one site contract (name, URLs, package) at config evaluation time,
    and every helper below derives from it.
-2. Presets wrap Fumadocs with the shared layout, MDX components, Tailwind v4 theme, build-time
-   TypeScript reference tables, and clean copy-as-Markdown, `llms.txt`, and `llms-full.txt`
-   output.
+2. Presets style Fumadocs with the shared theme. Reference tables and llms.txt output generate at
+   build time.
 3. `createMagicDocsStaticExport` turns the app into a static Next export that GitHub Pages serves
    under a project path.
 
@@ -45,31 +41,15 @@ guides, API decisions, and deploy workflow.
 Install the framework packages in the docs application:
 
 ```sh
-pnpm add next@16 react@^19.2.0 react-dom@^19.2.0 \
-  fumadocs-core@16.12.1 fumadocs-mdx@15.2.0 \
-  fumadocs-ui@npm:@fumadocs/base-ui@16.12.1 magic-docs
-pnpm add -D typescript@6.0.3 tailwindcss @tailwindcss/postcss
+pnpm add next@16 react react-dom fumadocs-core fumadocs-mdx \
+  fumadocs-ui@npm:@fumadocs/base-ui magic-docs
+pnpm add -D typescript tailwindcss @tailwindcss/postcss
 ```
 
 The `fumadocs-ui` alias selects Base UI while preserving Fumadocs' documented import paths.
-
-## Compatibility
-
-The package is built and tested with:
-
-| Dependency              | Version                                |
-| ----------------------- | -------------------------------------- |
-| Fumadocs Core/UI        | `16.12.1`                              |
-| Fumadocs MDX            | `15.2.0`                               |
-| Fumadocs TypeScript     | `5.3.0`                                |
-| React / React DOM       | `^19.2.0`                              |
-| TypeScript for docs app | `6.0.3`                                |
-| UI implementation       | Base UI (the current Fumadocs default) |
-
-`16.12.1` is the newest Fumadocs UI release outside this monorepo's three-day supply-chain
-quarantine at the time of the preset. The peer range accepts newer compatible 16.x versions.
-TypeScript is pinned separately from the `magic` root: the root currently tests TypeScript 7,
-while framework docs apps stay on the compiler compatible with their Next/Fumadocs stack.
+Pin TypeScript separately from this monorepo's root: the docs app needs a compiler release
+Next and Fumadocs have already caught up to. Exact ranges for everything else live in this
+package's `peerDependencies`.
 
 ## Site contract
 
@@ -131,8 +111,8 @@ export default function Layout({ children }: LayoutProps<"/">) {
 }
 ```
 
-`createMagicDocsLayout` keeps GitHub, npm, theme, and search controls consistent. Add
-package-specific links through its `links` option.
+`createMagicDocsLayout` keeps those controls in sync across packages. Add package-specific links
+through its `links` option.
 
 The shared MDX vocabulary includes Fumadocs' default cards, callouts, headings, and code blocks
 plus accordions, file trees, steps, tabs, and type tables:
@@ -182,8 +162,8 @@ Then reference a public type:
 <auto-type-table path="../../../src/types.ts" name="ModalProps" />
 ```
 
-Generated tables supplement prose. In `fumadocs-typescript@5.3.0`,
-object/interface properties work well, but:
+Generated tables supplement prose. `fumadocs-typescript` renders object and interface
+properties well, but:
 
 - top-level functions generate no useful entries;
 - enums can expose inherited `String` prototype members;
@@ -215,8 +195,7 @@ export async function getLlmText(page: (typeof source)["$inferPage"]) {
 }
 ```
 
-It renders a compact Markdown list with property name, full type, required/optional, deprecation,
-default, and description.
+It renders each prop as a Markdown row with its type and default.
 
 Fumadocs' `llms(source).index()` emits application-relative links. Prefix them before returning
 `llms.txt`:
@@ -248,9 +227,9 @@ const config = createMagicDocsStaticExport(site) satisfies NextConfig;
 export default withMdx(config);
 ```
 
-It sets `output: "export"`, `trailingSlash`, unoptimized images, and `basePath`. It deliberately
-does not set `assetPrefix`: Next handles `/_next` assets from `basePath` and does not recommend
-`assetPrefix` for sub-path hosting.
+It configures the static-export settings GitHub Pages needs. It deliberately does not set
+`assetPrefix`: Next handles `/_next` assets from `basePath` and does not recommend `assetPrefix`
+for sub-path hosting.
 
 `basePath` does not rewrite fetch URLs or strings. Use the shared paths for the places outside
 the Next router:
@@ -299,13 +278,13 @@ pnpm --filter magic-docs pack --pack-destination ./artifacts
 For a full pre-release adoption, copy the tarball into the consumer:
 
 ```text
-vendor/magic-docs-1.0.0.tgz
+vendor/magic-docs-<version>.tgz
 ```
 
 and install that committed artifact:
 
 ```sh
-pnpm add ./vendor/magic-docs-1.0.0.tgz
+pnpm add ./vendor/magic-docs-<version>.tgz
 pnpm exec magic-docs-init --out app/magic-docs.css
 ```
 
@@ -317,7 +296,7 @@ For a theme-only bootstrap, run the CLI from the tarball, commit the generated C
 `.nojekyll`, and do not retain `magic-docs` as a dependency until it is published.
 
 ```sh
-pnpm dlx ./artifacts/magic-docs-1.0.0.tgz \
+pnpm dlx ./artifacts/magic-docs-<version>.tgz \
   --out app/magic-docs.css
 ```
 

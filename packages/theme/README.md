@@ -2,13 +2,10 @@
   <img alt="Magic Theme coloring an editor window and a terminal window side by side" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme.png" />
 </p>
 
-<p align="center">One VS Code theme JSON, projected into six editors and terminals.</p>
+<p align="center">Edit one theme JSON. Run install to match it across your editor and every terminal you use.</p>
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-theme"><img alt="npm version" src="https://shieldcn.dev/npm/magic-theme.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-theme"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-theme/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## Install
@@ -37,9 +34,9 @@ pnpm exec magic-theme path ghostty
   <img alt="Magic Theme palette strip: bg, fg, accent, success, error, warning, and the 16 ANSI colors" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme-palette.png" />
 </p>
 
-## What it themes
+## Targets
 
-Six targets: `cursor`, `vscode`, `warp`, `ghostty`, `alacritty`, `orca`.
+`cursor`, `vscode`, `warp`, `ghostty`, `alacritty`, `orca`.
 
 - Cursor and VS Code get the theme as an extension; pick "Magic Theme" in the color theme picker.
 - Warp and Orca get a theme file; pick it in their Themes UI.
@@ -47,5 +44,5 @@ Six targets: `cursor`, `vscode`, `warp`, `ghostty`, `alacritty`, `orca`.
 - Alacritty gets a generated toml; add
   `import = ["~/.config/alacritty/themes/magic-theme.toml"]` to `alacritty.toml`.
 
-Edit the VS Code theme JSON, re-run `install`, and every target follows. Broader multi-app
-projection from a VS Code theme: [monotheme](https://github.com/eduwass/monotheme).
+Edit the VS Code theme JSON, re-run `install`, and every target follows. For projection into
+more apps than these six, see [monotheme](https://github.com/eduwass/monotheme).

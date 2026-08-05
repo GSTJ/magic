@@ -63,18 +63,38 @@ describe("tagline", () => {
   });
 });
 
-describe("shieldcn badge", () => {
-  it("passes with at least one shieldcn.dev badge", () => {
-    assert.deepEqual(validateReadme(valid), []);
+describe("npm version badge", () => {
+  it("passes when the badge points at the package's own name", () => {
+    assert.deepEqual(validateReadme(valid, { name: "magic-x" }), []);
   });
 
-  it("fails when the badges come from somewhere else", () => {
+  it("fails when the badge comes from somewhere else", () => {
     const foreign = valid.replaceAll("shieldcn.dev", "img.shields.io");
     assert.ok(
       validateReadme(foreign, { name: "magic-x" }).some((problem) =>
-        problem.includes("shieldcn.dev badge"),
+        problem.includes("no npm version badge for magic-x"),
       ),
     );
+  });
+
+  it("fails when the badge names a different package", () => {
+    assert.ok(
+      validateReadme(valid, { name: "magic-y" }).some((problem) =>
+        problem.includes("no npm version badge for magic-y"),
+      ),
+    );
+  });
+
+  it("exempts a README with no package name, badges or not", () => {
+    const bare = [HERO, TAGLINE, BODY].join("\n\n");
+    assert.deepEqual(validateReadme(bare), []);
+  });
+
+  it("never asks for a stars or license badge", () => {
+    const onlyNpm = [HERO, TAGLINE, BADGES, BODY].join("\n\n");
+    const problems = validateReadme(onlyNpm, { name: "magic-x" }).join(" ");
+    assert.ok(!problems.includes("stars"));
+    assert.ok(!problems.includes("license"));
   });
 });
 
@@ -135,5 +155,56 @@ describe("relative image srcs", () => {
         problem.includes('"media/demo.png" is relative'),
       ),
     );
+  });
+});
+
+describe("pinned versions", () => {
+  it("passes an unpinned install snippet", () => {
+    assert.deepEqual(validateReadme(valid), []);
+  });
+
+  it("fails on an exact pin in a code block", () => {
+    const pinned = valid.replace(
+      "npm install magic-x",
+      "npm install magic-x@1.2.3",
+    );
+    assert.ok(
+      validateReadme(pinned).some((problem) =>
+        problem.includes('"magic-x@1.2.3" pins an exact version'),
+      ),
+    );
+  });
+
+  it("fails on a pinned scoped package", () => {
+    const pinned = valid.replace(
+      "npm install magic-x",
+      "npm install @magic/theme@2.0.1",
+    );
+    assert.ok(
+      validateReadme(pinned).some((problem) =>
+        problem.includes('"@magic/theme@2.0.1" pins an exact version'),
+      ),
+    );
+  });
+
+  it("passes a moving major tag", () => {
+    const tagged = valid.replace(
+      "npm install magic-x",
+      "uses: GSTJ/magic/.github/workflows/ci.yml@v1\nnpm install magic-x@2",
+    );
+    assert.deepEqual(validateReadme(tagged), []);
+  });
+
+  it("passes a range, which floats with releases", () => {
+    const ranged = valid.replace(
+      "npm install magic-x",
+      "npm install magic-x@^1.2.3",
+    );
+    assert.deepEqual(validateReadme(ranged), []);
+  });
+
+  it("ignores a version written in prose", () => {
+    const prose = `${valid}\nThe repo pins oxlint@1.2.3 in its own manifest.\n`;
+    assert.deepEqual(validateReadme(prose), []);
   });
 });

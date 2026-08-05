@@ -2,13 +2,10 @@
   <img alt="The five presets as layered cards: base, then react, branching into react-native and next, with expo stacked on react-native" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxlint-config.png" />
 </p>
 
-<p align="center">Five oxlint preset variants, one per stack, each building on the last.</p>
+<p align="center">Export the variant that matches your stack; every preset underneath it is already tuned.</p>
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-oxlint-config"><img alt="npm version" src="https://shieldcn.dev/npm/magic-oxlint-config.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-oxlint-config"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-oxlint-config/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -41,12 +38,12 @@ export { default } from "magic-oxlint-config/react";
 ## Install
 
 ```sh
-pnpm add -D oxlint@1.75.0 magic-oxlint-config
+pnpm add -D oxlint magic-oxlint-config
 ```
 
 ## Extending
 
-Adding repo-specific rules on top goes through `extendConfig`:
+Layer repo-specific rules on top with `extendConfig`:
 
 ```ts
 // oxlint.config.mts
@@ -108,9 +105,9 @@ ignore list is a copy that goes stale instead of the live `react.ignorePatterns`
 ### Categories
 
 `correctness`, `suspicious`, `pedantic`, `style` and `perf` are all `error`; `restriction` and
-`nursery` are off. Then roughly forty individual rules are turned back off where the blanket
-switch is wrong more often than it's right. This is the strategy already running in invest-radar
-and in the MM mobile repo.
+`nursery` are off. Individual rules get turned back off from there wherever the blanket switch is
+wrong more often than it's right, see [`src/base.ts`](src/base.ts) for the list. This is the
+strategy already running in invest-radar and in the MM mobile repo.
 
 ### Type-aware rules
 
@@ -120,16 +117,17 @@ checklist.
 
 ### JS plugins
 
-`react` and below wire in `eslint-plugin-safe-jsx` (`safe-jsx/jsx-explicit-boolean`), which
-catches `items.length && <Row/>` rendering a literal `0`. The React Native variants add
-`magic-oxlint-plugin/react-native` for `no-inline-styles`, `no-color-literals`,
-`no-single-element-style-arrays` and `no-unused-styles`. Both are dependencies of this package
-and are resolved from here, so pnpm's non-hoisted layout doesn't break them.
+`react` and below wire in `eslint-plugin-safe-jsx`, which has no oxlint equivalent and catches
+`items.length && <Row/>` rendering a literal `0`. The React Native variants add
+`magic-oxlint-plugin/react-native` on top, see [`src/react-native.ts`](src/react-native.ts) for
+the rules it turns on. Both are dependencies of this package and resolve from here, so pnpm's
+non-hoisted layout doesn't break them.
 
-Those four used to come from `eslint-plugin-react-native`, which declares a required `eslint`
-peer that oxlint never calls; `autoInstallPeers` honoured it and installed eslint 9 into every
-consumer. The rule ids did not change. Since 2.0.0 a fresh `npm i magic-oxlint-config` adds 3
-packages instead of 90, with no eslint and no `brace-expansion` in the tree.
+Those react-native rules used to come from `eslint-plugin-react-native`, which declares a
+required `eslint` peer that oxlint never calls; `autoInstallPeers` honoured it and installed
+eslint into every consumer anyway. The rule ids didn't change in the port, so existing configs
+and `oxlint-disable` comments keep working. Full history in the root
+[CHANGELOG](../../CHANGELOG.md).
 
 ### Deliberately absent
 
@@ -155,12 +153,12 @@ each repo's own config. See "Local overrides" in the root README.
 
 oxlint's `extends` drops three of the extended config's top-level fields: `ignorePatterns`, `env`
 and `globals`. Severities, rule **options**, `categories`, `plugins`, `jsPlugins` and `overrides`
-all travel fine. Verified on oxlint 1.75.0 by executing each one rather than reading
+all travel fine. Verified by executing each one against a real install rather than reading
 `--print-config`, which misreports most of this (see below).
 
-Since 1.2.0 this package defends two of the three: `env` and `globals` are mirrored into a
-`files: ["**"]` override, and overrides survive `extends`. So `no-global-assign` on `document`,
-and `__DEV__` in the React Native variants, now behave the same either way.
+This package now defends two of the three (see CHANGELOG for when): `env` and `globals` are
+mirrored into a `files: ["**"]` override, and overrides survive `extends`. So `no-global-assign` on
+`document`, and `__DEV__` in the React Native variants, now behave the same either way.
 
 `ignorePatterns` cannot be defended (oxlint has no per-override ignore), and it is the field that
 matters most:
@@ -175,8 +173,8 @@ export default defineConfig({ extends: [expo] });
 export default defineConfig({ extends: [expo], ignorePatterns: ["**/foo/**"] });
 ```
 
-`ignorePatterns: expo.ignorePatterns` does restore them, and that recipe was documented up to
-1.1.0. It is gone because it is a line you have to remember forever, in every repo, on every
+`ignorePatterns: expo.ignorePatterns` does restore them, and that recipe was documented in an
+earlier release (see CHANGELOG). It is gone because it is a line you have to remember forever, in every repo, on every
 variant, with a silent and enormous failure mode when you don't. The re-export has nothing to
 forget. `.gitignore` is honoured separately, which is what hides the `node_modules` case in a
 real repo; it does not cover the `ios/` and `android/` that bare React Native repos commit.
@@ -184,8 +182,8 @@ real repo; it does not cover the `ios/` and `android/` that bare React Native re
 ### `--print-config` cannot audit an `extends`-shaped config
 
 Every consumption question above has to be answered by linting a file; `--print-config` cannot
-answer it. On 1.75.0 the printer renders an `extends`-shaped config **post-expansion and
-pre-merge**, so it reports:
+answer it. The printer renders an `extends`-shaped config **post-expansion and pre-merge**, so it
+reports:
 
 - `categories: {}`, while every category rule is in fact live, expanded into the printed `rules`
   map as bare `"deny"`
@@ -199,8 +197,8 @@ took the output at face value during one upgrade round and three of them started
 rule options by hand.
 
 The output is also actively misleading in the other direction: `env` and `globals` really _were_
-dropped before 1.2.0, and the printer showed that loss in exactly the same way it showed the six
-fields that were fine. `ignorePatterns` is the only field it reports accurately here.
+dropped in an earlier release, and the printer showed that loss in exactly the same way it showed
+the six fields that were fine. `ignorePatterns` is the only field it reports accurately here.
 
 `fixtures/adversarial/extends` in this repo executes all of it (both config shapes, both
 `--print-config` renderings) on every `pnpm run check`, so the paragraphs above stay true or CI

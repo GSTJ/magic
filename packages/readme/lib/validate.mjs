@@ -1,8 +1,9 @@
 /**
- * The mechanical half of the GSTJ README standard. Six structural rules a
- * machine can judge honestly: hero placement, tagline, badges, an install
- * heading, dashes, and image srcs. Prose quality is deliberately out of scope;
- * a checker that grades writing rejects good writing.
+ * The mechanical half of the GSTJ README standard. Seven structural rules a
+ * machine can judge honestly: hero placement, tagline, the npm badge, an
+ * install heading, dashes, image srcs, and pinned versions in code blocks.
+ * Prose quality is deliberately out of scope; a checker that grades writing
+ * rejects good writing.
  */
 
 /** Fence markers toggle; the marker lines themselves count as fenced. */
@@ -12,8 +13,10 @@ const CENTERED = /<p align="center">(?<body>[\s\S]*?)<\/p>/g;
 const HTML_IMG = /<img(?<attrs>[^>]*)>/g;
 const IMG_SRC = /\ssrc="(?<src>[^"]*)"/;
 const MD_IMAGE = /!\[[^\]]*\]\(\s*<?(?<src>[^)\s>]+)/g;
-const SHIELDCN = /<img[^>]*\ssrc="https:\/\/shieldcn\.dev\//;
+const SHIELDCN_NPM = "https://shieldcn.dev/npm/";
 const DASH = /[–—]/;
+/** `magic-theme@1.2.3`, `@scope/pkg@1.2.3`: a package-ish token pinned to x.y.z. */
+const PINNED = /[a-z0-9@][\w.@/-]*@\d+\.\d+\.\d+[\w.+-]*/gi;
 const ABSOLUTE = /^https?:\/\//;
 const TAG = /<[^>]+>/g;
 
@@ -100,6 +103,26 @@ const heroProblems = (prose) => {
 };
 
 /**
+ * Rule 3: a published package links its own npm version badge. Badges are
+ * marketing, so the standard asks for the one that answers "is this alive?"
+ * and never for stars or a license. The root README has no npm page to point
+ * at and is exempt: callers pass no `name` for it.
+ *
+ * @param {string} prose @param {string | null} name
+ * @returns {string[]}
+ */
+const badgeProblems = (prose, name) => {
+  if (!name) return [];
+  const badge = `${SHIELDCN_NPM}${name}.svg`;
+  const linked = imageSrcs(prose).some(({ src }) => src.startsWith(badge));
+  return linked
+    ? []
+    : [
+        `no npm version badge for ${name}; the hero needs an <img> src of ${badge}.`,
+      ];
+};
+
+/**
  * Rule 5: em and en dashes outside fenced code blocks.
  *
  * @param {string[]} lines @param {boolean[]} fenced
@@ -129,26 +152,40 @@ const relativeSrcProblems = (markdown) =>
   });
 
 /**
+ * Rule 7: an exact version inside a code block. Install snippets get copied,
+ * and `npm i magic-theme@1.2.3` is wrong the day after the next release. A
+ * moving tag (`@v1`, `@2`) has no digits after the major and stays legal.
+ *
+ * @param {string[]} lines @param {boolean[]} fenced
+ * @returns {string[]}
+ */
+const pinProblems = (lines, fenced) =>
+  lines.flatMap((text, index) => {
+    if (!fenced[index]) return [];
+    return [...text.matchAll(PINNED)].map(
+      (match) =>
+        `line ${index + 1}: "${match[0]}" pins an exact version; drop it or use a moving tag like @v1.`,
+    );
+  });
+
+/**
  * Check one README against the mechanical rules of the GSTJ standard.
  *
  * @param {string} markdown The README's full text.
- * @param {{ name?: string }} [options] The package name, for messages.
+ * @param {{ name?: string | null }} [options] The npm package name this README
+ *   ships with. Omit it for the root README or any file with no npm page; the
+ *   badge rule is skipped without one.
  * @returns {string[]} Problem sentences; empty when the file passes.
  */
-export const validateReadme = (markdown, { name = "this package" } = {}) => {
+export const validateReadme = (markdown, { name = null } = {}) => {
   const lines = markdown.split("\n");
   const fenced = fencedMask(lines);
   const prose = lines
     .map((text, index) => (fenced[index] ? "" : text))
     .join("\n");
 
-  const problems = [...heroProblems(prose)];
+  const problems = [...heroProblems(prose), ...badgeProblems(prose, name)];
 
-  if (!SHIELDCN.test(prose)) {
-    problems.push(
-      `no shieldcn.dev badge; the standard's hero links at least one for ${name}.`,
-    );
-  }
   if (!/^## Install\s*$/m.test(prose)) {
     problems.push("no `## Install` heading.");
   }
@@ -157,5 +194,6 @@ export const validateReadme = (markdown, { name = "this package" } = {}) => {
     ...problems,
     ...dashProblems(lines, fenced),
     ...relativeSrcProblems(markdown),
+    ...pinProblems(lines, fenced),
   ];
 };

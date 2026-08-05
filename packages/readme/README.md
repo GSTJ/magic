@@ -2,13 +2,10 @@
   <img alt="A README skeleton with the standard's sections highlighted" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-readme.png" />
 </p>
 
-<p align="center">The GSTJ README standard as code: an init that writes the skeleton and a check that catches structural drift.</p>
+<p align="center">Scaffold a README from the standard. Check any file back and get a line number for every rule it breaks.</p>
 
 <p align="center">
-  <a aria-label="npm version" href="https://www.npmjs.com/package/magic-readme"><img alt="npm version" src="https://shieldcn.dev/npm/magic-readme.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-readme"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-readme/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="npm version" href="https://www.npmjs.com/package/magic-readmes"><img alt="npm version" src="https://shieldcn.dev/npm/magic-readmes.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -16,7 +13,8 @@
 1. `magic-readme init` writes the standard's skeleton into a directory.
 2. You fill the placeholders: hero image, tagline, mechanism list, install commands, detail
    sections.
-3. `magic-readme check` runs six mechanical rules over any README and exits 1 listing what is off.
+3. `magic-readme check` runs seven mechanical rules over any README and exits 1 listing what is
+   off.
 4. In this repo, `pnpm run check` runs the same validator over every package README plus the root
    one.
 
@@ -32,14 +30,17 @@ magic-readme: 2 problem(s).
 ## Install
 
 ```sh
-npm install --save-dev magic-readme
+npm install --save-dev magic-readmes
 ```
 
 Or run it once without installing:
 
 ```sh
-npx magic-readme init
+npx magic-readmes init
 ```
+
+The package is `magic-readmes`; the command it installs is `magic-readme`. npx runs a package's
+only bin whatever that bin is called, so `npx magic-readmes init` works.
 
 ## Rules
 
@@ -50,15 +51,28 @@ the validator will not notice a hype tagline or a useless mechanism list, and re
    absolute https. Badge images do not count as the hero.
 2. A centered tagline: a `<p align="center">` block with plain text and no image, also before the
    first heading.
-3. At least one badge served from shieldcn.dev.
+3. An npm version badge from shieldcn.dev pointing at the package's own name, taken from the
+   adjacent `package.json`. Private packages and loose files have no npm page, so they skip this
+   one.
 4. An `## Install` heading.
 5. No em or en dashes outside fenced code blocks. House style bans them in prose; commas, periods,
    and parentheses cover every use.
 6. No relative image srcs anywhere, markdown or HTML. npm renders READMEs away from the repo, so a
    relative path 404s on the package page.
+7. No exact `name@x.y.z` pins inside fenced code blocks. Install lines get copied, and a patch
+   version in one is wrong the day after the next release. Moving tags like `@v1` and `@2` pass,
+   and so do ranges.
 
 Each problem comes back as a plain sentence with a line number where one helps, and `check` prints
 them per file before exiting 1.
+
+## Badges
+
+Badges are marketing, so a README carries only the ones that sell it. npm version and npm
+downloads do that: they say the package is alive and people install it. Stars and license badges
+came off every README here, because the star count is zero and the license badge renders
+`unknown`, and both of those argue against installing. Bring either back on a package where the
+number helps.
 
 ## Init
 

@@ -1,9 +1,7 @@
 # Adopting magic
 
-How to put a repo on this tooling, and everything adopting eleven repos taught us: the per-project
-setup, the reusable CI and its runner routing, the measured iOS E2E defaults, the pnpm 11 migration
-notes, the Renovate policy, and the gotchas. The [root README](../../README.md) is the index; the
-depth lives here.
+How to put a repo on this tooling, and everything adopting eleven repos taught us along the way.
+The [root README](../../README.md) is the index; the depth lives here.
 
 - [Setup, by project type](#setup-by-project-type)
 - [Copy-paste per project type](#copy-paste-per-project-type)
@@ -25,7 +23,7 @@ Every project gets the same four steps. Only the variant name changes.
 ### Step 1: install
 
 ```sh
-pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
 ```
 
 Pin `oxlint` and `oxfmt` exactly. Both add and remove rules between minor
@@ -146,7 +144,7 @@ In a monorepo, add `--disable-nested-config` to the root `lint` script. See
 ### Plain TypeScript / Node library
 
 ```sh
-pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig @types/node
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig @types/node
 ```
 
 (`@types/node` because `magic-tsconfig/base.json` doesn't pull in any global
@@ -219,7 +217,7 @@ reason that has nothing to do with build caches, see the Next.js section.
 ### Next.js
 
 ```sh
-pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
 pnpm remove eslint eslint-config-next @next/eslint-plugin-next prettier
 ```
 
@@ -249,9 +247,10 @@ export { next as default } from "magic-oxfmt-config";
 ```
 
 Keep `*.tsbuildinfo` in `.gitignore` here. `magic-tsconfig/nextjs.json` sets
-`incremental: true`, not for the cache, but because `next build` writes any of
-its suggested compiler options that are missing from the _resolved_ config
-straight into your `tsconfig.json`, reformatting the whole file as it goes. Leave
+`incremental: true` because `next build` writes any of its suggested compiler
+options that are missing from the _resolved_ config straight into your
+`tsconfig.json`, reformatting the whole file as it goes; that has nothing to do
+with the build cache. Leave
 `incremental` unset and every build dirties the working tree and fails the next
 `oxfmt --check` on a file nobody edited. Next keeps its own build info in
 `.next/cache`; the stray `tsconfig.tsbuildinfo` comes from your own
@@ -282,7 +281,7 @@ tripped `function-component-definition`.
 ### Expo
 
 ```sh
-pnpm add -D oxlint@1.75.0 oxfmt@0.60.0 magic-oxlint-config magic-oxfmt-config magic-tsconfig
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
 pnpm remove eslint eslint-config-expo prettier
 ```
 
@@ -423,8 +422,8 @@ this stays true or the build says so.
 ### vitest repos
 
 The presets declare the `jest` plugin, not `vitest`: the rule sets overlap
-almost entirely and `jest/*` fires on `vi.mock` and friends. Two consequences
-worth knowing before running any autofix:
+almost entirely and `jest/*` fires on `vi.mock` and friends. Before running any
+autofix:
 
 - `jest/*` **suggestions** emit jest-shaped code. `jest/no-untyped-mock-factory`
   writes `vi.mock<typeof import("x")>("x", factory)`, which is jest's signature;
@@ -600,7 +599,7 @@ Renaming `Button.tsx` to `button.tsx` does not change how it is imported:
 `import { Button } from "./button"` and `import Button from "./button"` both work
 unchanged. Only the specifier moves.
 
-Two things to know before running it in a monorepo:
+In a monorepo:
 
 - **`--tsconfig` is repeatable, and discovery now walks the workspace.** The
   resolver reads `paths` from the repo root, from every package matched by
@@ -628,7 +627,7 @@ version.
 **Install scripts are gated, and `--frozen-lockfile` errors rather than warns.**
 A fresh consumer with any native or download postinstall (esbuild, sharp,
 puppeteer, @swc/core) gets `[ERR_PNPM_IGNORED_BUILDS]` and CI dies at the install
-step. Declare them _before_ the first CI run, not after.
+step. Declare them _before_ the first CI run.
 
 **`onlyBuiltDependencies` is now `allowBuilds`, and it is a map, not a list.**
 
@@ -901,7 +900,7 @@ last tag, and moves `v1`.
 
 A called workflow always reports as `<caller job> / <called job>`, so it can
 never produce a bare context name, a ruleset that requires `verify` will never
-be satisfied by a reusable workflow alone. Two ways out:
+be satisfied by a reusable workflow alone:
 
 - name both halves: a caller job `verify` plus `job-name: verify` reports
   `verify / verify`, and that is the string to put in the ruleset;
@@ -918,7 +917,7 @@ The case for moving it is the repo that already has a self-hosted Mac for
 something else (iOS E2E, usually) and whose hosted minutes have run out or are
 billed privately: then the choice is not "Mac or Ubuntu", it is "Mac or nothing".
 
-Four inputs, the same four `e2e-ios.yml` takes, with the same meanings:
+The same four inputs `e2e-ios.yml` takes, with the same meanings:
 
 | Input                       | Default         | What it is                                                                    |
 | --------------------------- | --------------- | ----------------------------------------------------------------------------- |
@@ -1285,8 +1284,8 @@ more expensive. Time the flows before you shard: `maestro test` prints per-flow
 durations, and the job summary this workflow writes lists them per run.
 
 `shards: "3"` deals the flows round-robin, which assumes they are independent.
-If flow 03 reads what flow 02 wrote, it is not a sharding problem yet, it is a
-fixture problem, and naming the shards is the honest workaround.
+If flow 03 reads what flow 02 wrote, that's a fixture problem: naming the
+shards by hand is the workaround.
 
 ### Flaky flows
 
@@ -1464,10 +1463,9 @@ build when the gate moves, is narrowed, or disappears.
 
 ## Docs landing block
 
-`docs-landing` is the editable landing layer for `magic-docs`. It installs the
-shell, section primitives, clipboard button, scoped CSS, and GSAP effects into
-the consumer repo. Each package supplies its product demo, examples, history,
-and copy.
+`docs-landing` is the editable landing layer for `magic-docs`, installed
+straight into the consumer repo. Each package supplies its own product demo,
+examples, history, and copy on top.
 
 ```sh
 pnpm dlx shadcn@latest add GSTJ/magic/docs-landing

@@ -2,13 +2,10 @@
   <img alt="An error boundary catching a thrown error, beside the captureError event it ships to PostHog" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-observability.png" />
 </p>
 
-<p align="center">Per-platform PostHog init with error tracking on by default and one captureError shape everywhere.</p>
+<p align="center">Init once per platform. Catch errors in one boundary and ship them to PostHog in the same shape everywhere.</p>
 
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/magic-observability"><img alt="npm version" src="https://shieldcn.dev/npm/magic-observability.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-observability"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-observability/downloads.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
-  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
 </p>
 
 ## How it works
@@ -117,7 +114,7 @@ initNode({
 
 Three files. The client half and the server half never import each other.
 
-**`instrumentation-client.ts`** runs before hydration on Next 15.3+:
+**`instrumentation-client.ts`** runs before hydration:
 
 ```ts
 import { initWebAnalytics } from "magic-observability/web";
@@ -159,10 +156,6 @@ import { createRequestErrorHandler } from "magic-observability/next";
 export const register = () => {};
 export const onRequestError = createRequestErrorHandler();
 ```
-
-That handler skips the edge runtime, reads `distinct_id` off the `ph_phc_*_posthog` cookie so the
-exception lands on the same person as their client events, attaches the route metadata Next hands
-over, and flushes before the function freezes.
 
 Anywhere else on the server (route handlers, server actions, RSCs):
 
@@ -284,29 +277,15 @@ The two-step (build the client, then hand it to the provider) is the only docume
 both configured error tracking and the provider's screen tracking. `<PostHogProvider apiKey
 options>` cannot configure `errorTracking`; `new PostHog(...)` gives you no provider.
 
-Anywhere else:
-
-```ts
-import { capture, captureError } from "magic-observability/expo";
-
-capture("workout_finished", { minutes: 42 });
-captureError(error, { screen: "workout" });
-```
+Same free-function pattern as `/node` for calls outside a component: `import { capture,
+captureError } from "magic-observability/expo"`.
 
 ### Defaults
 
-`initExpo` turns on uncaught exceptions, unhandled rejections and native crashes, and leaves
-console capture off. That last one is deliberate: PostHog's docs warn that a
-`PostHogErrorBoundary` plus `console: ["error"]` reports every render error twice, because React
-logs caught errors to the console itself. This package ships a boundary and tells you to mount it,
-so the default is the deduplicated one. If your app deliberately has no boundary:
-
-```ts
-initExpo({ errorTracking: { console: ["error", "warn"] } });
-```
-
-Native crashes additionally need `@posthog/react-native-plugin` installed and native symbols
-uploaded. Without the plugin it is a documented no-op, so it costs nothing to leave on.
+`initExpo` turns on uncaught exceptions, unhandled rejections and native crashes (the last one
+also needs `@posthog/react-native-plugin` installed; it's a documented no-op without it). Console
+capture is off by default, deduplicated against the boundary this package ships; turn it back on
+with `initExpo({ errorTracking: { console: ["error", "warn"] } })` if your app has no boundary.
 
 In dev, React propagates errors to the global handler even when a boundary caught them, so you
 will see some things twice. That does not happen in production builds.
@@ -464,11 +443,8 @@ PostHog's self-driving loop (scouts watching your data, reports landing in an in
 opening pull requests) is open beta, and it is a product loop with nothing to import. What it
 needs from the application, this package already does:
 
-- Events flowing ("self-driving is only as good as the data feeding it"). Pageviews and screen
-  views are on by default here.
-- Error tracking, its first in-app signal source. On by default on all three platforms, in code,
-  so a fresh project reports from the first deploy instead of waiting for someone to find a
-  toggle.
+- Events flowing. Pageviews and screen views are on by default here.
+- Error tracking, its first in-app signal source. On by default on all three platforms, in code.
 - Session replay, its second. Off by default here; see the replay point above.
 
 The rest is manual and one-time, per organisation:
@@ -485,15 +461,3 @@ a $150 org billing limit is set automatically.
 Each scout report also fires a real `$scout_report_emitted` event into your own project, carrying
 `skill_name`, `title`, `priority`, `actionability`, `report_kind` and `report_url`. It is
 queryable in SQL, insights and alerts like any other event.
-
-## Versions
-
-| Package                | Version |
-| ---------------------- | ------- |
-| `posthog-js`           | 1.407.x |
-| `@posthog/react`       | 1.10.x  |
-| `posthog-node`         | 5.46.x  |
-| `posthog-react-native` | 4.60.x  |
-
-Peer ranges are wider than that. The hard floor is `posthog-react-native@4.35.0`; below it, remote
-error-tracking config does not exist.
