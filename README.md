@@ -13,7 +13,7 @@ slightly-wrong version.
 | [`magic-codemods`](packages/codemods)           | `magic-kebab`: the kebab-case filename migration                  |
 | [`magic-observability`](packages/observability) | PostHog init, `captureError`, error boundary, per-platform        |
 | [`magic-docs`](packages/docs)                   | Fumadocs theme, layout/MDX presets, TypeScript reference, Pages   |
-| [`magic-theme`](packages/theme)                 | Dracula 141414 for Cursor / VS Code, Warp, Ghostty, Alacritty     |
+| [`magic-theme`](packages/theme)                 | Magic Dracula for Cursor / VS Code, Warp, Ghostty, Alacritty      |
 | `GSTJ/magic/docs-landing`                       | Editable shadcn block for dark package landing pages              |
 | `.github/workflows/ci.yml`                      | Reusable `workflow_call` job: install, lint, format, typecheck    |
 | `.github/workflows/release.yml`                 | Reusable `workflow_call` job: build and publish to npm            |

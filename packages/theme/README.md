@@ -1,6 +1,6 @@
 # magic-theme
 
-Dracula 141414 for editors and terminals. Install projects the VS Code theme JSON
+Magic Dracula for editors and terminals. Install projects the VS Code theme JSON
 into each tool.
 
 ## Install
@@ -26,7 +26,7 @@ magic-theme install cursor warp
 
 | Path | Role |
 | ---- | ---- |
-| `vscode/themes/dracula-141414-color-theme.json` | colors + syntax |
+| `vscode/themes/magic-dracula-color-theme.json` | colors + syntax |
 | `lib/project.mjs` | bg / fg / ANSI roles from that theme |
 | `lib/formats.mjs` | Warp, Ghostty, Alacritty |
 | `bin/magic-theme.mjs` | write into each app's config dir |
@@ -37,9 +37,9 @@ Edit the VS Code theme, re-run install.
 
 | App | After install |
 | --- | ------------- |
-| Cursor / VS Code | theme **Dracula 141414** |
+| Cursor / VS Code | theme **Magic Dracula** |
 | Warp / Orca | Themes UI |
-| Ghostty | `theme = dracula-141414` |
+| Ghostty | `theme = magic-dracula` |
 | Alacritty | import the generated toml |
 | Windows Terminal | `toWindowsTerminal()` in `lib/formats.mjs` |
 

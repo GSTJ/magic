@@ -1,8 +1,8 @@
 {
   "name": "magic-theme",
-  "displayName": "Magic Dracula 141414",
-  "description": "Dracula with a #141414 background and quieter chrome. From GSTJ/magic.",
-  "version": "0.2.1",
+  "displayName": "Magic Dracula",
+  "description": "Quiet Dracula chrome for GSTJ. From GSTJ/magic.",
+  "version": "0.3.0",
   "publisher": "gstj",
   "license": "MIT",
   "engines": {
@@ -15,14 +15,14 @@
     "dracula",
     "dark",
     "theme",
-    "141414"
+    "magic"
   ],
   "contributes": {
     "themes": [
       {
-        "label": "Dracula 141414",
+        "label": "Magic Dracula",
         "uiTheme": "vs-dark",
-        "path": "./themes/dracula-141414-color-theme.json"
+        "path": "./themes/magic-dracula-color-theme.json"
       }
     ]
   }
