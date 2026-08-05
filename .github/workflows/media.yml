@@ -1,0 +1,48 @@
+name: 🎞️ Media
+
+# This repo's caller for render-media.yml. It exists as its own file because a
+# workflow cannot call itself: put the `uses:` job next to the `workflow_call:`
+# block and GitHub rejects the run as circular, and validate-workflows rejects
+# the `./` path first anyway, since inside a reusable file that path resolves
+# against the caller's checkout.
+#
+# Everything about how the render is published lives in render-media.yml. This
+# file only decides when it happens and which prefix it writes to.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/video/**"
+      # Ordered after the line above on purpose: a later pattern wins, so a
+      # docs-only commit in the package does not spend twenty minutes
+      # re-rendering identical pixels.
+      - "!packages/video/**/*.md"
+      # Each package draws its own media, so its composition is a source file
+      # for this pipeline like anything under packages/video.
+      - "packages/*/demo/**"
+      # The palette every composition colors itself from.
+      - "packages/theme/vscode/themes/**"
+      - "packages/theme/lib/**"
+      # The pipeline itself. A change to the upload or the verification should
+      # prove itself now, not on whichever composition someone touches next.
+      - ".github/workflows/media.yml"
+      - ".github/workflows/render-media.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  media:
+    # Local path, allowed here: this file has no `workflow_call:`, so `./`
+    # resolves against this repo. Same pattern as self-ci.yml. Queueing is
+    # handled inside the called job, keyed on the bucket and prefix it writes.
+    uses: ./.github/workflows/render-media.yml
+    with:
+      r2-prefix: magic
+    # Named rather than `inherit`: the called workflow declares exactly two
+    # secrets, and `inherit` would hand it NPM_TOKEN and everything else too.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

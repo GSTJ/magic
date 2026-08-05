@@ -45,3 +45,11 @@ pnpm --filter magic-video render:video-demo # this package's own reel, to out/in
 ```
 
 Each composition also has its own `render:<name>` script; see `package.json`.
+
+## CI rendering
+
+Every push to `main` that touches `packages/video/**`, any package's `demo/` composition, or
+`packages/theme`'s palette (`vscode/themes/**`, `lib/**`) triggers `media.yml`, which reruns this
+same render and publishes the result to the CDN. Docs-only edits are excluded. See the
+[workflows adoption guide](../../.github/workflows/README.md#media) for what "publish" means and
+what it doesn't touch here.

@@ -1,0 +1,248 @@
+name: 🎞️ Render Media
+
+# Reusable render-and-publish workflow. It rebuilds a repo's media folder from
+# source and overwrites the matching objects in an R2 bucket. It writes nothing
+# back to the repository: no commit, no branch, no PR.
+#
+#   jobs:
+#     media:
+#       uses: GSTJ/magic/.github/workflows/render-media.yml@v1
+#       with:
+#         r2-prefix: magic
+#       secrets:
+#         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+#
+# Call it by tag, never by branch, for the reasons in ci.yml's header.
+#
+# The committed media folder is still what every README links to, and nothing
+# here updates it. Render locally in the PR that changes a composition; this
+# workflow keeps the served copy honest afterwards, it does not stand in for
+# rendering before review.
+#
+# The bucket is not this repo's. It belongs to the portfolio, which already has
+# the public custom domain bound to it, so a consumer adds a key prefix and no
+# Cloudflare infrastructure at all.
+
+on:
+  workflow_call:
+    inputs:
+      render-command:
+        description: "Command that rebuilds media-dir from source."
+        type: string
+        required: false
+        default: "pnpm --filter magic-video run render:all"
+      media-dir:
+        description: "Folder the render writes into. Every file under it gets published, nesting included."
+        type: string
+        required: false
+        default: "media"
+      r2-bucket:
+        description: "R2 bucket with the public custom domain already bound to it."
+        type: string
+        required: false
+        default: "portfolio-assets"
+      r2-prefix:
+        description: "Key prefix inside the bucket. One per repo, so two consumers never collide."
+        type: string
+        required: true
+      base-url:
+        description: "Public origin the objects are read back from to prove the upload landed."
+        type: string
+        required: false
+        default: "https://assets.gabrieltaveira.dev"
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        description: "Needs Account > R2 > Edit on the account that owns r2-bucket."
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        description: "The account that owns r2-bucket."
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  render-and-publish:
+    name: 🎬 Render and publish
+    runs-on: ubuntu-latest
+    # A render is minutes of headless Chrome and ffmpeg. Six hours of it is a
+    # hang, not a slow day.
+    timeout-minutes: 60
+    # Job-level, because GitHub ignores workflow-level `concurrency` in a file
+    # that only ever runs through `workflow_call` (see ci.yml). Keyed on the
+    # objects being overwritten, and never cancelled: two runs racing the same
+    # keys is exactly the failure this prevents, and a cancelled upload leaves
+    # half a folder published.
+    concurrency:
+      group: render-media-${{ inputs.r2-bucket }}-${{ inputs.r2-prefix }}
+      cancel-in-progress: false
+    env:
+      MEDIA_DIR: ${{ inputs.media-dir }}
+      R2_BUCKET: ${{ inputs.r2-bucket }}
+      R2_PREFIX: ${{ inputs.r2-prefix }}
+      BASE_URL: ${{ inputs.base-url }}
+      # There is no cache purge here, so an object's max-age is the whole
+      # freshness story after a re-render. A zone Browser Cache TTL above this
+      # wins, whatever this says.
+      ASSET_CACHE_CONTROL: "public, max-age=3600"
+      # `pnpm dlx` rather than a dependency: wrangler in a caller's lockfile
+      # would be installed by every `pnpm install --frozen-lockfile` in its CI,
+      # and this workflow is the only thing in the fleet that needs it.
+      WRANGLER_VERSION: 4.119.0
+
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Referenced by owner/repo at a release commit, because `./` inside a
+      # reusable workflow resolves against the caller's checkout. Same note as
+      # ci.yml. The action installs with --frozen-lockfile, so there is no
+      # separate install step.
+      - name: 🏗 Setup Node + pnpm
+        uses: GSTJ/magic/.github/actions/setup@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
+
+      # Fail here rather than minutes of rendering later, inside a wrangler
+      # stack trace.
+      #
+      # "Missing" is the wrong word for what this catches. A secret saved with
+      # an empty value lists in the API exactly like a real one and arrives on
+      # the runner as an empty string.
+      - name: 🔑 Check Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          empty=""
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || empty="$empty CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || empty="$empty CLOUDFLARE_ACCOUNT_ID"
+
+          if [ -n "$empty" ]; then
+            echo "::error::Secret(s) unset or set to an empty value:$empty. Listing the name proves nothing, re-save the value. The token needs Account > R2 > Edit on the account that owns $R2_BUCKET."
+            exit 1
+          fi
+
+          # Cheapest call that proves three things at once: the token
+          # authenticates, the account id belongs to it, and it carries R2
+          # permissions.
+          if ! pnpm dlx "wrangler@$WRANGLER_VERSION" r2 bucket info "$R2_BUCKET"; then
+            echo "::error::Both secrets have values but they cannot read $R2_BUCKET. Check the token has Account > R2 > Edit and that CLOUDFLARE_ACCOUNT_ID owns the bucket."
+            exit 1
+          fi
+
+          echo "credentials reach $R2_BUCKET"
+
+      # Remotion downloads its own headless shell on first use and ships the
+      # ffmpeg the GIF passes run through, so there is nothing to apt-get.
+      # Through `bash -c` on an env var, not interpolated into the script, so a
+      # caller's input cannot rewrite the step around it.
+      - name: 🎬 Render
+        env:
+          RENDER_COMMAND: ${{ inputs.render-command }}
+        run: bash -euo pipefail -c "$RENDER_COMMAND"
+
+      # One pass over the folder writes the manifest every later step reads, so
+      # the key, the local file and the content type are decided once. Deriving
+      # the type twice is how an upload and its verification agree on the wrong
+      # answer.
+      - name: 📋 Inventory what was rendered
+        run: |
+          set -euo pipefail
+          MEDIA_DIR="${MEDIA_DIR%/}"
+
+          if [ ! -d "$MEDIA_DIR" ]; then
+            echo "::error::$MEDIA_DIR does not exist after the render. Check render-command actually writes there."
+            exit 1
+          fi
+
+          manifest="$RUNNER_TEMP/media-manifest.tsv"
+          : > "$manifest"
+
+          while IFS= read -r file; do
+            key="${file#"$MEDIA_DIR"/}"
+            # Wrangler does not sniff, and an image served as
+            # application/octet-stream downloads instead of rendering.
+            case "${key##*.}" in
+              gif) type="image/gif" ;;
+              png) type="image/png" ;;
+              jpg | jpeg) type="image/jpeg" ;;
+              webp) type="image/webp" ;;
+              svg) type="image/svg+xml" ;;
+              mp4) type="video/mp4" ;;
+              webm) type="video/webm" ;;
+              *) type="application/octet-stream" ;;
+            esac
+            printf '%s\t%s\t%s\n' "$key" "$file" "$type" >> "$manifest"
+            echo "$key  $(stat -c%s "$file") bytes  $type  sha256=$(sha256sum "$file" | cut -d' ' -f1)"
+          done < <(find "$MEDIA_DIR" -type f | sort)
+
+          count=$(wc -l < "$manifest")
+          if [ "$count" -eq 0 ]; then
+            echo "::error::$MEDIA_DIR holds no files. Publishing nothing and calling it green is the bug this catches."
+            exit 1
+          fi
+
+          echo "$count file(s) to publish under $R2_PREFIX/"
+
+      # --remote is not optional. Without it wrangler writes to a local
+      # simulation on the runner, reports success, and uploads nothing.
+      - name: ☁️ Upload to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r key file type; do
+            pnpm dlx "wrangler@$WRANGLER_VERSION" r2 object put "$R2_BUCKET/$R2_PREFIX/$key" \
+              --remote \
+              --file "$file" \
+              --content-type "$type" \
+              --cache-control "$ASSET_CACHE_CONTROL"
+          done < "$RUNNER_TEMP/media-manifest.tsv"
+
+      # Wrangler printing "Upload complete" is not evidence, and neither is a
+      # 200. Read every object back over HTTPS from the public domain and check
+      # the bytes against what this run just built.
+      - name: ✅ Verify what the public domain serves
+        run: |
+          set -euo pipefail
+
+          served="$RUNNER_TEMP/served"
+          mkdir -p "$served"
+          failed=0
+
+          while IFS=$'\t' read -r key file type; do
+            # The cache-busting query belongs here and nowhere else. Cloudflare
+            # caches responses from an R2 custom domain, including the 404s
+            # from before an object existed, so the bare URL can lag a fresh
+            # upload. READMEs must link the bare URL.
+            url="$BASE_URL/$R2_PREFIX/$key?ci=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            out="$served/${key//\//_}"
+
+            curl --silent --show-error --fail --location "$url" --output "$out"
+
+            got_type=$(curl --silent --show-error --fail --location --head "$url" \
+              | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type" {print $2}')
+
+            want_sum=$(sha256sum "$file" | cut -d' ' -f1)
+            got_sum=$(sha256sum "$out" | cut -d' ' -f1)
+
+            echo "$key: content-type=$got_type sha256=$got_sum"
+
+            if [ "$got_type" != "$type" ]; then
+              echo "::error::$key came back as '$got_type', expected '$type'"
+              failed=1
+            fi
+
+            if [ "$got_sum" != "$want_sum" ]; then
+              echo "::error::$key serves $got_sum but this run built $want_sum"
+              failed=1
+            fi
+          done < "$RUNNER_TEMP/media-manifest.tsv"
+
+          [ "$failed" -eq 0 ] || exit 1
+
+          echo "$BASE_URL/$R2_PREFIX/ serves exactly what this run built"

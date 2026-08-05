@@ -11,6 +11,7 @@ The [root README](../../README.md) is the index; the depth lives here.
 - [Kebab-case filenames](#kebab-case-filenames)
 - [pnpm 11](#pnpm-11)
 - [CI](#ci)
+- [Media](#media)
 - [iOS E2E](#ios-e2e)
 - [Renovate](#renovate)
 - [Docs landing block](#docs-landing-block)
@@ -1058,6 +1059,62 @@ And on a bot-opened PR whose runs GitHub parks at `action_required`:
     pull-request: ${{ steps.pr.outputs.number }}
     token: ${{ secrets.GH_PAT }} # needs actions:write + pull-requests:write
 ```
+
+---
+
+## Media
+
+```yaml
+# .github/workflows/media.yml in the consuming repo
+name: Media
+on:
+  push:
+    branches: [main]
+    paths:
+      - "path/that/draws/your/media/**"
+  workflow_dispatch:
+
+jobs:
+  media:
+    uses: GSTJ/magic/.github/workflows/render-media.yml@v1
+    with:
+      r2-prefix: your-repo-name
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+`on:` lives in the caller, not the reusable file: `workflow_call` cannot itself fire on `push`, and
+a workflow with `workflow_call:` in it is rejected outright if anything in the same file tries
+`uses: ./`, which is also why this is two files and not one. Pick the paths that actually draw your
+media and pair `push: branches: [main]` with `workflow_dispatch` for a manual re-render; this
+repo's own `media.yml` is the reference caller. The called job is `render-and-publish`, so the
+check reports as `<caller job> / render-and-publish`.
+
+Inputs:
+
+| Input            | Default                                    | For                                                  |
+| ---------------- | ------------------------------------------ | ---------------------------------------------------- |
+| `render-command` | `pnpm --filter magic-video run render:all` | Rebuilds `media-dir` from source                     |
+| `media-dir`      | `media`                                    | Everything under it gets published, nesting included |
+| `r2-bucket`      | `portfolio-assets`                         | Owned by the portfolio; a consumer provisions no R2  |
+| `r2-prefix`      | none, required                             | One per repo, so two consumers never collide         |
+| `base-url`       | `https://assets.gabrieltaveira.dev`        | Read back after upload to prove it landed            |
+
+Secrets, both required: `CLOUDFLARE_API_TOKEN` (needs Account > R2 > Edit on the account that owns
+`r2-bucket`) and `CLOUDFLARE_ACCOUNT_ID`. Consumed by tag like everything else here, see
+[Versions](#versions-and-why-never-main).
+
+### Render locally, publish in CI
+
+For now, `media/` is still committed and every README's hero image points at the checked-in file,
+not the CDN. Render locally in the PR that changes a composition; this workflow runs on merge to
+`main` and overwrites the matching R2 objects, so the served copy at `base-url` stays honest with
+what just got committed instead of drifting from it. It writes nothing back to the repository: no
+commit, no branch, no PR, and it does not stand in for rendering before review.
+
+A follow-up PR flips this: `media/` becomes gitignored scratch and the CDN becomes the source of
+truth.
 
 ---
 
