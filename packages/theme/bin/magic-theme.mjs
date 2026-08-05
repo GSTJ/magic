@@ -11,13 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  toAlacritty,
-  toClaude,
-  toGhostty,
-  toTmTheme,
-  toWarp,
-} from "../lib/formats.mjs";
+import { toAlacritty, toGhostty, toWarp } from "../lib/formats.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -28,7 +22,7 @@ const extId = `gstj.magic-theme-${pkg.version}`;
 const home = homedir();
 const slug = "dracula-141414";
 
-/** @typedef {"cursor" | "vscode" | "warp" | "ghostty" | "alacritty" | "orca" | "claude" | "codex"} Target */
+/** @typedef {"cursor" | "vscode" | "warp" | "ghostty" | "alacritty" | "orca"} Target */
 
 const ALL = /** @type {Target[]} */ ([
   "cursor",
@@ -37,8 +31,6 @@ const ALL = /** @type {Target[]} */ ([
   "ghostty",
   "alacritty",
   "orca",
-  "claude",
-  "codex",
 ]);
 
 /** @type {Record<Target, { dest: string, detect: () => boolean, write: () => void, note?: string }>} */
@@ -47,19 +39,19 @@ const targets = {
     dest: join(home, ".cursor", "extensions", extId),
     detect: () => existsSync(join(home, ".cursor")),
     write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".cursor", "extensions", extId)),
-    note: 'Color theme picker → "Dracula 141414"',
+    note: 'Color theme picker -> "Dracula 141414"',
   },
   vscode: {
     dest: join(home, ".vscode", "extensions", extId),
     detect: () => existsSync(join(home, ".vscode")),
     write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".vscode", "extensions", extId)),
-    note: 'Color theme picker → "Dracula 141414"',
+    note: 'Color theme picker -> "Dracula 141414"',
   },
   warp: {
     dest: join(home, ".warp", "themes", `${slug}.yaml`),
     detect: () => existsSync(join(home, ".warp")) || existsSync("/Applications/Warp.app"),
     write: () => write(join(home, ".warp", "themes", `${slug}.yaml`), toWarp(theme)),
-    note: "Warp Themes → Dracula 141414",
+    note: "Warp Themes -> Dracula 141414",
   },
   ghostty: {
     dest: join(home, ".config", "ghostty", "themes", slug),
@@ -80,31 +72,12 @@ const targets = {
     detect: () => existsSync(join(home, ".config", "orca")),
     write: () => write(join(home, ".config", "orca", "themes", `${slug}.yaml`), toWarp(theme)),
   },
-  claude: {
-    dest: join(home, ".claude", "themes", `${slug}.json`),
-    detect: () => existsSync(join(home, ".claude")),
-    write: () => {
-      write(join(home, ".claude", "themes", `${slug}.json`), toClaude(theme));
-      setJson(join(home, ".claude", "settings.json"), "theme", `custom:${slug}`);
-    },
-    note: "/theme → Dracula 141414 (or restart Claude Code)",
-  },
-  codex: {
-    dest: join(home, ".codex", "themes", `${slug}.tmTheme`),
-    detect: () => existsSync(join(home, ".codex")),
-    write: () => {
-      write(join(home, ".codex", "themes", `${slug}.tmTheme`), toTmTheme(theme));
-      setCodexTheme(join(home, ".codex", "config.toml"), slug);
-    },
-    note: "/theme → dracula-141414",
-  },
 };
 
 function usage() {
   console.log(`magic-theme ${pkg.version}
 
-Install Dracula 141414 from the VS Code theme (single source) into editors,
-terminals, Claude Code, and Codex.
+Install Dracula 141414 from the VS Code theme into editors and terminals.
 
 Usage:
   magic-theme install [targets...]
@@ -130,36 +103,6 @@ function linkOrCopyDir(src, dest) {
   } catch {
     cpSync(src, dest, { recursive: true });
   }
-}
-
-/** @param {string} file @param {string} key @param {unknown} value */
-function setJson(file, key, value) {
-  let data = {};
-  if (existsSync(file)) {
-    try {
-      data = JSON.parse(readFileSync(file, "utf8"));
-    } catch {
-      data = {};
-    }
-  }
-  data[key] = value;
-  write(file, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-/** @param {string} file @param {string} slugName */
-function setCodexTheme(file, slugName) {
-  let text = existsSync(file) ? readFileSync(file, "utf8") : "";
-  const line = `theme = "${slugName}"`;
-  if (/^\[tui\]/m.test(text)) {
-    if (/^theme\s*=/m.test(text)) {
-      text = text.replace(/^theme\s*=\s*".*?"/m, line);
-    } else {
-      text = text.replace(/^\[tui\]/m, `[tui]\n${line}`);
-    }
-  } else {
-    text = `${text.trimEnd()}\n\n[tui]\n${line}\n`;
-  }
-  write(file, text.endsWith("\n") ? text : `${text}\n`);
 }
 
 /** @param {string[]} args */

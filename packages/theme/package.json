@@ -1,10 +1,8 @@
 {
   "name": "magic-theme",
-  "version": "0.2.0",
-  "description": "Dracula 141414 from one VS Code theme into Cursor, terminals, Claude Code, and Codex.",
+  "version": "0.2.1",
+  "description": "Dracula 141414 from one VS Code theme into Cursor and terminals.",
   "keywords": [
-    "claude",
-    "codex",
     "cursor",
     "dracula",
     "theme",
