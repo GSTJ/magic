@@ -15,8 +15,8 @@
   "foregroundActiveLineNumber": "#c8c8c8",
   "accent": "#bd93f9",
   "cursor": "#f8f8f2",
-  "button": "#3a3a3a",
-  "buttonHover": "#484848",
+  "button": "#3e4048",
+  "buttonHover": "#4e5059",
   "focusBorder": "#555555",
   "ansi": {
     "normal": {
