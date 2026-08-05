@@ -2,7 +2,9 @@
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
   cpSync,
@@ -114,8 +116,16 @@ Targets: ${ALL.join(", ")}
 
 /** @param {string} dest @param {string} body */
 function write(dest, body) {
-  mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, body);
+  const directory = dirname(dest);
+  mkdirSync(directory, { recursive: true });
+  const temporaryDirectory = mkdtempSync(join(directory, ".magic-theme-"));
+  const temporary = join(temporaryDirectory, "theme");
+  try {
+    writeFileSync(temporary, body, { flag: "wx" });
+    renameSync(temporary, dest);
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
 }
 
 /** @param {string} src @param {string} dest */

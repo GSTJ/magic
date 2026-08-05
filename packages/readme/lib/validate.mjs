@@ -18,7 +18,31 @@ const DASH = /[–—]/;
 /** `magic-theme@1.2.3`, `@scope/pkg@1.2.3`: a package-ish token pinned to x.y.z. */
 const PINNED = /[a-z0-9@][\w.@/-]*@\d+\.\d+\.\d+[\w.+-]*/gi;
 const ABSOLUTE = /^https?:\/\//;
-const TAG = /<[^>]+>/g;
+
+/**
+ * Whether an HTML fragment has a non-whitespace character outside its tags.
+ * Track nested angle brackets so malformed markup cannot turn tag names into
+ * text as a side effect of stripping an inner tag first.
+ *
+ * @param {string} html
+ */
+const hasText = (html) => {
+  let depth = 0;
+  let quote = null;
+
+  for (const character of html) {
+    if (depth === 0) {
+      if (character === "<") depth = 1;
+      else if (character.trim() !== "") return true;
+    } else if (quote !== null) {
+      if (character === quote) quote = null;
+    } else if (character === '"' || character === "'") quote = character;
+    else if (character === "<") depth += 1;
+    else if (character === ">") depth -= 1;
+  }
+
+  return false;
+};
 
 /**
  * One boolean per line: is this line inside (or part of) a fenced code block?
@@ -91,7 +115,7 @@ const heroProblems = (prose) => {
   }
 
   const tagline = blocks.some(
-    (body) => imageSrcs(body).length === 0 && body.replace(TAG, "").trim(),
+    (body) => imageSrcs(body).length === 0 && hasText(body),
   );
   if (!tagline) {
     problems.push(

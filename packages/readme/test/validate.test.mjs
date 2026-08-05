@@ -55,10 +55,28 @@ describe("tagline", () => {
     assert.deepEqual(validateReadme(valid), []);
   });
 
+  it("passes text wrapped in inline HTML", () => {
+    const wrapped = valid.replace(
+      TAGLINE,
+      '<p align="center"><strong>Reads one file.</strong></p>',
+    );
+    assert.deepEqual(validateReadme(wrapped), []);
+  });
+
   it("fails without one before the first heading", () => {
     const bare = [HERO, BADGES, BODY].join("\n\n");
     assert.ok(
       validateReadme(bare).some((problem) => problem.includes("no tagline")),
+    );
+  });
+
+  it("does not synthesize tagline text from nested tags", () => {
+    const nested = valid.replace(
+      TAGLINE,
+      '<p align="center"><strong<strong>></strong></p>',
+    );
+    assert.ok(
+      validateReadme(nested).some((problem) => problem.includes("no tagline")),
     );
   });
 });

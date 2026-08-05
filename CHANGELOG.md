@@ -3,6 +3,24 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-08-05 - Harden README and theme writes
+
+The release publishes `magic-readmes@1.0.3` and `magic-theme@0.4.4`. The repo
+release is `v1.19.2`, and `v1` moves onto it.
+
+### Symlink-safe initializer writes
+
+`magic-readme init` now uses exclusive file creation. If a path appears during
+setup, the command stops and leaves it alone. Theme files are staged beside
+their destination and renamed into place. Existing symlinks are replaced at
+the destination, leaving their targets untouched.
+
+### Structural tagline validation
+
+The README validator now scans text and markup separately. Nested markup cannot
+turn a tag name into apparent tagline text as a side effect of removing another
+tag. This closes CodeQL alert 29.
+
 ## v1.12.6
 
 `v1.12.6` disables Renovate's experimental OSV vulnerability source in the
