@@ -1,17 +1,34 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  cpSync,
+  symlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  toAlacritty,
+  toClaude,
+  toGhostty,
+  toTmTheme,
+  toWarp,
+} from "../lib/formats.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkgRoot = join(__dirname, "..");
-const pkg = JSON.parse(readFileSync(join(pkgRoot, "package.json"), "utf8"));
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const theme = JSON.parse(
+  readFileSync(join(root, "vscode", "themes", "dracula-141414-color-theme.json"), "utf8"),
+);
 const extId = `gstj.magic-theme-${pkg.version}`;
-
 const home = homedir();
+const slug = "dracula-141414";
 
-/** @typedef {"cursor" | "vscode" | "warp" | "ghostty" | "alacritty" | "orca"} Target */
+/** @typedef {"cursor" | "vscode" | "warp" | "ghostty" | "alacritty" | "orca" | "claude" | "codex"} Target */
 
 const ALL = /** @type {Target[]} */ ([
   "cursor",
@@ -20,157 +37,138 @@ const ALL = /** @type {Target[]} */ ([
   "ghostty",
   "alacritty",
   "orca",
+  "claude",
+  "codex",
 ]);
+
+/** @type {Record<Target, { dest: string, detect: () => boolean, write: () => void, note?: string }>} */
+const targets = {
+  cursor: {
+    dest: join(home, ".cursor", "extensions", extId),
+    detect: () => existsSync(join(home, ".cursor")),
+    write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".cursor", "extensions", extId)),
+    note: 'Color theme picker → "Dracula 141414"',
+  },
+  vscode: {
+    dest: join(home, ".vscode", "extensions", extId),
+    detect: () => existsSync(join(home, ".vscode")),
+    write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".vscode", "extensions", extId)),
+    note: 'Color theme picker → "Dracula 141414"',
+  },
+  warp: {
+    dest: join(home, ".warp", "themes", `${slug}.yaml`),
+    detect: () => existsSync(join(home, ".warp")) || existsSync("/Applications/Warp.app"),
+    write: () => write(join(home, ".warp", "themes", `${slug}.yaml`), toWarp(theme)),
+    note: "Warp Themes → Dracula 141414",
+  },
+  ghostty: {
+    dest: join(home, ".config", "ghostty", "themes", slug),
+    detect: () =>
+      existsSync(join(home, ".config", "ghostty")) || existsSync("/Applications/Ghostty.app"),
+    write: () => write(join(home, ".config", "ghostty", "themes", slug), toGhostty(theme)),
+    note: "theme = dracula-141414",
+  },
+  alacritty: {
+    dest: join(home, ".config", "alacritty", "themes", `${slug}.toml`),
+    detect: () => existsSync(join(home, ".config", "alacritty")),
+    write: () =>
+      write(join(home, ".config", "alacritty", "themes", `${slug}.toml`), toAlacritty(theme)),
+    note: `import = ["~/.config/alacritty/themes/${slug}.toml"]`,
+  },
+  orca: {
+    dest: join(home, ".config", "orca", "themes", `${slug}.yaml`),
+    detect: () => existsSync(join(home, ".config", "orca")),
+    write: () => write(join(home, ".config", "orca", "themes", `${slug}.yaml`), toWarp(theme)),
+  },
+  claude: {
+    dest: join(home, ".claude", "themes", `${slug}.json`),
+    detect: () => existsSync(join(home, ".claude")),
+    write: () => {
+      write(join(home, ".claude", "themes", `${slug}.json`), toClaude(theme));
+      setJson(join(home, ".claude", "settings.json"), "theme", `custom:${slug}`);
+    },
+    note: "/theme → Dracula 141414 (or restart Claude Code)",
+  },
+  codex: {
+    dest: join(home, ".codex", "themes", `${slug}.tmTheme`),
+    detect: () => existsSync(join(home, ".codex")),
+    write: () => {
+      write(join(home, ".codex", "themes", `${slug}.tmTheme`), toTmTheme(theme));
+      setCodexTheme(join(home, ".codex", "config.toml"), slug);
+    },
+    note: "/theme → dracula-141414",
+  },
+};
 
 function usage() {
   console.log(`magic-theme ${pkg.version}
 
-Install Dracula 141414 for editors and terminals.
+Install Dracula 141414 from the VS Code theme (single source) into editors,
+terminals, Claude Code, and Codex.
 
 Usage:
   magic-theme install [targets...]
   magic-theme uninstall [targets...]
-  magic-theme path [target]
+  magic-theme path <target>
 
-Targets (default: all that look installed):
-  cursor      ~/.cursor/extensions/${extId}
-  vscode     ~/.vscode/extensions/${extId}
-  warp       ~/.warp/themes/dracula-141414.yaml
-  ghostty    ~/.config/ghostty/themes/dracula-141414
-  alacritty  ~/.config/alacritty/themes/dracula-141414.toml
-  orca       ~/.config/orca/themes/dracula-141414.yaml
-
-Examples:
-  magic-theme install
-  magic-theme install cursor warp
-  magic-theme uninstall cursor
+Targets: ${ALL.join(", ")}
 `);
 }
 
-/** @param {Target} target */
-function paths(target) {
-  switch (target) {
-    case "cursor":
-      return {
-        dest: join(home, ".cursor", "extensions", extId),
-        src: join(pkgRoot, "vscode"),
-        kind: "dir",
-      };
-    case "vscode":
-      return {
-        dest: join(home, ".vscode", "extensions", extId),
-        src: join(pkgRoot, "vscode"),
-        kind: "dir",
-      };
-    case "warp":
-      return {
-        dest: join(home, ".warp", "themes", "dracula-141414.yaml"),
-        src: join(pkgRoot, "terminals", "warp.yaml"),
-        kind: "file",
-      };
-    case "ghostty":
-      return {
-        dest: join(home, ".config", "ghostty", "themes", "dracula-141414"),
-        src: join(pkgRoot, "terminals", "ghostty"),
-        kind: "file",
-      };
-    case "alacritty":
-      return {
-        dest: join(
-          home,
-          ".config",
-          "alacritty",
-          "themes",
-          "dracula-141414.toml",
-        ),
-        src: join(pkgRoot, "terminals", "alacritty.toml"),
-        kind: "file",
-      };
-    case "orca":
-      return {
-        dest: join(home, ".config", "orca", "themes", "dracula-141414.yaml"),
-        src: join(pkgRoot, "terminals", "warp.yaml"),
-        kind: "file",
-      };
-    default:
-      throw new Error(`unknown target: ${target}`);
-  }
-}
-
-/** @param {Target} target */
-function looksInstalled(target) {
-  switch (target) {
-    case "cursor":
-      return existsSync(join(home, ".cursor"));
-    case "vscode":
-      return existsSync(join(home, ".vscode"));
-    case "warp":
-      return existsSync(join(home, ".warp")) || existsSync("/Applications/Warp.app");
-    case "ghostty":
-      return (
-        existsSync(join(home, ".config", "ghostty")) ||
-        existsSync("/Applications/Ghostty.app")
-      );
-    case "alacritty":
-      return existsSync(join(home, ".config", "alacritty"));
-    case "orca":
-      return existsSync(join(home, ".config", "orca"));
-    default:
-      return false;
-  }
-}
-
-/** @param {string} dest */
-function ensureParent(dest) {
+/** @param {string} dest @param {string} body */
+function write(dest, body) {
   mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, body);
 }
 
-/** @param {Target} target */
-function installOne(target) {
-  const { dest, src, kind } = paths(target);
-  ensureParent(dest);
+/** @param {string} src @param {string} dest */
+function linkOrCopyDir(src, dest) {
+  mkdirSync(dirname(dest), { recursive: true });
   rmSync(dest, { recursive: true, force: true });
-  if (kind === "dir") {
+  try {
+    symlinkSync(src, dest, "dir");
+  } catch {
+    cpSync(src, dest, { recursive: true });
+  }
+}
+
+/** @param {string} file @param {string} key @param {unknown} value */
+function setJson(file, key, value) {
+  let data = {};
+  if (existsSync(file)) {
     try {
-      symlinkSync(src, dest, "dir");
+      data = JSON.parse(readFileSync(file, "utf8"));
     } catch {
-      cpSync(src, dest, { recursive: true });
+      data = {};
+    }
+  }
+  data[key] = value;
+  write(file, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+/** @param {string} file @param {string} slugName */
+function setCodexTheme(file, slugName) {
+  let text = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const line = `theme = "${slugName}"`;
+  if (/^\[tui\]/m.test(text)) {
+    if (/^theme\s*=/m.test(text)) {
+      text = text.replace(/^theme\s*=\s*".*?"/m, line);
+    } else {
+      text = text.replace(/^\[tui\]/m, `[tui]\n${line}`);
     }
   } else {
-    try {
-      symlinkSync(src, dest);
-    } catch {
-      cpSync(src, dest);
-    }
+    text = `${text.trimEnd()}\n\n[tui]\n${line}\n`;
   }
-  console.log(`installed ${target} -> ${dest}`);
-}
-
-/** @param {Target} target */
-function uninstallOne(target) {
-  const { dest } = paths(target);
-  if (!existsSync(dest)) {
-    console.log(`skip ${target} (not installed)`);
-    return;
-  }
-  rmSync(dest, { recursive: true, force: true });
-  console.log(`removed ${dest}`);
+  write(file, text.endsWith("\n") ? text : `${text}\n`);
 }
 
 /** @param {string[]} args */
 function parseTargets(args) {
-  if (args.length === 0) {
-    return ALL.filter(looksInstalled);
-  }
-  /** @type {Target[]} */
-  const out = [];
-  for (const a of args) {
-    if (!ALL.includes(/** @type {Target} */ (a))) {
-      throw new Error(`unknown target: ${a}`);
-    }
-    out.push(/** @type {Target} */ (a));
-  }
-  return out;
+  if (args.length === 0) return ALL.filter((t) => targets[t].detect());
+  return args.map((a) => {
+    if (!(a in targets)) throw new Error(`unknown target: ${a}`);
+    return /** @type {Target} */ (a);
+  });
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -180,34 +178,35 @@ try {
     usage();
     process.exit(0);
   }
-
   if (cmd === "path") {
-    const target = /** @type {Target} */ (rest[0] ?? "cursor");
-    console.log(paths(target).dest);
+    const t = /** @type {Target} */ (rest[0] ?? "cursor");
+    console.log(targets[t].dest);
     process.exit(0);
   }
-
   if (cmd === "install") {
-    const targets = parseTargets(rest);
-    if (targets.length === 0) {
+    const list = parseTargets(rest);
+    if (!list.length) {
       console.error("nothing to install (pass targets explicitly)");
       process.exit(1);
     }
-    for (const t of targets) installOne(t);
-    console.log("");
-    console.log("Cursor / VS Code: set color theme to \"Dracula 141414\" (reload if needed).");
-    console.log("Warp: Settings -> Appearance -> Themes -> Dracula 141414.");
-    console.log("Ghostty: theme = dracula-141414");
-    console.log("Alacritty: import = [\"~/.config/alacritty/themes/dracula-141414.toml\"]");
+    for (const t of list) {
+      targets[t].write();
+      console.log(`installed ${t} -> ${targets[t].dest}`);
+      if (targets[t].note) console.log(`  ${targets[t].note}`);
+    }
     process.exit(0);
   }
-
   if (cmd === "uninstall") {
-    const targets = parseTargets(rest.length ? rest : ALL);
-    for (const t of targets) uninstallOne(t);
+    for (const t of parseTargets(rest.length ? rest : ALL)) {
+      if (!existsSync(targets[t].dest)) {
+        console.log(`skip ${t}`);
+        continue;
+      }
+      rmSync(targets[t].dest, { recursive: true, force: true });
+      console.log(`removed ${targets[t].dest}`);
+    }
     process.exit(0);
   }
-
   console.error(`unknown command: ${cmd}`);
   usage();
   process.exit(1);
