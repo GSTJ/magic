@@ -1,0 +1,115 @@
+---
+title: magic-oxfmt-config
+description: oxfmt config, import sort order included.
+---
+
+One import replaces both Prettier and the import-sort plugin. oxfmt has no
+`extends` in its config schema either: adding one is silently ignored
+rather than reported, so a real package import is the only sharing
+mechanism, and that's what this package is.
+
+## Install
+
+```sh
+pnpm add -D oxfmt magic-oxfmt-config
+```
+
+Pin `oxfmt` to an exact version in your own lockfile. A minor bump can
+change formatting output and reflow the whole repo in one run.
+
+## Adopt
+
+```ts
+// oxfmt.config.mts
+import base from "magic-oxfmt-config";
+
+export default base;
+```
+
+## Variants
+
+```ts
+import { expo } from "magic-oxfmt-config"; // also: react, reactNative, next
+
+export default expo;
+```
+
+Each variant adds ignore patterns for its framework's generated and native
+directories on top of the base. Extend locally by spreading:
+
+```ts
+import base from "magic-oxfmt-config";
+
+export default {
+  ...base,
+  ignorePatterns: [...(base.ignorePatterns ?? []), "vendor/**"],
+};
+```
+
+## Import order
+
+oxfmt's sorter groups imports by glob rather than regex. The config walks
+through ten groups, in order:
+
+1. Type imports
+2. Type imports from react / react-native, then next, then expo
+3. Node builtins
+4. react / react-native / react-dom
+5. next
+6. expo
+7. Other third-party
+8. Workspace-internal (`~/`, `@/`, `#`)
+9. Parent, sibling, and index relatives
+10. Stylesheets
+
+Custom groups outrank predefined ones and match first-come, so the `-type`
+groups have to sit before the plain `react` group. Otherwise it swallows
+`import type { ReactNode } from "react"` out of the type group.
+
+Side-effect imports never move (`sortSideEffects: false`).
+`import "react-native-gesture-handler"` only works staying first.
+
+`internalPattern` takes literal prefixes and matches by starts-with. The
+config sets `["~/", "@/", "#"]`; writing a glob there instead, like
+`"@/**"`, matches nothing and raises no error, and the aliased imports
+quietly land in the third-party group next to everything else.
+
+## House style
+
+Prettier's defaults, with two changes from oxfmt's own defaults:
+`printWidth: 80` (oxfmt defaults to 100, and leaving that unset reflows
+every file on the first run) and `singleQuote: false` (also oxfmt's own
+default).
+
+## Ignored files
+
+The shared ignore list covers files a tool owns and nobody reads the diff
+of: `CHANGELOG.md`, `*.generated.*`, minified output. Take one back with
+`withoutIgnorePatterns`:
+
+```ts
+import base, { withoutIgnorePatterns } from "magic-oxfmt-config";
+
+export default withoutIgnorePatterns(base, ["**/CHANGELOG.md"]);
+```
+
+It throws on a pattern the config doesn't actually ignore, so a typo
+surfaces immediately instead of silently keeping the file excluded.
+
+<Callout title="oxfmt exits 2 when every target path is excluded">
+  A release script that runs `oxfmt CHANGELOG.md` after generating the changelog
+  starts failing once that file is ignored: oxfmt treats an all-excluded target
+  list as an error. Drop the explicit call, or opt the file back in with
+  `withoutIgnorePatterns`.
+</Callout>
+
+## JSON fallback
+
+```sh
+pnpm exec magic-oxfmt-init expo      # writes .oxfmtrc.json
+```
+
+This writes a one-time snapshot; bumping `magic-oxfmt-config` won't update
+it, rerun the command. oxfmt only accepts one config file per directory, so
+`magic-oxfmt-init` refuses to write next to an existing
+`.oxfmtrc.json`/`oxfmt.config.mts`. Delete the other one first.

@@ -1,11 +1,18 @@
-import type { ThemedToken } from "shiki";
-
 import type { CSSProperties, FC } from "react";
 
-import { COLORS } from "../brand";
-import { FONTS } from "../fonts";
-import { BrandMark, CodePane, SceneBackground, Tagline } from "../primitives";
-import { useTokens } from "../shiki";
+// Every other package pulls these from the `magic-video` devDependency. This
+// one cannot: magic-video's own tsconfig extends magic-tsconfig, so declaring
+// the dependency back would make the workspace graph cyclic and turbo refuses
+// to plan it. Relative paths into the same source, no dependency edge.
+import { COLORS } from "../../video/src/brand";
+import { FONTS } from "../../video/src/fonts";
+import {
+  BrandMark,
+  CodePane,
+  SceneBackground,
+  Tagline,
+} from "../../video/src/primitives";
+import { type ThemedToken, useTokens } from "../../video/src/shiki";
 
 /**
  * Signature options only; the cards are a detail crop, not the full files.

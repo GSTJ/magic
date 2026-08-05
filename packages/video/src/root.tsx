@@ -3,22 +3,25 @@ import type { FC } from "react";
 
 import { Composition } from "remotion";
 
-import { CodemodsDemo, CodemodsStill } from "./compositions/codemods";
-import { DocsStill } from "./compositions/docs";
-import { ObservabilityStill } from "./compositions/observability";
-import { OxfmtStill } from "./compositions/oxfmt-config";
-import { OxlintConfigStill } from "./compositions/oxlint-config";
-import { OxlintPluginStill } from "./compositions/oxlint-plugin";
-import { ReadmeStill } from "./compositions/readme";
+import { CodemodsDemo, CodemodsStill } from "../../codemods/demo/media";
+import { DocsStill } from "../../docs/demo/media";
+import { ObservabilityStill } from "../../observability/demo/media";
+import { OxfmtStill } from "../../oxfmt-config/demo/media";
+import { OxlintConfigStill } from "../../oxlint-config/demo/media";
+import { OxlintPluginStill } from "../../oxlint-plugin/demo/media";
+import { ReadmeStill } from "../../readme/demo/media";
+import { ThemePaletteStill, ThemeStill } from "../../theme/demo/media";
+import { TsconfigStill } from "../../tsconfig/demo/media";
+import { MagicDemo } from "./compositions/magic";
 import { MagicSocial } from "./compositions/social";
-import { ThemePaletteStill, ThemeStill } from "./compositions/theme";
-import { TsconfigStill } from "./compositions/tsconfig";
-import { VideoStill } from "./compositions/video";
+import { VideoDemo, VideoStill } from "./compositions/video";
 
 /**
  * Hero stills share one frame spec so every README image lands identical. The
  * ids here are what the render scripts in package.json call; per-package work
- * happens in `compositions/<pkg>.tsx`, never in this file.
+ * happens in that package's own `demo/media.tsx`, never in this file. The
+ * sibling imports are relative on purpose: a `demo/` subpath export would
+ * advertise a path the published tarball never ships.
  */
 const HERO = {
   durationInFrames: 1,
@@ -61,6 +64,22 @@ export const RemotionRoot: FC = () => (
       fps={30}
       height={900}
       id="CodemodsDemo"
+      width={1600}
+    />
+    <Composition
+      component={VideoDemo}
+      durationInFrames={450}
+      fps={30}
+      height={900}
+      id="VideoDemo"
+      width={1600}
+    />
+    <Composition
+      component={MagicDemo}
+      durationInFrames={450}
+      fps={30}
+      height={900}
+      id="MagicDemo"
       width={1600}
     />
   </>

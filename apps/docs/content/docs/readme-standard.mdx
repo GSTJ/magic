@@ -1,0 +1,72 @@
+---
+title: The README standard
+description: What every README here contains, and the check that enforces it.
+---
+
+Every package README in this repo follows the same shape, and `magic-readme check` enforces the
+mechanical half of it: it exits 1 with a line number for each rule a file breaks. A good tagline or
+a useful mechanism list is still a human call in review.
+
+## Anatomy
+
+Top to bottom, in order:
+
+| Section           | What goes there                                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Hero              | A `<p align="center">` block with one `<img>`, absolute https `src`. Badges don't count.                                  |
+| Tagline           | A `<p align="center">` block, plain text, no image. What the reader does with it, in concrete verbs, two clauses at most. |
+| Badges            | npm version and npm downloads. See [Badges](#badges).                                                                     |
+| `## How it works` | The mechanism, as numbered steps.                                                                                         |
+| `## Install`      | No exact version pin in the snippet; moving tags and ranges are fine.                                                     |
+| Detail sections   | Why the package exists, configuration, gotchas, each under its own H2.                                                    |
+
+Two more rules apply to the whole file, beyond those sections: no em or en dashes outside fenced
+code blocks, and no relative image `src` anywhere, since npm renders a README away from the repo
+and a relative path 404s on the package page.
+
+## init and check
+
+```sh
+npx magic-readmes init
+```
+
+writes the skeleton to `README.md` in the current directory (or the directory you pass) and
+refuses to touch one that already exists. Fill every placeholder, then check it back:
+
+```sh
+magic-readme check README.md
+```
+
+```
+README.md
+  - no tagline: a <p align="center"> block with plain text and no image must come before the first heading.
+  - no `## Install` heading.
+
+magic-readme: 2 problem(s).
+```
+
+This repo runs the same check over every package README plus the root one, in CI. The full rule
+list and the validator source are in the
+[magic-readmes README](https://github.com/GSTJ/magic/blob/main/packages/readme#readme).
+
+## Media
+
+The hero image and any demo clip come from one pipeline: `magic-video`, the Remotion package at
+`packages/video`, renders every package's still and clip into the repo root's `media/` directory,
+which is committed. A README then points at the raw GitHub URL:
+
+```
+https://raw.githubusercontent.com/GSTJ/magic/main/media/<pkg>.png
+```
+
+so the same file renders on GitHub and on the npm package page. Nothing is hand-screenshotted; the
+renders share `magic-theme`'s own palette. See the
+[magic-video README](https://github.com/GSTJ/magic/blob/main/packages/video#readme) for how a
+still or clip gets built.
+
+## Badges
+
+A README carries only the badges that sell the package: npm version and npm downloads say it
+exists and people install it. Stars and license badges are off by default, a zero star count and
+an `unknown` license both argue against installing rather than for it. Add either back on a
+package where the number actually helps.

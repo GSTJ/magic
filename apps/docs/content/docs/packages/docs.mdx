@@ -1,0 +1,118 @@
+---
+title: magic-docs
+description: The Fumadocs preset this site is built on.
+---
+
+import { repositoryFileUrl } from "magic-docs";
+
+import { site } from "@/lib/site";
+
+The page you're reading is the worked example. This whole site is a Fumadocs app that imports
+`magic-docs` for its layout, theme, MDX components, type tables and static export, and its own
+config is short enough to read in full:
+
+```ts
+// apps/docs/lib/site.ts
+import { createMagicDocsPublicPaths, defineMagicDocs } from "magic-docs";
+
+export const site = defineMagicDocs({
+  name: "magic",
+  description:
+    "Change a lint rule or a CI step once, and every repo importing this one picks it up on its next run.",
+  siteUrl: "https://gstj.github.io/magic",
+  repository: "https://github.com/GSTJ/magic",
+});
+
+export const publicPaths = createMagicDocsPublicPaths(site);
+```
+
+`defineMagicDocs` validates the URLs and repository shape once, at config evaluation time, and
+every other helper in the package derives from that one `site` object. `siteUrl` carries the
+GitHub Pages project path (`/magic`), which is why every internal link, canonical URL and
+`llms.txt` entry this site emits comes out correctly prefixed without any file writing `/magic`
+by hand.
+
+## Install
+
+```sh
+pnpm add next react react-dom fumadocs-core fumadocs-mdx \
+  fumadocs-ui@npm:@fumadocs/base-ui magic-docs
+pnpm add -D typescript tailwindcss @tailwindcss/postcss
+```
+
+The `fumadocs-ui` alias selects Base UI while keeping Fumadocs' documented import paths. Pin
+TypeScript separately from a monorepo root: the docs app needs a compiler release that Next and
+Fumadocs have already caught up to.
+
+## Layout and MDX
+
+This app's layout and MDX setup are both one call:
+
+```tsx
+// app/(docs)/layout.tsx
+<DocsLayout {...createMagicDocsLayout(site)} tree={source.getPageTree()}>
+  {children}
+</DocsLayout>
+```
+
+```tsx
+// mdx-components.tsx
+export const getMDXComponents = createMagicDocsMdxComponents;
+export const useMDXComponents = createMagicDocsMdxComponents;
+```
+
+`createMagicDocsLayout` keeps sidebar and nav controls consistent across every package that adopts
+the preset; add package-specific links through its `links` option. The MDX vocabulary is
+Fumadocs' cards, callouts, headings and code blocks, plus accordions, file trees, steps, tabs and
+type tables, all of which this page uses.
+
+## Static export
+
+`next.config.ts` here is four lines:
+
+```ts
+const withMdx = createMDX();
+const config = createMagicDocsStaticExport(site) satisfies NextConfig;
+
+export default withMdx(config);
+```
+
+`createMagicDocsStaticExport` sets `output: "export"` and `basePath: "/magic"` for GitHub Pages,
+and deliberately leaves `assetPrefix` alone: Next serves `/_next` assets from `basePath` on its
+own. `basePath` only rewrites what the Next router touches, so anything outside it, the
+copy-Markdown button, `llms.txt`, canonical and OG URLs, goes through `publicPaths` instead:
+
+```ts
+publicPaths.markdown(page.url); // copy-Markdown button URL
+publicPaths.llms; // /magic/llms.txt
+publicPaths.url(page.url); // canonical/OG absolute URL
+```
+
+This site's own `/llms.txt` and `/llms-full.txt` routes are two of the shortest files in the app,
+because the rendering lives in the package:
+
+```ts
+// app/llms.txt/route.ts
+export const GET = () =>
+  new Response(prefixMagicDocsLlmLinks(site, llms(source).index()));
+```
+
+`prefixMagicDocsLlmLinks` exists because Fumadocs' own `llms(source).index()` emits
+application-relative links with no `basePath` awareness; without it every link in `/llms.txt`
+would 404 under `/magic`.
+
+<Callout title="Keep hidden files in the Pages artifact">
+  `createMagicDocsStaticExport` also writes `public/.nojekyll`. The GitHub Pages
+  upload step needs `include-hidden-files: true` or that file drops out of the
+  artifact and GitHub may run the export through Jekyll instead of serving it
+  as-is.
+</Callout>
+
+<Cards>
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/docs/README.md")}
+    title="Full reference"
+    description="Type tables, the pre-release tarball workflow, and the six-section content standard this site follows."
+  />
+</Cards>

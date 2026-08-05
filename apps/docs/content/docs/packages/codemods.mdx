@@ -1,0 +1,66 @@
+---
+title: magic-codemods
+description: magic-kebab renames files to kebab-case and rewrites the imports.
+---
+
+import { repositoryFileUrl } from "magic-docs";
+
+import { site } from "@/lib/site";
+
+`magic-oxlint-config` turns on `unicorn/filename-case` at `kebabCase`, so a repo adopting the
+preset picks up a pile of `Button.tsx` and `formatDate.ts` filenames that now fail lint, all at
+once. Renaming those by hand is a large, error-prone diff in the middle of a migration that is
+already touching everything else, and `find | xargs mv` breaks every import in the repo. One
+binary, `magic-kebab`, does both parts: it renames the files and rewrites every import that
+pointed at them.
+
+## How it works
+
+```sh
+pnpm exec magic-kebab --dry-run   # the plan; changes nothing
+pnpm exec magic-kebab --write     # apply it
+```
+
+`--dry-run` asks the repo's own oxlint which filenames break the rule and prints the plan:
+renames, skips, conflicts. Nothing changes yet, and the plan reflects that repo's own `ignore`
+list and overrides because the linter is the one answering.
+
+`--write` rewrites imports, requires, jest/vitest mocks and tsconfig path aliases, then moves each
+file through two `git mv`s via a temp name so a case-only rename survives case-insensitive APFS.
+Git infers renames from content similarity at diff time, so a commit that only renames keeps `git
+log --follow` working. Verify (`tsc`, lint, tests) and commit the renames on their own; mixing a
+refactor into the same commit is what breaks history.
+
+## Install
+
+```sh
+pnpm add -D magic-codemods
+```
+
+## What it won't rename
+
+Filenames where the name is behavior. `magic-oxlint-config` exempts the same list, so the codemod
+never skips something the linter still flags:
+
+| Pattern                     | Why                                                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `[postId].tsx`              | The bracketed text is a route parameter name; Next.js, expo-router and TanStack Router all read it from the file. |
+| `__mocks__/AsyncStorage.ts` | Jest and Vitest match `__mocks__/<name>` against the module being mocked, and the name belongs to the package.    |
+| `App.tsx`                   | Bare React Native's `index.js` and classic Expo's entry point both import it by that literal path.                |
+
+`--rename Old.tsx=new.tsx` overrides the target for a file the detector already flagged; a key
+naming anything else fails, on purpose, instead of silently doing nothing.
+
+<Callout title="One invariant makes the rest tractable">
+  Directories never move. Only the basename changes, so only the last segment of
+  any specifier is ever rewritten.
+</Callout>
+
+<Cards>
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/codemods/README.md")}
+    title="Full reference"
+    description="The rewrite table, the two-step git mv, path alias resolution, and --detect oxlint vs --detect builtin."
+  />
+</Cards>

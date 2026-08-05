@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="The magic social card: the sparkle mark and wordmark on the theme's night background" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-social.png" />
+  <img alt="A tour of the repo: the magic mark, a file fixing its own lint, formatting and import order, the shared CI checks going green, and the theme palette washing through" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-demo.gif" />
 </p>
 
 <p align="center">Change a lint rule or a CI step once. Every repo importing this one picks it up on its next run.</p>

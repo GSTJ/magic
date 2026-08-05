@@ -1,0 +1,99 @@
+---
+title: CI and automation
+description: Reusable CI jobs consumed by tag, and the shared Renovate policy.
+---
+
+Three GitHub Actions workflows and one Renovate preset live here. A consuming repo calls them by
+tag, so a fix or a rule change lands in this repo once and reaches every caller on its next run.
+
+## ci.yml
+
+Lint, format check, and typecheck, wired to the caller's own scripts.
+
+```yaml
+# .github/workflows/ci.yml in the consuming repo
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: GSTJ/magic/.github/workflows/ci.yml@v1
+```
+
+Test, build, and any repo-specific gate are opt-in inputs (`test-command`, `build-command`,
+`extra-command`), empty by default.
+
+## release.yml
+
+Publishes to npm through `release-it`, driven by conventional commits. The caller keeps its own
+`.release-it.js`; this workflow only checks out, installs, authenticates, and runs the release
+command.
+
+```yaml
+jobs:
+  release:
+    uses: GSTJ/magic/.github/workflows/release.yml@v1
+    permissions:
+      contents: write
+      id-token: write
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+```
+
+## e2e-ios.yml
+
+Maestro end-to-end for Expo and bare React Native apps: prebuild, pod install, boot a simulator,
+install the app, run every flow with a retry, upload screenshots when one goes red.
+
+```yaml
+jobs:
+  e2e:
+    uses: GSTJ/magic/.github/workflows/e2e-ios.yml@v1
+    with:
+      app-dir: apps/mobile
+```
+
+That's the whole adoption for a repo with an Expo app and a `.maestro` directory next to it.
+Self-hosted Mac routing, sharding, quarantining flaky flows, and flake statistics are all opt-in
+inputs on top of this default.
+
+## Versions
+
+Every workflow and action here is consumed by tag, never by branch.
+
+| Ref      | What it does                                                                  |
+| -------- | ----------------------------------------------------------------------------- |
+| `@v1`    | Moving major. A fix lands here once and reaches every caller on its next run. |
+| `@x.y.z` | Exact pin. Nothing changes under you; Renovate opens the bump PR.             |
+| `@main`  | Don't. An unreviewed merge here reruns every consuming repo's CI.             |
+
+`@v1` is the default: the whole point of one tooling repo is that a fix lands once. Pin exactly on
+a release path or a repo you rarely look at; the shared Renovate preset groups those bumps with
+the `magic-*` npm packages into one PR and automerges it.
+
+## Renovate
+
+```jsonc
+// renovate.json in the consuming repo
+{ "extends": ["github>GSTJ/magic"] }
+```
+
+That resolves to `default.json` at the root of this repo, where the preset lives. Third-party
+releases are quarantined for 14 days before Renovate opens a branch; `magic-*` packages and
+`GSTJ/magic` action tags are the first-party exception and move immediately. Majors never
+automerge, on any dependency.
+
+<Callout title="Deep tuning lives on GitHub">
+  Self-hosted Mac routing, sharding math, quarantine decay, cache keys, and
+  every measured gotcha live once, in the [adoption
+  guide](https://github.com/GSTJ/magic/blob/main/.github/workflows/README.md):
+  [CI](https://github.com/GSTJ/magic/blob/main/.github/workflows/README.md#ci),
+  [iOS
+  E2E](https://github.com/GSTJ/magic/blob/main/.github/workflows/README.md#ios-e2e),
+  [Renovate](https://github.com/GSTJ/magic/blob/main/.github/workflows/README.md#renovate),
+  [Gotchas](https://github.com/GSTJ/magic/blob/main/.github/workflows/README.md#gotchas).
+</Callout>

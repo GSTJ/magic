@@ -1,16 +1,15 @@
 import type { CSSProperties, FC } from "react";
 
-import { Easing, interpolate, useCurrentFrame } from "remotion";
-
-import { CODE, COLORS } from "../brand";
-import { FONTS } from "../fonts";
+import { CODE, COLORS } from "magic-video/brand";
+import { FONTS } from "magic-video/fonts";
 import {
   BrandMark,
   SceneBackground,
   Sparkle,
   Tagline,
   WindowFrame,
-} from "../primitives";
+} from "magic-video/primitives";
+import { Easing, interpolate, useCurrentFrame } from "remotion";
 
 const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 

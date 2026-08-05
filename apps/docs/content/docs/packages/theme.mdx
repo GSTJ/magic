@@ -1,0 +1,64 @@
+---
+title: magic-theme
+description: Magic Theme, ported across editors and terminals.
+---
+
+import { repositoryFileUrl } from "magic-docs";
+
+import { site } from "@/lib/site";
+
+<img
+  alt="Magic Theme coloring an editor window and a terminal window side by side"
+  src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme.png"
+/>
+
+One theme lives as a VS Code color theme JSON. `magic-theme install` reads it and writes the
+matching file for every editor and terminal it finds on the machine, so a palette change is one
+edit and one command instead of six hand-maintained config files drifting apart.
+
+## Install
+
+```sh
+pnpm add -D magic-theme
+pnpm exec magic-theme install
+```
+
+With no arguments, `install` writes every target it detects. Pass names to limit the run:
+
+```sh
+pnpm exec magic-theme install cursor warp
+```
+
+`uninstall` removes everything it wrote, and `path <target>` prints where a target's file lands
+without touching it.
+
+## Palette
+
+<img
+  alt="Magic Theme palette strip: bg, fg, accent, success, error, warning, and the 16 ANSI colors"
+  src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme-palette.png"
+/>
+
+`magic-video`'s compositions pull this same palette through `magic-theme/lib/project.mjs`, so the
+hero images this site and every package README embed come from the same source as the editor
+theme, not a re-picked copy.
+
+## Targets
+
+| Target          | What it gets                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| Cursor, VS Code | An extension. Pick "Magic Theme" in the color theme picker.                                           |
+| Warp, Orca      | A theme file. Pick it in the app's Themes UI.                                                         |
+| Ghostty         | A theme file. Set `theme = magic-theme` in its config.                                                |
+| Alacritty       | A generated toml. Add `import = ["~/.config/alacritty/themes/magic-theme.toml"]` to `alacritty.toml`. |
+
+Edit the VS Code theme JSON, re-run `install`, and every target follows.
+
+<Cards>
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/theme/README.md")}
+    title="Full reference"
+    description="The palette role names, the projection algorithm, and per-target file paths."
+  />
+</Cards>

@@ -1,15 +1,15 @@
 import type { CSSProperties, FC } from "react";
 
-import { COLORS } from "../brand";
-import { FONTS } from "../fonts";
+import { COLORS } from "magic-video/brand";
+import { FONTS } from "magic-video/fonts";
 import {
   BrandMark,
   CodePane,
   SceneBackground,
   Tagline,
   WindowFrame,
-} from "../primitives";
-import { useTokens } from "../shiki";
+} from "magic-video/primitives";
+import { useTokens } from "magic-video/shiki";
 
 /**
  * The same seven imports twice: authored in a scramble on the left, after one

@@ -1,6 +1,6 @@
 {
   "name": "magic-video",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Render stills and clips from shared brand primitives, fonts and theme-derived colors; today it draws every image in media/.",
   "keywords": [
     "brand",
@@ -32,18 +32,20 @@
     ".": "./src/index.ts",
     "./brand": "./src/brand.ts",
     "./fonts": "./src/fonts.ts",
-    "./primitives": "./src/primitives.tsx"
+    "./primitives": "./src/primitives.tsx",
+    "./shiki": "./src/shiki.ts"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "dev": "remotion studio",
-    "render:all": "pnpm run render:theme && pnpm run render:theme-palette && pnpm run render:codemods && pnpm run render:codemods-gif && pnpm run render:oxfmt && pnpm run render:oxlint-config && pnpm run render:oxlint-plugin && pnpm run render:tsconfig && pnpm run render:docs && pnpm run render:observability && pnpm run render:readme && pnpm run render:social && pnpm run render:video",
+    "render:all": "pnpm run render:theme && pnpm run render:theme-palette && pnpm run render:codemods && pnpm run render:codemods-gif && pnpm run render:oxfmt && pnpm run render:oxlint-config && pnpm run render:oxlint-plugin && pnpm run render:tsconfig && pnpm run render:docs && pnpm run render:observability && pnpm run render:readme && pnpm run render:social && pnpm run render:video && pnpm run render:video-gif && pnpm run render:magic-demo",
     "render:codemods": "remotion still Codemods ../../media/magic-codemods.png",
     "render:codemods-demo": "remotion render CodemodsDemo out/intermediate.mp4",
     "render:codemods-gif": "pnpm run render:codemods-demo && remotion ffmpeg -y -i out/intermediate.mp4 -filter_complex \"scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -r 12 -t 15 ../../media/magic-codemods-demo.gif",
     "render:docs": "remotion still Docs ../../media/magic-docs.png",
+    "render:magic-demo": "remotion render MagicDemo out/intermediate.mp4 && remotion ffmpeg -y -i out/intermediate.mp4 -filter_complex \"scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -r 12 -t 15 ../../media/magic-demo.gif",
     "render:observability": "remotion still Observability ../../media/magic-observability.png",
     "render:oxfmt": "remotion still Oxfmt ../../media/magic-oxfmt-config.png",
     "render:oxlint-config": "remotion still OxlintConfig ../../media/magic-oxlint-config.png",
@@ -54,6 +56,8 @@
     "render:theme-palette": "remotion still ThemePalette ../../media/magic-theme-palette.png",
     "render:tsconfig": "remotion still Tsconfig ../../media/magic-tsconfig.png",
     "render:video": "remotion still Video ../../media/magic-video.png",
+    "render:video-demo": "remotion render VideoDemo out/intermediate.mp4",
+    "render:video-gif": "pnpm run render:video-demo && remotion ffmpeg -y -i out/intermediate.mp4 -filter_complex \"scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -r 12 -t 15 ../../media/magic-video-demo.gif",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

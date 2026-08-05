@@ -72,9 +72,10 @@
   "devDependencies": {
     "@types/mdx": "^2.0.13",
     "@types/react": "^19.2.0",
-    "fumadocs-core": "16.12.1",
-    "fumadocs-ui": "npm:@fumadocs/base-ui@16.12.1",
+    "fumadocs-core": "catalog:",
+    "fumadocs-ui": "catalog:",
     "magic-tsconfig": "workspace:*",
+    "magic-video": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "typescript": "6.0.3"

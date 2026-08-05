@@ -1,8 +1,12 @@
 import type { CSSProperties, FC } from "react";
 
-import { CODE, COLORS } from "../brand";
-import { FONTS } from "../fonts";
-import { BrandMark, SceneBackground, WindowFrame } from "../primitives";
+import { CODE, COLORS } from "magic-video/brand";
+import { FONTS } from "magic-video/fonts";
+import {
+  BrandMark,
+  SceneBackground,
+  WindowFrame,
+} from "magic-video/primitives";
 
 /**
  * The docs hero: a browser window on a rendered Fumadocs page, showing the

@@ -75,6 +75,7 @@
     "@posthog/react": "^1.10.0",
     "@types/react": "^19.0.0",
     "magic-tsconfig": "workspace:*",
+    "magic-video": "workspace:*",
     "oxlint": "1.75.0",
     "posthog-js": "^1.257.2",
     "posthog-node": "^5.0.0",

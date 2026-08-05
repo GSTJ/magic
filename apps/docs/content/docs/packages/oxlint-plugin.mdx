@@ -1,0 +1,229 @@
+---
+title: magic-oxlint-plugin
+description: Opt-in lint rules with no oxlint equivalent.
+---
+
+`magic-oxlint-plugin` loads as an oxlint jsPlugin and ships two namespaces.
+`magic/*` is eight rules, all opt-in, none enabled by any
+`magic-oxlint-config` preset. `react-native/*` is four rules ported from
+`eslint-plugin-react-native`, and the `react-native` and `expo` presets
+already turn all four on, so most consumers never wire this package in
+directly.
+
+## Install
+
+```sh
+pnpm add -D magic-oxlint-plugin
+```
+
+## Enable a rule
+
+Wire the plugin in through `extendConfig`, same as any other repo-specific
+rule:
+
+```ts
+// oxlint.config.mts
+import { extendConfig } from "magic-oxlint-config";
+import base from "magic-oxlint-config/base";
+
+export default extendConfig(base, {
+  jsPlugins: [{ name: "magic", specifier: "magic-oxlint-plugin" }],
+  rules: {
+    "magic/prefer-early-return": ["error", { maximumStatements: 0 }],
+  },
+});
+```
+
+## magic/\* rules
+
+All eight are opt-in by design. Each one is either a policy call or
+specific enough to a stack that turning it on should be a deliberate,
+per-repo decision.
+
+| Rule                                                                        | Summary                                                                                |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [`magic/prefer-early-return`](#magic-prefer-early-return)                   | Flags a function whose whole body is one `if` with no `else`                           |
+| [`magic/no-ancestor-directory-import`](#magic-no-ancestor-directory-import) | Flags an import that routes through the index file of its own directory or an ancestor |
+| [`magic/react-require-autocomplete`](#magic-react-require-autocomplete)     | Flags an autofillable `<input>` with no `autoComplete`                                 |
+| [`magic/react-hooks-strict-return`](#magic-react-hooks-strict-return)       | Flags a hook returning more than two positional array values                           |
+| [`magic/no-barrel-file`](#magic-no-barrel-file)                             | Bans `export * from "..."` in a package entry point                                    |
+| [`magic/no-module-mocks`](#magic-no-module-mocks)                           | Bans `vi.mock()` / `jest.mock()` in test files                                         |
+| [`magic/prefer-suspense-query`](#magic-prefer-suspense-query)               | Steers tRPC / TanStack Query call sites onto `useSuspenseQuery`                        |
+| [`magic/no-manual-classname`](#magic-no-manual-classname)                   | Bans hand-composed `className` strings                                                 |
+
+### `magic/prefer-early-return` [#magic-prefer-early-return]
+
+Port of `@shopify/prefer-early-return`. Flags a function whose entire body
+is a single `if` with no `else`.
+
+```ts
+// reported
+const handle = (ok: boolean) => {
+  if (ok) {
+    doA();
+    doB();
+  }
+};
+
+// fine
+const handle = (ok: boolean) => {
+  if (!ok) return;
+  doA();
+  doB();
+};
+```
+
+Options: `maximumStatements` (default `0`), how many statements the lone
+`if` can hold before this fires. Not autofixable: inverting a condition
+correctly needs `&&`/`||` precedence, and a blind `!(...)` wrapper reads
+worse than the original.
+
+### `magic/no-ancestor-directory-import` [#magic-no-ancestor-directory-import]
+
+Port of `@shopify/no-ancestor-directory-import`, reimplemented without a
+module resolver (the upstream rule can't load as an oxlint jsPlugin).
+Flags an import or re-export that routes through the index file of the
+current directory or an ancestor of it:
+
+```ts
+// reported: the barrel above you re-exports you, so the graph loops
+import { thing } from "..";
+export * from "..";
+
+// fine: sideways and downward imports name a real file
+import { thing } from "./thing";
+```
+
+No options. Dynamic `import("..")` isn't covered.
+
+### `magic/react-require-autocomplete` [#magic-react-require-autocomplete]
+
+Port of `@shopify/react-require-autocomplete`. An autofillable `<input>`
+with no `autoComplete` gets whatever the browser guesses, which is how a
+password manager fills an address into a one-time-code box.
+`autoComplete="off"` is a fine answer, the rule just wants the decision
+made instead of defaulted.
+
+Options: `inputComponents`, component names that render an `<input>` and
+forward props.
+
+### `magic/react-hooks-strict-return` [#magic-react-hooks-strict-return]
+
+Port of `@shopify/react-hooks-strict-return`. A hook returning
+`[a, b, c, d]` makes every call site memorize a positional order nothing
+checks; two is the limit that keeps
+`const [value, setValue] = useThing()` readable. Object returns are never
+reported, at any size.
+
+Options: `maximumReturnValues` (default `2`).
+
+### `magic/no-barrel-file` [#magic-no-barrel-file]
+
+Bans a catch-all `export * from "..."` in a package's entry point. A
+wildcard re-export pulls every transitive symbol into every consumer's
+module graph and defeats subpath exports. Named re-exports are fine.
+
+Options: `files` (path suffixes counted as entry points, defaults to the
+usual `index.ts`/`index.tsx` set), `allow` (path substrings permitted to
+keep a barrel, for grandfathered facades).
+
+### `magic/no-module-mocks` [#magic-no-module-mocks]
+
+Bans `vi.mock()` / `jest.mock()` and friends in test files. A module mock
+couples a test to the module graph instead of to behavior: it breaks on
+rename and lets a test pass for reasons unrelated to the code under test.
+Not autofixable, removing the call just leaves a test that imports the
+real module and fails.
+
+Options: `objects` (default `["vi", "jest"]`), `methods`,
+`testFilePattern`.
+
+### `magic/prefer-suspense-query` [#magic-prefer-suspense-query]
+
+Steers tRPC / TanStack Query call sites from `useQuery` to
+`useSuspenseQuery`, so loading and error states live in one `<Suspense>` /
+`<ErrorBoundary>` pair instead of an `isLoading` branch in every component.
+Not autofixable on purpose: `data` stops being possibly-undefined, and the
+surrounding `isLoading` / `isError` / `refetch` usage has to come out by
+hand.
+
+Options: `roots` (default `["api", "trpc"]`), `hooks` (default
+`["useQuery"]`).
+
+### `magic/no-manual-classname` [#magic-no-manual-classname]
+
+Bans composing a `className` by hand. The value has to be a plain string
+or a call: `cn()` to merge, `cva()` / `tv()` to declare variants.
+
+```tsx
+// reported
+<div className={active ? "bg-accent p-2" : "bg-muted p-2"} />
+
+// fine
+<div className={cn("p-2", active && "bg-accent")} />
+```
+
+Two Tailwind classes that set the same property both survive string
+concatenation, and which one wins comes down to their order in the
+generated stylesheet; `cn()` resolves that. Not autofixable, picking which
+piece resolves which conflict is a judgement call.
+
+Options: `attributes` (default `["className", "class"]`), `composers`
+(default `["cn", "cva", "twMerge", "clsx", "cx"]`).
+
+## React Native rules
+
+The `react-native` and `expo` presets in `magic-oxlint-config` already
+enable all four of these, from a separate entry point:
+
+```ts
+jsPlugins: [
+  { name: "react-native", specifier: "magic-oxlint-plugin/react-native" },
+],
+rules: {
+  "react-native/no-inline-styles": "error",
+  "react-native/no-color-literals": "error",
+  "react-native/no-single-element-style-arrays": "error",
+  "react-native/no-unused-styles": "error",
+},
+```
+
+Ported from `eslint-plugin-react-native`; the rule ids didn't change, so
+existing `oxlint-disable` comments keep working.
+
+| Rule                                                                                | Summary                                                          |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [`react-native/no-inline-styles`](#rn-no-inline-styles)                             | An object literal in a `style` prop allocates fresh every render |
+| [`react-native/no-color-literals`](#rn-no-color-literals)                           | A hard-coded color in a style object can't follow a theme        |
+| [`react-native/no-single-element-style-arrays`](#rn-no-single-element-style-arrays) | `style={[styles.row]}` allocates an array for nothing            |
+| [`react-native/no-unused-styles`](#rn-no-unused-styles)                             | A `StyleSheet.create` entry nothing reads still ships at startup |
+
+### `react-native/no-inline-styles` [#rn-no-inline-styles]
+
+An object literal in a `style` prop is a new object every render, so
+`StyleSheet` never sees it and it crosses the bridge again each time.
+
+```tsx
+// reported
+<View style={{ padding: 8 }} />
+
+// fine
+<View style={styles.row} />
+```
+
+### `react-native/no-color-literals` [#rn-no-color-literals]
+
+Flags any property whose name contains "color", in a style prop or inside
+`StyleSheet.create`, when it's set to a literal instead of a theme value.
+
+### `react-native/no-single-element-style-arrays` [#rn-no-single-element-style-arrays]
+
+`style={[styles.row]}` allocates a fresh array every render for nothing.
+Autofixable: the fix unwraps it to `style={styles.row}`.
+
+### `react-native/no-unused-styles` [#rn-no-unused-styles]
+
+A `StyleSheet.create` entry nothing reads still gets registered at
+startup, usually the leftover of a deleted component. The rule only fires
+once it detects a React component in the file, so a shared `styles.ts`
+consumed elsewhere stays quiet.

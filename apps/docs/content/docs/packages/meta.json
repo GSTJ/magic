@@ -1,0 +1,16 @@
+{
+  "title": "Packages",
+  "pages": [
+    "index",
+    "oxlint-config",
+    "oxfmt-config",
+    "oxlint-plugin",
+    "tsconfig",
+    "codemods",
+    "observability",
+    "docs",
+    "theme",
+    "readme",
+    "video"
+  ]
+}
