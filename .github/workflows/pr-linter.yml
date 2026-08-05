@@ -1,0 +1,28 @@
+name: 🧹 PR Linter
+
+# Squash merges land the PR title as the commit on main, and release-plan.mjs
+# derives versions from conventional commits since the last tag. The title is
+# therefore the release input, and this is where it gets linted.
+#
+# `pull_request_target` so the check also runs with a usable token on forks.
+# Safe here: no checkout, the action only reads the PR title.
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: pr-linter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  main:
+    name: 👮 Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
