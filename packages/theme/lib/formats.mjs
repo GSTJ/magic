@@ -2,7 +2,8 @@ import { project } from "./project.mjs";
 
 /** @param {ReturnType<typeof project>} p */
 const ansiBlock = (p) => {
-  const [n0, n1, n2, n3, n4, n5, n6, n7, b0, b1, b2, b3, b4, b5, b6, b7] = p.ansi;
+  const [n0, n1, n2, n3, n4, n5, n6, n7, b0, b1, b2, b3, b4, b5, b6, b7] =
+    p.ansi;
   return { n0, n1, n2, n3, n4, n5, n6, n7, b0, b1, b2, b3, b4, b5, b6, b7 };
 };
 

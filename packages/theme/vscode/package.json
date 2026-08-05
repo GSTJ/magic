@@ -1,22 +1,19 @@
 {
   "name": "magic-theme",
   "displayName": "Magic Dracula",
-  "description": "Quiet Dracula chrome for GSTJ. From GSTJ/magic.",
   "version": "0.3.0",
-  "publisher": "gstj",
-  "license": "MIT",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
+  "description": "Quiet Dracula chrome for GSTJ. From GSTJ/magic.",
   "categories": [
     "Themes"
   ],
   "keywords": [
-    "dracula",
     "dark",
-    "theme",
-    "magic"
+    "dracula",
+    "magic",
+    "theme"
   ],
+  "license": "MIT",
+  "publisher": "gstj",
   "contributes": {
     "themes": [
       {
@@ -25,5 +22,8 @@
         "path": "./themes/magic-dracula-color-theme.json"
       }
     ]
+  },
+  "engines": {
+    "vscode": "^1.85.0"
   }
 }

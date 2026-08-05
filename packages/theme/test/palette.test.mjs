@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+
 import { toWarp } from "../lib/formats.mjs";
 import { project } from "../lib/project.mjs";
 
 const root = join(import.meta.dirname, "..");
 const theme = JSON.parse(
-  readFileSync(join(root, "vscode", "themes", "magic-dracula-color-theme.json"), "utf8"),
+  readFileSync(
+    join(root, "vscode", "themes", "magic-dracula-color-theme.json"),
+    "utf8",
+  ),
 );
 
 describe("magic-theme", () => {

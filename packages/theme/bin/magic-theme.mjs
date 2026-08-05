@@ -10,13 +10,17 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+
 import { toAlacritty, toGhostty, toWarp } from "../lib/formats.mjs";
 import { project } from "../lib/project.mjs";
 
 const root = join(import.meta.dirname, "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const theme = JSON.parse(
-  readFileSync(join(root, "vscode", "themes", "magic-dracula-color-theme.json"), "utf8"),
+  readFileSync(
+    join(root, "vscode", "themes", "magic-dracula-color-theme.json"),
+    "utf8",
+  ),
 );
 const p = project(theme);
 const extId = `gstj.magic-theme-${pkg.version}`;
@@ -39,39 +43,58 @@ const targets = {
   cursor: {
     dest: join(home, ".cursor", "extensions", extId),
     detect: () => existsSync(join(home, ".cursor")),
-    write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".cursor", "extensions", extId)),
+    write: () =>
+      linkOrCopyDir(
+        join(root, "vscode"),
+        join(home, ".cursor", "extensions", extId),
+      ),
     note: `Color theme picker -> "${name}"`,
   },
   vscode: {
     dest: join(home, ".vscode", "extensions", extId),
     detect: () => existsSync(join(home, ".vscode")),
-    write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".vscode", "extensions", extId)),
+    write: () =>
+      linkOrCopyDir(
+        join(root, "vscode"),
+        join(home, ".vscode", "extensions", extId),
+      ),
     note: `Color theme picker -> "${name}"`,
   },
   warp: {
     dest: join(home, ".warp", "themes", `${slug}.yaml`),
-    detect: () => existsSync(join(home, ".warp")) || existsSync("/Applications/Warp.app"),
-    write: () => write(join(home, ".warp", "themes", `${slug}.yaml`), toWarp(theme)),
+    detect: () =>
+      existsSync(join(home, ".warp")) || existsSync("/Applications/Warp.app"),
+    write: () =>
+      write(join(home, ".warp", "themes", `${slug}.yaml`), toWarp(theme)),
     note: `Warp Themes -> ${name}`,
   },
   ghostty: {
     dest: join(home, ".config", "ghostty", "themes", slug),
     detect: () =>
-      existsSync(join(home, ".config", "ghostty")) || existsSync("/Applications/Ghostty.app"),
-    write: () => write(join(home, ".config", "ghostty", "themes", slug), toGhostty(theme)),
+      existsSync(join(home, ".config", "ghostty")) ||
+      existsSync("/Applications/Ghostty.app"),
+    write: () =>
+      write(join(home, ".config", "ghostty", "themes", slug), toGhostty(theme)),
     note: `theme = ${slug}`,
   },
   alacritty: {
     dest: join(home, ".config", "alacritty", "themes", `${slug}.toml`),
     detect: () => existsSync(join(home, ".config", "alacritty")),
     write: () =>
-      write(join(home, ".config", "alacritty", "themes", `${slug}.toml`), toAlacritty(theme)),
+      write(
+        join(home, ".config", "alacritty", "themes", `${slug}.toml`),
+        toAlacritty(theme),
+      ),
     note: `import = ["~/.config/alacritty/themes/${slug}.toml"]`,
   },
   orca: {
     dest: join(home, ".config", "orca", "themes", `${slug}.yaml`),
     detect: () => existsSync(join(home, ".config", "orca")),
-    write: () => write(join(home, ".config", "orca", "themes", `${slug}.yaml`), toWarp(theme)),
+    write: () =>
+      write(
+        join(home, ".config", "orca", "themes", `${slug}.yaml`),
+        toWarp(theme),
+      ),
   },
 };
 
@@ -156,7 +179,8 @@ try {
     process.exit(0);
   }
   if (cmd === "uninstall") {
-    for (const t of parseTargets(rest.length > 0 ? rest : ALL)) uninstallTarget(t);
+    for (const t of parseTargets(rest.length > 0 ? rest : ALL))
+      uninstallTarget(t);
     process.exit(0);
   }
   console.error(`unknown command: ${cmd}`);
