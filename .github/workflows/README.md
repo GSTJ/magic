@@ -432,8 +432,7 @@ autofix:
   typechecks. See the `--fix-suggestions` gotcha below.
 - To swap the plugin, re-declare the test-file override with
   `plugins: [...testFilePlugins.filter((p) => p !== "jest"), "vitest"]` and the
-  `vitest/*` names you want. There is no `vitest` variant shipped yet
-  (DECISIONS.md §4).
+  `vitest/*` names you want. There is no `vitest` variant shipped yet.
 
 E2E suites are another local-override case. The presets' test globs only match
 `*.test.*` / `*.spec.*` / `__tests__`, so Playwright / Maestro / Detox specs in

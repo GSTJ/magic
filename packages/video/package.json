@@ -1,14 +1,45 @@
 {
-  "name": "@magic/demo-video",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Remotion source for every README image and GIF committed in media/",
+  "name": "magic-video",
+  "version": "1.0.0",
+  "description": "Render stills and clips from shared brand primitives, fonts and theme-derived colors; today it draws every image in media/.",
+  "keywords": [
+    "brand",
+    "remotion",
+    "still",
+    "video"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/video#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/video"
+  },
+  "files": [
+    "src",
+    "public",
+    "remotion.config.ts",
+    "README.md"
+  ],
   "sideEffects": [
     "*.css"
   ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./brand": "./src/brand.ts",
+    "./fonts": "./src/fonts.ts",
+    "./primitives": "./src/primitives.tsx"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "remotion studio",
-    "render:all": "pnpm run render:theme && pnpm run render:theme-palette && pnpm run render:codemods && pnpm run render:codemods-gif && pnpm run render:oxfmt && pnpm run render:oxlint-config && pnpm run render:oxlint-plugin && pnpm run render:tsconfig && pnpm run render:docs && pnpm run render:observability && pnpm run render:readme && pnpm run render:social",
+    "render:all": "pnpm run render:theme && pnpm run render:theme-palette && pnpm run render:codemods && pnpm run render:codemods-gif && pnpm run render:oxfmt && pnpm run render:oxlint-config && pnpm run render:oxlint-plugin && pnpm run render:tsconfig && pnpm run render:docs && pnpm run render:observability && pnpm run render:readme && pnpm run render:social && pnpm run render:video",
     "render:codemods": "remotion still Codemods ../../media/magic-codemods.png",
     "render:codemods-demo": "remotion render CodemodsDemo out/intermediate.mp4",
     "render:codemods-gif": "pnpm run render:codemods-demo && remotion ffmpeg -y -i out/intermediate.mp4 -filter_complex \"scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -r 12 -t 15 ../../media/magic-codemods-demo.gif",
@@ -22,6 +53,7 @@
     "render:theme": "remotion still Theme ../../media/magic-theme.png",
     "render:theme-palette": "remotion still ThemePalette ../../media/magic-theme-palette.png",
     "render:tsconfig": "remotion still Tsconfig ../../media/magic-tsconfig.png",
+    "render:video": "remotion still Video ../../media/magic-video.png",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

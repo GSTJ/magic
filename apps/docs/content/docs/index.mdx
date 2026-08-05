@@ -1,0 +1,27 @@
+---
+title: magic
+description: Change a lint rule or a CI step once, and every repo importing this one picks it up on its next run.
+---
+
+<MagicMark />
+
+magic is the monorepo for lint, format, TypeScript, docs, observability and CI. The
+packages carry the configs. `.github/workflows` carries the reusable CI jobs and the
+composite actions they are built from. `default.json` carries the Renovate policy.
+
+Repos consume all three by re-export and by tag, so a version bump is the whole upgrade.
+
+<Cards>
+  <Card
+    href="/getting-started"
+    title="Getting started"
+    description="Install the configs and pick the variant for your project type."
+  />
+  <Card
+    href="/packages"
+    title="Packages"
+    description="What each one does, and where its README lives."
+  />
+</Cards>
+
+This site runs on `magic-docs`, the same preset every other package here uses.

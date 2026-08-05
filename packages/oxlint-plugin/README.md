@@ -230,8 +230,10 @@ Not auto-fixable: wrapping the expression in `cn()` renders the identical class
 string, and picking which piece resolves which conflict is a judgement call a
 fixer can't make safely.
 
-Full rationale, the evidence behind the defaults, and the known gaps are in
-[DECISIONS.md](../../DECISIONS.md) section 10.
+What it does not reach: `let`, any name bound twice in the same file, anything
+behind a function boundary (`className={buildClasses(side)}` may well be correct
+inside), `||` and `??` (in an attribute those read as a default, not a
+composition), and `element.className = ...` outside JSX.
 
 ## React Native
 

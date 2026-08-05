@@ -1,0 +1,73 @@
+---
+title: Packages
+description: Every package in the monorepo and where its README lives.
+---
+
+import { repositoryFileUrl } from "magic-docs";
+
+import { site } from "@/lib/site";
+
+Each package README has the full detail.
+
+<Cards>
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/oxlint-config/README.md")}
+    title="magic-oxlint-config"
+    description="oxlint presets, one per project type."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/oxfmt-config/README.md")}
+    title="magic-oxfmt-config"
+    description="oxfmt config, import sort order included."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/oxlint-plugin/README.md")}
+    title="magic-oxlint-plugin"
+    description="Opt-in lint rules with no oxlint equivalent."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/tsconfig/README.md")}
+    title="magic-tsconfig"
+    description="TypeScript bases, one per project type."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/codemods/README.md")}
+    title="magic-codemods"
+    description="magic-kebab renames files to kebab-case and rewrites the imports."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/observability/README.md")}
+    title="magic-observability"
+    description="PostHog init, captureError and an error boundary, per platform."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/docs/README.md")}
+    title="magic-docs"
+    description="The Fumadocs preset this site is built on."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/theme/README.md")}
+    title="magic-theme"
+    description="Magic Theme, ported across editors and terminals."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/readme/README.md")}
+    title="magic-readmes"
+    description="The README standard as code: template, scaffold and validator."
+  />
+  <Card
+    external
+    href={repositoryFileUrl(site, "packages/video/README.md")}
+    title="magic-video"
+    description="Renders every still and clip the READMEs embed."
+  />
+</Cards>

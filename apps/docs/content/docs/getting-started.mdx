@@ -1,0 +1,38 @@
+---
+title: Getting started
+description: Install the shared configs, then copy the four-step setup for your project type.
+---
+
+## Install
+
+```sh
+pnpm add -D oxlint oxfmt magic-oxlint-config magic-oxfmt-config magic-tsconfig
+```
+
+Pin `oxlint` and `oxfmt` exactly. Both add and remove rules between minors, and an
+unknown rule name is a fatal config error. The shared Renovate preset groups them and
+never automerges them for that reason.
+
+## Setup for your project type
+
+Every project gets the same four steps: install, `oxlint.config.mts`, `oxfmt.config.mts`,
+`tsconfig.json`. Each config file is a single re-export, and only the variant name
+changes between project types:
+
+| Project type                | Variant        |
+| --------------------------- | -------------- |
+| TypeScript, Node, libraries | `base`         |
+| React web                   | `react`        |
+| Next.js                     | `next`         |
+| Bare React Native           | `react-native` |
+| Expo                        | `expo`         |
+
+The [adoption guide](https://github.com/GSTJ/magic/blob/main/.github/workflows/README.md#setup-by-project-type)
+has the copy-paste block for each variant, plus the gotchas eleven migrated repos turned
+up.
+
+<Callout title="Do not consume a preset through oxlint's extends">
+  `extends` drops the preset's `ignorePatterns`, which is how a repo ends up
+  linting `node_modules`, `ios/` and `android/` without noticing. Re-export the
+  preset, or use `extendConfig` for repo-specific rules.
+</Callout>

@@ -88,8 +88,8 @@ const readPaths = (tsconfigPath: string): PathsConfig | undefined => {
   if (!options.paths) return undefined;
 
   // `paths` is resolved relative to `baseUrl` when set, otherwise relative to
-  // the config that declared it. tsgo forbids `baseUrl` outright (see
-  // DECISIONS.md), so the second branch is the common one now.
+  // the config that declared it. tsgo forbids `baseUrl` outright, so the second
+  // branch is the common one now.
   const baseUrl =
     options.baseUrl ?? options.pathsBasePath ?? dirname(tsconfigPath);
   return { baseUrl: String(baseUrl), paths: options.paths };

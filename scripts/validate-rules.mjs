@@ -124,7 +124,6 @@ const sourcesOfRuleNames = [
   join(repoRoot, "oxlint.config.mts"),
   join(repoRoot, "README.md"),
   join(pluginDir, "README.md"),
-  join(repoRoot, "DECISIONS.md"),
   ...walk(join(repoRoot, "fixtures")).filter((file) =>
     file.endsWith("oxlint.config.mts"),
   ),
@@ -180,7 +179,7 @@ process.stdout.write(
  *   - a name a variant enables that the plugin does not export — oxlint refuses
  *     the whole config with `Rule 'x' not found in plugin 'react-native'`;
  *   - a rule the plugin exports that no variant enables — dead code shipped to
- *     every consumer, and the symptom DECISIONS.md warned the port would have.
+ *     every consumer, and the same symptom a mis-resolved specifier produces.
  *
  * The second half is what makes this worth writing: a broken jsPlugin specifier
  * does not throw, it just stops reporting, and a rule that is never named is

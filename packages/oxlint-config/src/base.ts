@@ -49,22 +49,26 @@ const typeAwareRules: Record<string, unknown> = {
   // produce more noise than signal; `no-unsafe-argument` and `no-unsafe-return`
   // above catch the cases that actually propagate.
   "typescript/no-unsafe-assignment": "off",
-  // NOTE: a downgrade from the incumbent, which only disabled the two above —
-  // `no-unsafe-call` was live at error. Grouped with the family here because
-  // calling into an `any`-typed SDK boundary is the same untyped-boundary case,
-  // but it *is* a loosening. See DECISIONS.md.
+  // NOTE: a downgrade from the incumbent, which only disabled the two above and
+  // ran `no-unsafe-call` at error. Grouped with the family here because calling
+  // into an `any`-typed SDK boundary is the same untyped-boundary case, and
+  // keeping one third of the family produced noise without changing behaviour.
+  // It *is* a loosening.
   "typescript/no-unsafe-call": "off",
   "typescript/no-unsafe-member-access": "off",
   "typescript/no-unsafe-type-assertion": "off",
-  // Consistently misfires on generic helper signatures. Both references (MM,
-  // invest-radar) run it at error; deviation logged in DECISIONS.md.
+  // Consistently misfires on generic helper signatures
+  // (`const pick = <T, K extends keyof T>(…)`), which shared-utility packages
+  // are full of. Both references (MM, invest-radar) run it at error; this one is
+  // a deliberate deviation from them.
   "typescript/no-unnecessary-type-parameters": "off",
   // Needs every dependency's deprecation metadata to be accurate. It isn't.
   "typescript/no-deprecated": "off",
   // Downgrades from strictTypeChecked (incumbent had these at error):
   // `no-confusing-void-expression` fights the arrow-heavy house style
   // (`onPress={() => void mutate()}`, `=> setState(x)`), and the other two
-  // fire almost exclusively on that same pattern. See DECISIONS.md.
+  // fire almost exclusively on that same pattern. Dormant either way until a
+  // repo passes `--type-aware`.
   "typescript/no-confusing-void-expression": "off",
   "typescript/no-meaningless-void-operator": "off",
   "typescript/no-base-to-string": "off",
@@ -107,12 +111,11 @@ export const filenameCaseIgnore: string[] = [
  * as the package is called that. Deliberately narrower than the test-file
  * override — `button.test.tsx` is ours and does get kebab-cased.
  *
- * Exported (and appended last by every variant) because an `overrides[]` entry
- * that omits `plugins` re-activates category rules for the files it matches —
- * see the jest note in DECISIONS.md §2. `unicorn/filename-case` is a `style`
- * rule, so a later, broader override could switch it back on for `__mocks__`
- * from underneath us. Being last is the only thing that makes it stick, and
- * `test/variants.test.mjs` asserts it holds in all five variants.
+ * Exported (and appended last by every variant) because a later, broader
+ * `overrides[]` entry can switch a category rule back on for the files it
+ * matches, and `unicorn/filename-case` is a `style` rule, so an earlier `off`
+ * for `__mocks__` does not survive one. Being last is the only thing that makes
+ * it stick, and `test/variants.test.mjs` asserts it holds in all five variants.
  */
 export const mocksFilenameCase: MagicOxlintOverride = {
   files: ["**/__mocks__/**"],
@@ -247,13 +250,14 @@ const baseConfig: MagicOxlintConfig = {
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
 
-    // ON since 2026-07-27 (Gabriel's call, reversing decision #6 — see
-    // DECISIONS.md §5). `case` is stated explicitly even though `kebabCase` is
-    // the current default, on the same reasoning as oxfmt's `groups`: a default
-    // change upstream must not silently re-case every repo at once.
+    // On, kebab-case everywhere, per the g2i and invest-radar convention.
+    // `case` is stated explicitly even though `kebabCase` is the current
+    // default, on the same reasoning as oxfmt's `groups`: a default change
+    // upstream must not silently re-case every repo at once.
     //
-    // The mass rename this implies is not hand work — `magic-codemods`' `magic-kebab`
-    // does the renames and the import rewrites together.
+    // The mass rename this implies is not hand work. `magic-codemods`'
+    // `magic-kebab` does the renames and the import rewrites together, so every
+    // repo runs the same script instead of inventing one.
     "unicorn/filename-case": [
       "error",
       { case: "kebabCase", ignore: filenameCaseIgnore },
@@ -275,8 +279,9 @@ const baseConfig: MagicOxlintConfig = {
     // replaces the whole span with one `export … from`, and everything between
     // the first and last re-export is silently gone. No diagnostic, no type
     // error at the fix site. `{ checkUsedVariables: false }` narrows it but does
-    // not close it — see DECISIONS.md §2 and
-    // `fixtures/adversarial/base/src/derived-reexport.ts`.
+    // not close it: a barrel whose re-exported names are used nowhere else still
+    // collapses. `fixtures/adversarial/base/src/derived-reexport.ts` is the
+    // shape to re-test with.
     "unicorn/prefer-export-from": "off",
     "unicorn/no-immediate-mutation": "off",
     "unicorn/no-null": "off",

@@ -1,8 +1,8 @@
 {
   "name": "magic-oxlint-config",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "type": "module",
-  "description": "Shared oxlint configs for GSTJ projects. Variants: base, react, react-native, next, expo.",
+  "description": "Shared oxlint configs. Variants: base, react, react-native, next, expo.",
   "keywords": ["oxlint", "oxc", "lint", "config", "react", "react-native", "expo", "nextjs"],
   "repository": {
     "type": "git",

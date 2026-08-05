@@ -21,8 +21,9 @@ import { react } from "./react.ts";
  * `oxlint-disable` comments that name them keep working. The reason for the
  * port is that upstream declares a required `eslint` peer nothing calls, which
  * `autoInstallPeers` then installed into every consumer along with eslint 9's
- * `minimatch@3` -> `brace-expansion@1` tail. See DECISIONS.md ("Vendoring the
- * react-native rules") for the measured parity.
+ * `minimatch@3` -> `brace-expansion@1` tail. Parity was measured before the
+ * swap: both plugins report the same 40 diagnostics over the same corpus, same
+ * rule ids, spans and message text, and the same `--fix` output.
  *
  * Also absent: `reanimated/js-function-in-worklet`, which the old react-native
  * config ran at `error`. `eslint-plugin-reanimated@2.0.1` *loads* fine as a
@@ -30,7 +31,9 @@ import { react } from "./react.ts";
  * `context.parserServices.hasFullTypeInformation` is true — it resolves call
  * signatures through the TypeScript checker. oxlint's JS plugin API exposes no
  * parser services, so the rule installs and then reports nothing, which is worse
- * than leaving it out. See DECISIONS.md ("Dropped").
+ * than leaving it out. Nothing replaces it: the safety net is the Reanimated
+ * Babel plugin plus the runtime "tried to synchronously call a non-worklet
+ * function on the UI thread" crash.
  */
 const reactNativeConfig: MagicOxlintConfig = extendConfig(react, {
   jsPlugins: [jsPlugin("react-native", "magic-oxlint-plugin/react-native")],

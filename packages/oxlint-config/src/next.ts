@@ -67,9 +67,10 @@ const nextConfig: MagicOxlintConfig = extendConfig(react, {
         // `react/function-component-definition`, which the react preset pins to
         // arrow functions. Only `const Page = …; export default Page` satisfied
         // both, which is not a convention worth enforcing on framework files.
-        // `import/no-anonymous-default-export` is on deliberately (DECISIONS §2)
-        // with "config files where it is idiomatic get an override exemption
-        // instead" — App Router pages are that case and had been missed.
+        // `import/no-anonymous-default-export` is on deliberately in `base`: it
+        // is a good general rule, and the files where an anonymous default
+        // export is idiomatic get an override exemption instead. App Router
+        // pages are that case and had been missed.
         "react/function-component-definition": "off",
         "import/no-anonymous-default-export": "off",
 

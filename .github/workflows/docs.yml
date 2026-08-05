@@ -1,0 +1,71 @@
+name: 📚 Docs
+
+# Publishes apps/docs to GitHub Pages. The site is a magic-docs consumer like
+# any other repo's, so this workflow is also the working proof that the
+# package's static-export path still deploys.
+#
+# There is no `actions/configure-pages` step. Its job is to hand a framework the
+# base path, and `defineMagicDocs` already derives `basePath: /magic` from
+# `siteUrl`. Two sources for one value is how the canonical URLs and the asset
+# paths end up disagreeing. Pages still has to be set to "GitHub Actions" in the
+# repository settings for `deploy-pages` to accept the artifact.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/docs/**"
+      - "packages/docs/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time, and never cancel one in flight: `deploy-pages` publishes
+# to a live site, so a cancelled run can leave the Pages deployment half-claimed.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 🏗 Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The working-tree action, like self-ci.yml. This workflow never runs
+      # through `workflow_call`, so `./` resolves against this repo.
+      - name: 🏗 Setup Node + pnpm
+        uses: ./.github/actions/setup
+
+      # turbo, not `pnpm --filter`, because the app imports magic-docs from the
+      # workspace and `next build` needs its `dist` on disk first.
+      - name: 📚 Build the docs site
+        run: pnpm exec turbo run build --filter=@magic/docs-site
+
+      # include-hidden-files keeps public/.nojekyll, which magic-docs-init
+      # writes. Without it GitHub runs the export through Jekyll, and Jekyll
+      # drops every `_next` directory.
+      - name: 📦 Upload the export
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: apps/docs/out
+          include-hidden-files: true
+
+  deploy:
+    name: 🚀 Deploy
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: 🚀 Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

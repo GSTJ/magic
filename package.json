@@ -2,7 +2,7 @@
   "name": "@magic/root",
   "version": "0.0.0",
   "private": true,
-  "description": "GSTJ's shared tooling monorepo: lint, format, TypeScript, docs, observability, reusable GitHub workflows, and Renovate.",
+  "description": "Shared tooling monorepo: lint, format, TypeScript, docs, observability, reusable GitHub workflows, and Renovate.",
   "homepage": "https://github.com/GSTJ/magic#readme",
   "bugs": {
     "url": "https://github.com/GSTJ/magic/issues"
