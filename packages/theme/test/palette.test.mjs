@@ -8,17 +8,18 @@ import { project } from "../lib/project.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const theme = JSON.parse(
-  readFileSync(join(root, "vscode", "themes", "dracula-141414-color-theme.json"), "utf8"),
+  readFileSync(join(root, "vscode", "themes", "magic-dracula-color-theme.json"), "utf8"),
 );
 
 describe("magic-theme", () => {
-  it("projects #141414 from the vscode theme", () => {
+  it("projects Magic Dracula from the vscode theme", () => {
     const p = project(theme);
-    assert.equal(p.bg, "#141414");
+    assert.equal(p.name, "Magic Dracula");
+    assert.equal(p.slug, "magic-dracula");
     assert.equal(p.ansi.length, 16);
   });
 
-  it("renders warp from the same theme", () => {
-    assert.match(toWarp(theme), /background: '#141414'/);
+  it("renders warp with the theme name", () => {
+    assert.match(toWarp(theme), /^name: Magic Dracula/m);
   });
 });

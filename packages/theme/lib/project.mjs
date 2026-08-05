@@ -1,5 +1,5 @@
 /**
- * Project a VS Code theme into the small role set terminals/agents need.
+ * Project a VS Code theme into the small role set terminals need.
  * Prefer terminal.ansi*; fall back only when missing.
  */
 const ANSI_KEYS = [
@@ -30,16 +30,22 @@ function pick(colors, keys, fallback) {
   return fallback;
 }
 
+/** @param {string} name */
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 /** @param {{ name?: string, type?: string, colors: Record<string, string>, tokenColors?: unknown[] }} theme */
 export function project(theme) {
   const c = theme.colors;
+  const name = theme.name ?? "Magic Dracula";
   const ansi = ANSI_KEYS.map((k, i) =>
     pick(c, [k], i < 8 ? "#888888" : "#cccccc"),
   );
   return {
-    name: theme.name ?? "Dracula 141414",
+    name,
     type: theme.type === "light" ? "light" : "dark",
-    slug: "dracula-141414",
+    slug: slugify(name),
     bg: pick(c, ["editor.background", "terminal.background"], "#141414"),
     fg: pick(c, ["editor.foreground", "foreground"], "#f8f8f2"),
     fgMuted: pick(c, ["descriptionForeground", "editorLineNumber.foreground"], "#6e6e76"),

@@ -12,15 +12,17 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { toAlacritty, toGhostty, toWarp } from "../lib/formats.mjs";
+import { project } from "../lib/project.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const theme = JSON.parse(
-  readFileSync(join(root, "vscode", "themes", "dracula-141414-color-theme.json"), "utf8"),
+  readFileSync(join(root, "vscode", "themes", "magic-dracula-color-theme.json"), "utf8"),
 );
+const p = project(theme);
 const extId = `gstj.magic-theme-${pkg.version}`;
 const home = homedir();
-const slug = "dracula-141414";
+const { slug, name } = p;
 
 /** @typedef {"cursor" | "vscode" | "warp" | "ghostty" | "alacritty" | "orca"} Target */
 
@@ -39,26 +41,26 @@ const targets = {
     dest: join(home, ".cursor", "extensions", extId),
     detect: () => existsSync(join(home, ".cursor")),
     write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".cursor", "extensions", extId)),
-    note: 'Color theme picker -> "Dracula 141414"',
+    note: `Color theme picker -> "${name}"`,
   },
   vscode: {
     dest: join(home, ".vscode", "extensions", extId),
     detect: () => existsSync(join(home, ".vscode")),
     write: () => linkOrCopyDir(join(root, "vscode"), join(home, ".vscode", "extensions", extId)),
-    note: 'Color theme picker -> "Dracula 141414"',
+    note: `Color theme picker -> "${name}"`,
   },
   warp: {
     dest: join(home, ".warp", "themes", `${slug}.yaml`),
     detect: () => existsSync(join(home, ".warp")) || existsSync("/Applications/Warp.app"),
     write: () => write(join(home, ".warp", "themes", `${slug}.yaml`), toWarp(theme)),
-    note: "Warp Themes -> Dracula 141414",
+    note: `Warp Themes -> ${name}`,
   },
   ghostty: {
     dest: join(home, ".config", "ghostty", "themes", slug),
     detect: () =>
       existsSync(join(home, ".config", "ghostty")) || existsSync("/Applications/Ghostty.app"),
     write: () => write(join(home, ".config", "ghostty", "themes", slug), toGhostty(theme)),
-    note: "theme = dracula-141414",
+    note: `theme = ${slug}`,
   },
   alacritty: {
     dest: join(home, ".config", "alacritty", "themes", `${slug}.toml`),
@@ -77,7 +79,7 @@ const targets = {
 function usage() {
   console.log(`magic-theme ${pkg.version}
 
-Install Dracula 141414 from the VS Code theme into editors and terminals.
+Install ${name} from the VS Code theme into editors and terminals.
 
 Usage:
   magic-theme install [targets...]
