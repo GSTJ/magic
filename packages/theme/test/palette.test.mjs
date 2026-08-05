@@ -9,20 +9,20 @@ import { project } from "../lib/project.mjs";
 const root = join(import.meta.dirname, "..");
 const theme = JSON.parse(
   readFileSync(
-    join(root, "vscode", "themes", "magic-dracula-color-theme.json"),
+    join(root, "vscode", "themes", "magic-theme-color-theme.json"),
     "utf8",
   ),
 );
 
 describe("magic-theme", () => {
-  it("projects Magic Dracula from the vscode theme", () => {
+  it("projects Magic Theme from the vscode theme", () => {
     const p = project(theme);
-    assert.equal(p.name, "Magic Dracula");
-    assert.equal(p.slug, "magic-dracula");
+    assert.equal(p.name, "Magic Theme");
+    assert.equal(p.slug, "magic-theme");
     assert.equal(p.ansi.length, 16);
   });
 
   it("renders warp with the theme name", () => {
-    assert.match(toWarp(theme), /^name: Magic Dracula/m);
+    assert.match(toWarp(theme), /^name: Magic Theme/m);
   });
 });
