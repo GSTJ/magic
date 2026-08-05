@@ -3,6 +3,50 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v1.12.6
+
+`v1.12.6` disables Renovate's experimental OSV vulnerability source in the
+shared preset. The moving `v1` tag advances with it. Package manifests and npm
+package versions stay unchanged.
+
+### Fixed: OSV false positives no longer create dependency loops
+
+GitHub vulnerability alerts remain enabled and keep the 14-day release
+quarantine. The preset no longer asks Renovate's experimental OSV source to open
+another security-update path, which had produced repeated updates for versions
+that were already patched.
+
+## v1.12.5
+
+`v1.12.5` lets first-party Magic tooling move immediately through the shared
+Renovate preset. The moving `v1` tag advances with it. Package manifests and npm
+package versions stay unchanged.
+
+### Fixed: first-party updates no longer wait behind the quarantine
+
+The grouped `magic-*` package rule and `GSTJ/magic` action rule skip the release
+age floor because GSTJ owns their source and publish path. Every third-party
+package still waits 14 days. The policy validator rejects any other rule that
+tries to remove the quarantine.
+
+## v1.12.4
+
+`v1.12.4` raises the shared dependency-release quarantine from three days to 14
+days. The moving `v1` tag advances with it. Package manifests and npm package
+versions stay unchanged.
+
+### Security
+
+Renovate requires registry timestamps, suppresses branches until the age check
+passes, and uses the same 14-day floor for GitHub vulnerability-alert updates.
+Consumers enforce the matching 20,160-minute floor in pnpm. Renovate performs
+eligible non-major merges after repository checks pass, while majors remain
+manual.
+
+This version also enabled Renovate's experimental OSV vulnerability source.
+`v1.12.6` disables it after false positives produced repeated updates for
+versions that were already patched.
+
 ## v1.12.3
 
 `v1.12.3` moves the repository lockfile onto the patched brace expansion

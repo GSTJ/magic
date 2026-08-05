@@ -151,7 +151,7 @@ const releaseAgeProblems = (preset) => {
     ["internalChecksFilter", "strict"],
     ["prCreation", "not-pending"],
     ["platformAutomerge", false],
-    ["osvVulnerabilityAlerts", true],
+    ["osvVulnerabilityAlerts", false],
   ];
   for (const [key, expected] of requiredPolicy) {
     if (preset?.[key] !== expected) {

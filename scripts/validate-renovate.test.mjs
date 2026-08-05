@@ -21,7 +21,7 @@ const preset = (rules) => ({
   internalChecksFilter: "strict",
   prCreation: "not-pending",
   platformAutomerge: false,
-  osvVulnerabilityAlerts: true,
+  osvVulnerabilityAlerts: false,
   vulnerabilityAlerts: {
     enabled: true,
     minimumReleaseAge: "14 days",
@@ -173,6 +173,33 @@ test("weakening a strict release-age control fails", () => {
     (problems) => {
       assert.equal(problems.length, 1);
       assert.match(problems[0], /minimumReleaseAgeBehaviour/);
+    },
+  );
+});
+
+test("the experimental OSV source stays disabled", () => {
+  withPreset(
+    { ...preset([MAJOR_GATE]), osvVulnerabilityAlerts: true },
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /osvVulnerabilityAlerts/);
+    },
+  );
+});
+
+test("GitHub vulnerability alerts stay enabled", () => {
+  withPreset(
+    {
+      ...preset([MAJOR_GATE]),
+      vulnerabilityAlerts: {
+        enabled: false,
+        minimumReleaseAge: "14 days",
+        prCreation: "not-pending",
+      },
+    },
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /vulnerabilityAlerts/);
     },
   );
 });
