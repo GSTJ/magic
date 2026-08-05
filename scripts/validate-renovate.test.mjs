@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -16,7 +16,17 @@ const MAJOR_GATE = {
 
 const preset = (rules) => ({
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  minimumReleaseAge: "3 days",
+  minimumReleaseAge: "14 days",
+  minimumReleaseAgeBehaviour: "timestamp-required",
+  internalChecksFilter: "strict",
+  prCreation: "not-pending",
+  platformAutomerge: false,
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    enabled: true,
+    minimumReleaseAge: "14 days",
+    prCreation: "not-pending",
+  },
   packageRules: rules,
 });
 
@@ -35,6 +45,17 @@ const withPreset = (value, assertions) => {
 
 test("the checked-in preset passes", () => {
   assert.deepEqual(renovateProblems(repoRoot), []);
+});
+
+test("magic itself is the explicit immediate-update exception", () => {
+  const localConfig = JSON.parse(
+    readFileSync(join(repoRoot, "renovate.json"), "utf8"),
+  );
+  const workspace = readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8");
+
+  assert.equal(localConfig.minimumReleaseAge, "0 days");
+  assert.equal(localConfig.vulnerabilityAlerts.minimumReleaseAge, "0 days");
+  assert.match(workspace, /^minimumReleaseAge: 0$/m);
 });
 
 test("a preset with no major gate fails", () => {
@@ -138,7 +159,37 @@ test("weakening minimumReleaseAge fails", () => {
     { ...preset([MAJOR_GATE]), minimumReleaseAge: "1 day" },
     (problems) => {
       assert.equal(problems.length, 1);
-      assert.match(problems[0], /must keep minimumReleaseAge at "3 days"/);
+      assert.match(problems[0], /must keep minimumReleaseAge at "14 days"/);
+    },
+  );
+});
+
+test("weakening a strict release-age control fails", () => {
+  withPreset(
+    {
+      ...preset([MAJOR_GATE]),
+      minimumReleaseAgeBehaviour: "timestamp-optional",
+    },
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /minimumReleaseAgeBehaviour/);
+    },
+  );
+});
+
+test("vulnerability PRs keep the same quarantine", () => {
+  withPreset(
+    {
+      ...preset([MAJOR_GATE]),
+      vulnerabilityAlerts: {
+        enabled: true,
+        minimumReleaseAge: null,
+        prCreation: "immediate",
+      },
+    },
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /vulnerabilityAlerts/);
     },
   );
 });

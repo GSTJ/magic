@@ -25,7 +25,7 @@ const modulePath = import.meta.filename;
 const defaultRoot = join(import.meta.dirname, "..");
 
 const RENOVATE_SCHEMA = "https://docs.renovatebot.com/renovate-schema.json";
-const RELEASE_AGE = "3 days";
+const RELEASE_AGE = "14 days";
 
 /** The only rule allowed to opt out of the release-age quarantine. */
 const RELEASE_AGE_EXEMPT = "GSTJ/magic";
@@ -143,6 +143,32 @@ const releaseAgeProblems = (preset) => {
   if (preset?.minimumReleaseAge !== RELEASE_AGE) {
     problems.push(
       `default.json must keep minimumReleaseAge at "${RELEASE_AGE}"; pnpm 11 enforces its own release-age floor on --frozen-lockfile and the two numbers have to agree.`,
+    );
+  }
+
+  const requiredPolicy = [
+    ["minimumReleaseAgeBehaviour", "timestamp-required"],
+    ["internalChecksFilter", "strict"],
+    ["prCreation", "not-pending"],
+    ["platformAutomerge", false],
+    ["osvVulnerabilityAlerts", true],
+  ];
+  for (const [key, expected] of requiredPolicy) {
+    if (preset?.[key] !== expected) {
+      problems.push(
+        `default.json must keep ${key} at ${JSON.stringify(expected)}.`,
+      );
+    }
+  }
+
+  const alerts = preset?.vulnerabilityAlerts;
+  if (
+    alerts?.enabled !== true ||
+    alerts?.minimumReleaseAge !== RELEASE_AGE ||
+    alerts?.prCreation !== "not-pending"
+  ) {
+    problems.push(
+      `default.json vulnerabilityAlerts must stay enabled, keep minimumReleaseAge at "${RELEASE_AGE}", and use prCreation "not-pending".`,
     );
   }
 
