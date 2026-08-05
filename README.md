@@ -1264,6 +1264,10 @@ the repository's checks pass; majors and the hand-held tool groups below still
 wait for review. `magic-*` packages and `GSTJ/magic` action tags are first-party
 exceptions and may move immediately.
 
+GitHub vulnerability alerts stay enabled and use the same 14-day quarantine.
+Renovate's experimental OSV source is disabled because its false positives can
+loop against versions that are already patched.
+
 ### What automerges
 
 | Update                               | Automerges |

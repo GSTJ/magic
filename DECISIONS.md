@@ -2268,8 +2268,9 @@ Releases without a registry timestamp fail closed.
 Renovate handles GitHub vulnerability alerts so Dependabot's separate security
 PR generator can be disabled without losing alerts. Security fixes keep the same
 age floor; a new package version is not trusted merely because its release notes
-say it fixes a vulnerability. OSV checks add a second source for direct
-dependency advisories and malicious-package flags.
+say it fixes a vulnerability. Renovate's experimental OSV source stays disabled
+fleet-wide because false positives can loop against versions that are already
+patched. GitHub vulnerability alerts remain the security-update source.
 
 Non-major updates still automerge, but Renovate performs the merge after it sees
 the repository checks pass. GitHub's platform automerge is deliberately off in
