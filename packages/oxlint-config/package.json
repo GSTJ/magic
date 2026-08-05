@@ -1,31 +1,59 @@
 {
   "name": "magic-oxlint-config",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "type": "module",
   "description": "Shared oxlint configs. Variants: base, react, react-native, next, expo.",
-  "keywords": ["oxlint", "oxc", "lint", "config", "react", "react-native", "expo", "nextjs"],
+  "keywords": [
+    "oxlint",
+    "oxc",
+    "lint",
+    "config",
+    "react",
+    "react-native",
+    "expo",
+    "nextjs"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GSTJ/magic.git",
     "directory": "packages/oxlint-config"
   },
   "homepage": "https://github.com/GSTJ/magic/tree/main/packages/oxlint-config#readme",
-  "bugs": { "url": "https://github.com/GSTJ/magic/issues" },
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
   "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
   "license": "MIT",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./base": { "types": "./dist/base.d.ts", "default": "./dist/base.js" },
-    "./react": { "types": "./dist/react.d.ts", "default": "./dist/react.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./base": {
+      "types": "./dist/base.d.ts",
+      "default": "./dist/base.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
     "./react-native": {
       "types": "./dist/react-native.d.ts",
       "default": "./dist/react-native.js"
     },
-    "./next": { "types": "./dist/next.d.ts", "default": "./dist/next.js" },
-    "./expo": { "types": "./dist/expo.d.ts", "default": "./dist/expo.js" },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "default": "./dist/next.js"
+    },
+    "./expo": {
+      "types": "./dist/expo.d.ts",
+      "default": "./dist/expo.js"
+    },
     "./base.json": "./base.json",
     "./react.json": "./react.json",
     "./react-native.json": "./react-native.json",
@@ -58,12 +86,16 @@
     "oxlint": ">=1.75.0"
   },
   "peerDependenciesMeta": {
-    "oxlint": { "optional": true }
+    "oxlint": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "magic-tsconfig": "workspace:*",
     "magic-video": "workspace:*",
     "typescript": "^7.0.2"
   },
-  "engines": { "node": ">=22.18.0" }
+  "engines": {
+    "node": ">=22.18.0"
+  }
 }

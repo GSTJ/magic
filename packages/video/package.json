@@ -1,6 +1,6 @@
 {
   "name": "magic-video",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Render stills and clips from shared brand primitives, fonts and theme-derived colors; today it draws every image in media/.",
   "keywords": [
     "brand",

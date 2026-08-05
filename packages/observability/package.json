@@ -1,6 +1,6 @@
 {
   "name": "magic-observability",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Shared PostHog layer: per-platform init with error tracking on, one captureError shape, a React/RN error boundary, and a no-op client when the key is absent.",
   "keywords": [
     "analytics",

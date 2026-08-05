@@ -1,6 +1,6 @@
 {
   "name": "magic-oxfmt-config",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Shared oxfmt configuration, including the @ianvs-equivalent import sort order.",
   "keywords": [
     "config",
