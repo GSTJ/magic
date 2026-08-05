@@ -1,7 +1,7 @@
 # magic-theme
 
-Dracula 141414 for editors, terminals, Claude Code, and Codex. Install projects
-the VS Code theme JSON into each tool.
+Dracula 141414 for editors and terminals. Install projects the VS Code theme JSON
+into each tool.
 
 ## Install
 
@@ -16,10 +16,10 @@ npx magic-theme install
 ```
 
 Default targets: apps we already have (`cursor`, `vscode`, `warp`, `ghostty`,
-`alacritty`, `orca`, `claude`, `codex`). Pass names to limit:
+`alacritty`, `orca`). Pass names to limit:
 
 ```sh
-magic-theme install cursor claude codex warp
+magic-theme install cursor warp
 ```
 
 ## Layout
@@ -28,20 +28,10 @@ magic-theme install cursor claude codex warp
 | ---- | ---- |
 | `vscode/themes/dracula-141414-color-theme.json` | colors + syntax |
 | `lib/project.mjs` | bg / fg / ANSI roles from that theme |
-| `lib/formats.mjs` | Warp, Ghostty, Alacritty, Claude, TextMate |
+| `lib/formats.mjs` | Warp, Ghostty, Alacritty |
 | `bin/magic-theme.mjs` | write into each app's config dir |
 
 Edit the VS Code theme, re-run install.
-
-## Claude Code
-
-Install writes `~/.claude/themes/dracula-141414.json` and sets
-`theme: "custom:dracula-141414"` in settings. Confirm in `/theme`.
-
-## Codex
-
-Install writes `~/.codex/themes/dracula-141414.tmTheme` and sets `[tui] theme`.
-Confirm in `/theme`.
 
 ## Elsewhere
 
