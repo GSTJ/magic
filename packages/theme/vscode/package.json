@@ -1,0 +1,29 @@
+{
+  "name": "magic-theme",
+  "displayName": "Magic Dracula 141414",
+  "description": "Dracula with a #141414 background and quieter chrome. From GSTJ/magic.",
+  "version": "0.1.0",
+  "publisher": "gstj",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Themes"
+  ],
+  "keywords": [
+    "dracula",
+    "dark",
+    "theme",
+    "141414"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "Dracula 141414",
+        "uiTheme": "vs-dark",
+        "path": "./themes/dracula-141414-color-theme.json"
+      }
+    ]
+  }
+}
