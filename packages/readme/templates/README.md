@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="<what the image shows>" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/<pkg>.png" />
+  <img alt="<what the image shows>" src="https://assets.gabrieltaveira.dev/magic/<pkg>.png" />
 </p>
 
 <!-- Tagline: say what the reader does with the package, in concrete verbs, at

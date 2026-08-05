@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="A rendered magic-docs page: sidebar navigation, content column, and a generated type table" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-docs.png" />
+  <img alt="A rendered magic-docs page: sidebar navigation, content column, and a generated type table" src="https://assets.gabrieltaveira.dev/magic/magic-docs.png" />
 </p>
 
 <p align="center">Define your site once. Ship a themed docs site with generated type tables and agent-readable llms.txt.</p>

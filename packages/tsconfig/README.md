@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="The four magic-tsconfig bases drawn as config cards, with extends arrows from each preset to base.json" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-tsconfig.png" />
+  <img alt="The four magic-tsconfig bases drawn as config cards, with extends arrows from each preset to base.json" src="https://assets.gabrieltaveira.dev/magic/magic-tsconfig.png" />
 </p>
 
 <p align="center">Extend one file. Every app and package inherits the same strict TypeScript setup, tuned to its framework.</p>

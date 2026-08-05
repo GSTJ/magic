@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="An error boundary catching a thrown error, beside the captureError event it ships to PostHog" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-observability.png" />
+  <img alt="An error boundary catching a thrown error, beside the captureError event it ships to PostHog" src="https://assets.gabrieltaveira.dev/magic/magic-observability.png" />
 </p>
 
 <p align="center">Init once per platform. Catch errors in one boundary and ship them to PostHog in the same shape everywhere.</p>

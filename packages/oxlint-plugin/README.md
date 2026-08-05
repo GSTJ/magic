@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Editor window with a lone wrapping if flagged by the magic/prefer-early-return diagnostic" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxlint-plugin.png" />
+  <img alt="Editor window with a lone wrapping if flagged by the magic/prefer-early-return diagnostic" src="https://assets.gabrieltaveira.dev/magic/magic-oxlint-plugin.png" />
 </p>
 
 <p align="center">Add one oxlint plugin. Opt into eight rules by hand, or use the react-native ones your preset already turns on.</p>
