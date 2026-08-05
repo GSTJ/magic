@@ -22,18 +22,17 @@ const ANSI_KEYS = [
 ];
 
 /** @param {Record<string, string | undefined>} colors */
-function pick(colors, keys, fallback) {
+const pick = (colors, keys, fallback) => {
   for (const k of keys) {
     const v = colors[k];
     if (v) return v.length === 9 ? v.slice(0, 7) : v;
   }
   return fallback;
-}
+};
 
 /** @param {string} name */
-function slugify(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
+const slugify = (name) =>
+  name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "");
 
 /** @param {{ name?: string, type?: string, colors: Record<string, string>, tokenColors?: unknown[] }} theme */
 export function project(theme) {

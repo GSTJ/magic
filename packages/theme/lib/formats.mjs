@@ -1,10 +1,10 @@
 import { project } from "./project.mjs";
 
 /** @param {ReturnType<typeof project>} p */
-function ansiBlock(p) {
+const ansiBlock = (p) => {
   const [n0, n1, n2, n3, n4, n5, n6, n7, b0, b1, b2, b3, b4, b5, b6, b7] = p.ansi;
   return { n0, n1, n2, n3, n4, n5, n6, n7, b0, b1, b2, b3, b4, b5, b6, b7 };
-}
+};
 
 /** @param {{ name?: string, type?: string, colors: Record<string, string>, tokenColors?: unknown[] }} theme */
 export function toWarp(theme) {
@@ -49,7 +49,7 @@ export function toGhostty(theme) {
     `selection-background = ${p.selection}`,
     `selection-foreground = ${p.fg}`,
   ];
-  p.ansi.forEach((c, i) => lines.push(`palette = ${i}=${c}`));
+  for (const [i, c] of p.ansi.entries()) lines.push(`palette = ${i}=${c}`);
   return `${lines.join("\n")}\n`;
 }
 

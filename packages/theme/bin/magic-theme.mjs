@@ -10,11 +10,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { toAlacritty, toGhostty, toWarp } from "../lib/formats.mjs";
 import { project } from "../lib/project.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const root = join(import.meta.dirname, "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const theme = JSON.parse(
   readFileSync(join(root, "vscode", "themes", "magic-dracula-color-theme.json"), "utf8"),
@@ -116,6 +115,30 @@ function parseTargets(args) {
   });
 }
 
+/** @param {string[]} args */
+function install(args) {
+  const list = parseTargets(args);
+  if (list.length === 0) {
+    console.error("nothing to install (pass targets explicitly)");
+    process.exit(1);
+  }
+  for (const t of list) {
+    targets[t].write();
+    console.log(`installed ${t} -> ${targets[t].dest}`);
+    if (targets[t].note) console.log(`  ${targets[t].note}`);
+  }
+}
+
+/** @param {Target} t */
+function uninstallTarget(t) {
+  if (!existsSync(targets[t].dest)) {
+    console.log(`skip ${t}`);
+    return;
+  }
+  rmSync(targets[t].dest, { recursive: true, force: true });
+  console.log(`removed ${targets[t].dest}`);
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 
 try {
@@ -129,33 +152,17 @@ try {
     process.exit(0);
   }
   if (cmd === "install") {
-    const list = parseTargets(rest);
-    if (!list.length) {
-      console.error("nothing to install (pass targets explicitly)");
-      process.exit(1);
-    }
-    for (const t of list) {
-      targets[t].write();
-      console.log(`installed ${t} -> ${targets[t].dest}`);
-      if (targets[t].note) console.log(`  ${targets[t].note}`);
-    }
+    install(rest);
     process.exit(0);
   }
   if (cmd === "uninstall") {
-    for (const t of parseTargets(rest.length ? rest : ALL)) {
-      if (!existsSync(targets[t].dest)) {
-        console.log(`skip ${t}`);
-        continue;
-      }
-      rmSync(targets[t].dest, { recursive: true, force: true });
-      console.log(`removed ${targets[t].dest}`);
-    }
+    for (const t of parseTargets(rest.length > 0 ? rest : ALL)) uninstallTarget(t);
     process.exit(0);
   }
   console.error(`unknown command: ${cmd}`);
   usage();
   process.exit(1);
-} catch (err) {
-  console.error(err instanceof Error ? err.message : err);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 }
