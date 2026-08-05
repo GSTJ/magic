@@ -6,7 +6,7 @@ packages:
 # banner. Denied, so `pnpm install` stops asking and CI stays quiet.
 allowBuilds:
   core-js: false
-  # apps/demo-video pulls esbuild in through @remotion/cli. Its postinstall
+  # packages/video pulls esbuild in through @remotion/cli. Its postinstall
   # fetches/validates the platform binary; blocked, Remotion's bundler breaks.
   esbuild: true
 # magic is the first-party exception to the shared 14-day supply-chain

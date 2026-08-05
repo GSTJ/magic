@@ -1,10 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   // The README's library recipe, dogfooded: extend the shared base, then say
-  // what a build needs on top of it. These files used to extend nothing, which
-  // is why `incremental` in base.json and the emitDeclarationOnly trap in
-  // internal-package.json both survived to publish — the repo prescribed a shape
-  // it did not itself use. See DECISIONS.md §4.
+  // what a build needs on top of it. These files used to extend nothing, so the
+  // repo prescribed a shape it never ran itself, which is how `incremental` in
+  // base.json and the emitDeclarationOnly trap in internal-package.json both
+  // survived to publish.
   "extends": "magic-tsconfig/base.json",
   "compilerOptions": {
     // ES2023 for `Array#findLast` and friends; the shared base pins ES2022

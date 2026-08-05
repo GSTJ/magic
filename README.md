@@ -4,6 +4,10 @@
 
 <p align="center">Change a lint rule or a CI step once. Every repo importing this one picks it up on its next run.</p>
 
+<p align="center">
+  <a href="https://gstj.github.io/magic/">Docs</a> | <a href="https://github.com/GSTJ/magic">GitHub</a>
+</p>
+
 ## How it works
 
 1. The packages below carry the configs. Projects consume them by re-export, so every field
@@ -43,11 +47,13 @@ Each one has its own README with the full detail.
   package README for which ones).
 - [`magic-readmes`](packages/readme) is the README standard as code: a template, an `init`
   scaffold, and the `check` validator this repo runs on itself.
+- [`magic-video`](packages/video) is the Remotion source for every README hero image and clip
+  in `media/` (see the package README).
 - `GSTJ/magic/docs-landing` is the editable shadcn block for dark package landing pages; see
   [its section in the adoption guide](.github/workflows/README.md#docs-landing-block).
 
-Every image these READMEs embed is rendered by [`apps/demo-video`](apps/demo-video), a private
-Remotion app that draws from `magic-theme`'s own palette; nothing is hand-screenshotted.
+Every image these READMEs embed is rendered by [`magic-video`](packages/video), which draws
+from `magic-theme`'s own palette; nothing is hand-screenshotted.
 
 ## CI and automation
 

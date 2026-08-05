@@ -1,0 +1,33 @@
+{
+  "name": "@magic/docs-site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "This repo's own documentation site, built on magic-docs.",
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "clean": "rm -rf .next out .turbo"
+  },
+  "dependencies": {
+    "fumadocs-core": "16.14.0",
+    "fumadocs-mdx": "^15.2.2",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.14.0",
+    "magic-docs": "workspace:*",
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.4",
+    "magic-tsconfig": "workspace:*",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

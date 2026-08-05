@@ -1,0 +1,12 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The root task caches `dist/**`, which a Next app never writes. Without
+    // this, a cache hit restores nothing and the deploy uploads an empty `out`.
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**"]
+    }
+  }
+}

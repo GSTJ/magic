@@ -1,7 +1,7 @@
 {
   "name": "magic-readmes",
-  "version": "1.0.0",
-  "description": "Scaffold a README from the GSTJ standard and check any file back against it.",
+  "version": "1.0.1",
+  "description": "Scaffold a README from the shared standard and check any file back against it.",
   "keywords": [
     "cli",
     "docs",

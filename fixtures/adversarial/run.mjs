@@ -292,7 +292,7 @@ process.stdout.write(
 
 // ------------------------------------------------------------- shopify ----
 process.stdout.write(
-  "\n[shopify] every @shopify rule's disposition, executed (DECISIONS.md §6)\n",
+  "\n[shopify] every @shopify rule's disposition, executed\n",
 );
 {
   const r = lint(join(here, "shopify"), ["src"]);

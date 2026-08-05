@@ -818,7 +818,7 @@ gabriel-taveira-portfolio, 11 in chatmode, 6 in invest-radar, 1 in
 padrinhos-ana-julia-gabriel, 0 in e-card, pegada and would-you-rather. Not
 auto-fixable, on purpose: wrapping the expression in `cn()` renders the
 identical string, and splitting it into the right arguments is a judgement call.
-See [DECISIONS.md](DECISIONS.md) section 10 and the [plugin
+See DECISIONS.md section 10 and the [plugin
 README](packages/oxlint-plugin#magicno-manual-classname).
 
 ## 2026-07-27 — CI: composite actions, and consumption by tag

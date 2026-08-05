@@ -37,7 +37,7 @@ export const MagicSocial: FC = () => (
       >
         magic
       </div>
-      <Tagline fontSize={32}>Shared tooling for GSTJ projects</Tagline>
+      <Tagline fontSize={32}>Change it once. Every repo gets it.</Tagline>
     </div>
   </SceneBackground>
 );

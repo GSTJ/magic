@@ -279,10 +279,10 @@ describe("variant composition", () => {
 });
 
 /**
- * Turning `unicorn/filename-case` on (DECISIONS.md §6) means every framework
- * that derives behaviour from a filename is now one bad exemption away from a
- * broken app. These assert against a real tree rather than against the comments
- * in the source, because the rule's actual semantics are surprising: it checks
+ * Turning `unicorn/filename-case` on means every framework that derives
+ * behaviour from a filename is now one bad exemption away from a broken app.
+ * These assert against a real tree rather than against the comments in the
+ * source, because the rule's actual semantics are surprising: it checks
  * only the segment before the *first* dot, it trims leading and trailing
  * underscores, and it rejects nothing but uppercase, spaces and interior
  * underscores — `+not-found.tsx` and `$ref.ts` pass on their own merits, while

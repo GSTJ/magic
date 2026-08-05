@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   // Same shape as the other publishable packages here: extend the shared base,
-  // then say what a build needs on top of it. See DECISIONS.md §4.
+  // then say what a build needs on top of it, so every change to the shared base
+  // has to survive this repo's own build before it reaches a consumer.
   "extends": "magic-tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ES2023"],

@@ -13,6 +13,7 @@ import { ReadmeStill } from "./compositions/readme";
 import { MagicSocial } from "./compositions/social";
 import { ThemePaletteStill, ThemeStill } from "./compositions/theme";
 import { TsconfigStill } from "./compositions/tsconfig";
+import { VideoStill } from "./compositions/video";
 
 /**
  * Hero stills share one frame spec so every README image lands identical. The
@@ -37,6 +38,7 @@ export const RemotionRoot: FC = () => (
     <Composition component={DocsStill} id="Docs" {...HERO} />
     <Composition component={ObservabilityStill} id="Observability" {...HERO} />
     <Composition component={ReadmeStill} id="Readme" {...HERO} />
+    <Composition component={VideoStill} id="Video" {...HERO} />
     <Composition
       component={ThemePaletteStill}
       durationInFrames={1}

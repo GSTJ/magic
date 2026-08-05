@@ -86,9 +86,9 @@ exists, configuration, gotchas. Relocate it under clear H2 sections after `## In
 
 ## Media
 
-Hero images come from one pipeline. `apps/demo-video`, a private Remotion app in this repo, renders
-every package's hero still and demo media into the repo root `media/` directory, which is
-committed. READMEs then point at the raw GitHub URL, in the shape
+Hero images come from one pipeline. `magic-video`, the Remotion package in this repo
+(`packages/video`), renders every package's hero still and demo media into the repo root `media/`
+directory, which is committed. READMEs then point at the raw GitHub URL, in the shape
 `https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-readme.png`, so the same file
 renders on GitHub and on npm. Nothing is hand-screenshotted; the stills share the repo's own theme
 and brand primitives.

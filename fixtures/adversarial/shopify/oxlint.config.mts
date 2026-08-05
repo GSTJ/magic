@@ -2,10 +2,10 @@ import react from "magic-oxlint-config/react";
 import { defineConfig } from "oxlint";
 
 /**
- * Every `@shopify/*` rule the incumbent ESLint config used, wired the way
- * DECISIONS.md §6 dispositions it — the three ported rules from
- * magic-oxlint-plugin, and the native replacements copied verbatim from the
- * snippets the plugin README tells consumers to paste.
+ * Every `@shopify/*` rule the incumbent ESLint config used, wired the way this
+ * repo settles each one: the four rules ported into magic-oxlint-plugin, and
+ * the native replacements copied verbatim from the snippets the plugin README
+ * tells consumers to paste.
  *
  * The point of this fixture is that both halves are *executed*: a README
  * snippet that no longer fires is a lie the next migration agent inherits.

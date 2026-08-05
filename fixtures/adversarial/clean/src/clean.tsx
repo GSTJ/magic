@@ -4,8 +4,10 @@
 // choice worth flagging to the integrator).
 import { useMemo } from "react";
 
-// A type alias, not an interface: `typescript/consistent-type-definitions` is
-// configured as `["error", "type"]`. See DECISIONS.md §2.
+// `typescript/consistent-type-definitions` is configured as `["error", "type"]`,
+// so declarations here are type aliases. The other direction is unsafe to
+// autofix: an interface has no implicit index signature, so it stops satisfying
+// `Record<string, unknown>` and the errors land at every use site.
 type Item = {
   id: string;
   label: string;
