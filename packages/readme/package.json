@@ -1,0 +1,45 @@
+{
+  "name": "magic-readme",
+  "version": "1.0.0",
+  "description": "The GSTJ README standard as code: a skeleton to start from and a mechanical check.",
+  "keywords": [
+    "cli",
+    "docs",
+    "readme",
+    "template",
+    "validator"
+  ],
+  "homepage": "https://github.com/GSTJ/magic/tree/main/packages/readme#readme",
+  "bugs": {
+    "url": "https://github.com/GSTJ/magic/issues"
+  },
+  "license": "MIT",
+  "author": "Gabriel Taveira <gabrielstaveira@gmail.com> (https://github.com/GSTJ)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GSTJ/magic.git",
+    "directory": "packages/readme"
+  },
+  "bin": {
+    "magic-readme": "./bin/magic-readme.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "templates",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt .",
+    "typecheck": "echo \"magic-readme ships plain JS\"",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

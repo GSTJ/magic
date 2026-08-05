@@ -1,0 +1,41 @@
+{
+  "name": "@magic/demo-video",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Remotion source for every README image and GIF committed in media/",
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "dev": "remotion studio",
+    "render:all": "pnpm run render:theme && pnpm run render:theme-palette && pnpm run render:codemods && pnpm run render:codemods-gif && pnpm run render:oxfmt && pnpm run render:oxlint-config && pnpm run render:oxlint-plugin && pnpm run render:tsconfig && pnpm run render:docs && pnpm run render:observability && pnpm run render:readme && pnpm run render:social",
+    "render:codemods": "remotion still Codemods ../../media/magic-codemods.png",
+    "render:codemods-demo": "remotion render CodemodsDemo out/intermediate.mp4",
+    "render:codemods-gif": "pnpm run render:codemods-demo && remotion ffmpeg -y -i out/intermediate.mp4 -filter_complex \"scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -r 12 -t 15 ../../media/magic-codemods-demo.gif",
+    "render:docs": "remotion still Docs ../../media/magic-docs.png",
+    "render:observability": "remotion still Observability ../../media/magic-observability.png",
+    "render:oxfmt": "remotion still Oxfmt ../../media/magic-oxfmt-config.png",
+    "render:oxlint-config": "remotion still OxlintConfig ../../media/magic-oxlint-config.png",
+    "render:oxlint-plugin": "remotion still OxlintPlugin ../../media/magic-oxlint-plugin.png",
+    "render:readme": "remotion still Readme ../../media/magic-readme.png",
+    "render:social": "remotion still MagicSocial ../../media/magic-social.png",
+    "render:theme": "remotion still Theme ../../media/magic-theme.png",
+    "render:theme-palette": "remotion still ThemePalette ../../media/magic-theme-palette.png",
+    "render:tsconfig": "remotion still Tsconfig ../../media/magic-tsconfig.png",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.503",
+    "@remotion/fonts": "4.0.503",
+    "magic-theme": "workspace:*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.503",
+    "shiki": "^3"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "magic-tsconfig": "workspace:*",
+    "typescript": "^5"
+  }
+}

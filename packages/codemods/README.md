@@ -1,23 +1,47 @@
-# magic-codemods
+<p align="center">
+  <img alt="Terminal demo: magic-kebab prints a rename plan under --dry-run, then --write applies it while an editor's imports flash to their kebab-case names" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-codemods-demo.gif" />
+</p>
 
-Migration codemods for GSTJ projects. One binary today:
+<p align="center">Renames files to kebab-case and rewrites every import that pointed at them.</p>
 
-**`magic-kebab`** — renames files to kebab-case and rewrites every import that
-pointed at them, so `unicorn/filename-case` can be turned on in a repo without a
+<p align="center">
+  <a aria-label="npm version" href="https://www.npmjs.com/package/magic-codemods"><img alt="npm version" src="https://shieldcn.dev/npm/magic-codemods.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-codemods"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-codemods/downloads.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
+</p>
+
+## How it works
+
+One binary today: `magic-kebab`, so `unicorn/filename-case` can be turned on in a repo without a
 week of hand-editing.
+
+1. `--dry-run` asks the repo's own oxlint which filenames break `unicorn/filename-case` and prints
+   the plan: renames, skips, conflicts. Nothing changes.
+2. `--write` rewrites every specifier that resolves to a renamed file (imports, requires, mocks,
+   tsconfig aliases), then moves each file through two `git mv`s via a temp name, so case-only
+   renames survive case-insensitive APFS.
+3. You verify and commit the renames on their own. Git infers renames from content similarity at
+   diff time, so a rename-only commit keeps `git log --follow` working.
+
+```sh
+pnpm exec magic-kebab --dry-run   # the plan; changes nothing
+pnpm exec magic-kebab --write     # apply it
+```
+
+## Install
 
 ```sh
 pnpm add -D magic-codemods
 ```
 
-## Why this exists
+## Why it exists
 
-`magic-oxlint-config` enables `unicorn/filename-case` at `kebabCase` in `base`,
-which means every repo adopting the preset has a pile of `Button.tsx` and
-`formatDate.ts` to deal with at once. Doing that by hand is a large, boring,
-error-prone diff in the middle of a migration that is already changing
-everything else. Doing it with `find | xargs mv` breaks every import in the repo
-and, on macOS, silently does nothing at all for the case-only renames.
+`magic-oxlint-config` enables `unicorn/filename-case` at `kebabCase` in `base`, so every repo
+adopting the preset has a pile of `Button.tsx` and `formatDate.ts` to deal with at once. Doing
+that by hand is a large, boring, error-prone diff in the middle of a migration that is already
+changing everything else. Doing it with `find | xargs mv` breaks every import in the repo and, on
+macOS, silently does nothing at all for the case-only renames.
 
 ## Use it
 
@@ -42,10 +66,9 @@ pnpm exec tsc --noEmit && pnpm run lint && pnpm run test
 git add -A && git commit -m "refactor: kebab-case filenames"
 ```
 
-Commit the renames on their own. `git log --follow` survives this codemod
-because git infers renames from content similarity at diff time, and a commit
-that _only_ renames gives it the easiest possible job. Mixing a refactor into
-the same commit is what breaks history.
+Commit the renames on their own. `git log --follow` survives this codemod because git infers
+renames from content similarity at diff time, and a commit that _only_ renames gives it the
+easiest possible job. Mixing a refactor into the same commit is what breaks history.
 
 ### Options
 
@@ -59,7 +82,7 @@ the same commit is what breaks history.
                       jsconfig.json at the repo root and in each workspace
                       package, merged.
 --rename <old=new>    Override one target basename. Repeatable. Keys are FULL
-                      basenames, extension included — `S3=s3` is an error.
+                      basenames, extension included; `S3=s3` is an error.
 --allow-dirty         Skip the clean-tree check.
 --strict              Exit 1 if anything needs manual review.
 --json                Emit the whole result as JSON.
@@ -67,56 +90,47 @@ the same commit is what breaks history.
 
 Positional arguments scope the run: `magic-kebab --dry-run src/components`.
 
-Exit codes: `0` success, `1` refused (dirty tree, bad arguments, a `--rename`
-that matched nothing) or the plan has conflicts, or `--strict` and something
-needs review.
+Exit codes: `0` success, `1` refused (dirty tree, bad arguments, a `--rename` that matched
+nothing) or the plan has conflicts, or `--strict` and something needs review.
 
 ### `--rename` keys are full basenames
 
-`--rename zodI18n.ts=zod-i18n.ts` works. `--rename zodI18n=zod-i18n` is an
-**error**, not a no-op — it used to be silently ignored, and the file was renamed
-to the codemod's own target instead. `--rename` exists precisely for the files a
-human looked at and overruled, so discarding one quietly is the worst thing this
-tool could do with it. The message suggests the key you meant.
+`--rename zodI18n.ts=zod-i18n.ts` works. `--rename zodI18n=zod-i18n` is an **error**. It used to
+be silently ignored, and the file was renamed to the codemod's own target instead. `--rename`
+exists for the files a human looked at and overruled. The message suggests the key you meant.
 
-The same applies to a key naming a file the detector never reported: under
-`--detect oxlint` the preset already exempts `__mocks__/AsyncStorage.ts`, so
-`--rename AsyncStorage.ts=…` matches nothing and fails. Use `--detect builtin` if
-you want to force one of those.
+The same applies to a key naming a file the detector never reported: under `--detect oxlint` the
+preset already exempts `__mocks__/AsyncStorage.ts`, so `--rename AsyncStorage.ts=...` matches
+nothing and fails. Use `--detect builtin` if you want to force one of those.
 
 ### Path aliases in a monorepo
 
-The resolver reads `paths` from every tsconfig it can find: the repo root, then
-each package matched by `pnpm-workspace.yaml`'s `packages` globs, then a generic
-`*/tsconfig.json` / `*/*/tsconfig.json` sweep. It used to look only at the run
-root — which in a monorepo usually has no tsconfig at all — print one line saying
-so, and then rewrite relative imports while leaving every `@/…` alias pointing at
-a file it had just renamed.
+The resolver reads `paths` from every tsconfig it can find: the repo root, then each package
+matched by `pnpm-workspace.yaml`'s `packages` globs, then a generic `*/tsconfig.json` /
+`*/*/tsconfig.json` sweep. It used to look only at the run root (which in a monorepo usually has
+no tsconfig at all), print one line saying so, and then rewrite relative imports while leaving
+every `@/...` alias pointing at a file it had just renamed.
 
-If an alias still cannot be resolved (declared only in a bundler config, say) and
-its last segment names a file being renamed, that import is printed under
-`NEEDS REVIEW` and `--strict` exits non-zero. Pass `--tsconfig` — repeatable —
-at the config that defines it.
+If an alias still cannot be resolved (declared only in a bundler config, say) and its last
+segment names a file being renamed, that import is printed under `NEEDS REVIEW` and `--strict`
+exits non-zero. Pass `--tsconfig`, repeatable, at the config that defines it.
 
 ### `--detect oxlint` vs `--detect builtin`
 
-The default asks **the repo's own oxlint** what is wrong and reads the
-`unicorn(filename-case)` diagnostics, including the rename target out of the
-diagnostic's own `help` text. That is the only way to be sure the codemod and CI
-agree: the repo's `ignore` list, its `overrides`, its `ignorePatterns` all apply
-for free, because the linter is the one answering.
+The default asks **the repo's own oxlint** what is wrong and reads the `unicorn(filename-case)`
+diagnostics, including the rename target out of the diagnostic's own `help` text. That is the
+only way to be sure the codemod and CI agree: the repo's `ignore` list, its `overrides`, its
+`ignorePatterns` all apply for free, because the linter is the one answering.
 
-`--detect builtin` applies this package's own copy of the rule to every tracked
-file. Use it before a repo has adopted the preset, or when a full lint is too
-slow. It knows nothing about that repo's exemptions, so it reports more — which
-is where the skip list below comes in. `test/kebab.test.mjs` generates a corpus,
-runs the real binary over it, and fails if the two ever disagree on a single
-name.
+`--detect builtin` applies this package's own copy of the rule to every tracked file. Use it
+before a repo has adopted the preset, or when a full lint is too slow. It knows nothing about
+that repo's exemptions, so it reports more, which is where the skip list below comes in.
+`test/kebab.test.mjs` generates a corpus, runs the real binary over it, and fails if the two
+ever disagree on a single name.
 
-Do **not** try to speed the default up with `oxlint -A all -D unicorn/filename-case`.
-Verified on 1.75.0: `-D <rule>` re-enables the rule with its _default_ options
-and throws away the config's `ignore` list, so a run scoped that way reports
-every `[postId].tsx` in the repo.
+Do **not** try to speed the default up with `oxlint -A all -D unicorn/filename-case`. Verified
+on 1.75.0: `-D <rule>` re-enables the rule with its _default_ options and throws away the
+config's `ignore` list, so a run scoped that way reports every `[postId].tsx` in the repo.
 
 ## What it rewrites
 
@@ -135,46 +149,44 @@ every `[postId].tsx` in the repo.
 | `moduleNameMapper`, `resolve.alias`, bundler configs                  | **reported** |
 | `package.json` `main` / `exports` / `bin`, `.md` docs, YAML           | **reported** |
 
-The split is deliberate. A `moduleNameMapper` key is a _regex_ whose escaping
-belongs to whoever wrote it, and a `package.json` `exports` path is a published
-contract. Guessing at either is how a codemod turns a lint fix into an outage, so
-those are printed under `NEEDS REVIEW` and left exactly as they were.
+The split is deliberate. A `moduleNameMapper` key is a _regex_ whose escaping belongs to whoever
+wrote it, and a `package.json` `exports` path is a published contract. Guessing at either is how
+a codemod turns a lint fix into an outage, so those are printed under `NEEDS REVIEW` and left
+exactly as they were.
 
-Bare string literals are the newest entry and the one that cost the most: an
-Expo config plugin (`plugins: ["./plugins/withThing"]`), the argument to a repo's
-own `require`-wrapper, a route manifest. None of those is a specifier to any AST
-pass, all of them resolve to a file, and the Expo case only fails on Linux/EAS —
-APFS resolves the stale path fine, so a migration verifies green locally and
-ships a broken build.
+Bare string literals are the newest entry and the one that cost the most: an Expo config plugin
+(`plugins: ["./plugins/withThing"]`), the argument to a repo's own `require`-wrapper, a route
+manifest. None of those is a specifier to any AST pass, all of them resolve to a file, and the
+Expo case only fails on Linux/EAS (APFS resolves the stale path fine), so a migration verifies
+green locally and ships a broken build.
 
-One invariant makes the rest tractable: **directories never move.** Only the
-basename stem changes, so only the last segment of any specifier is ever touched.
+One invariant makes the rest tractable: **directories never move.** Only the basename stem
+changes, so only the last segment of any specifier is ever touched.
 
 ## What it refuses to rename
 
 Framework conventions where the filename _is_ behaviour. These are also exempt in
-`magic-oxlint-config`, and the two lists have to agree — anything the codemod
-skips but the linter reports leaves a repo with an error that has no automated
-fix.
+`magic-oxlint-config`, and the two lists have to agree: anything the codemod skips but the linter
+reports leaves a repo with an error that has no automated fix.
 
-| Pattern                        | Why                                                                                                                                                                     |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[postId].tsx`, `[[...x]].tsx` | The bracketed text is a route parameter name — it becomes `params.postId`. Renaming it changes the route contract, not the file. Next.js, expo-router, TanStack Router. |
-| `__mocks__/AsyncStorage.ts`    | jest and vitest match `__mocks__/<x>` against the _module being mocked_. The name belongs to the package.                                                               |
-| `App.tsx`                      | Bare RN's `index.js` imports `./App`, and classic Expo points `main` at `node_modules/expo/AppEntry.js` whose `import App from "../../App"` no codemod can reach.       |
+| Pattern                        | Why                                                                                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[postId].tsx`, `[[...x]].tsx` | The bracketed text is a route parameter name (it becomes `params.postId`), so renaming it changes the route contract. Next.js, expo-router, TanStack Router.      |
+| `__mocks__/AsyncStorage.ts`    | jest and vitest match `__mocks__/<x>` against the _module being mocked_. The name belongs to the package.                                                         |
+| `App.tsx`                      | Bare RN's `index.js` imports `./App`, and classic Expo points `main` at `node_modules/expo/AppEntry.js` whose `import App from "../../App"` no codemod can reach. |
 
-A `__mocks__/Button.ts` sitting next to a `Button.tsx` **is** renamed, in lockstep
-with its module — that one mocks something the repo owns.
+A `__mocks__/Button.ts` sitting next to a `Button.tsx` **is** renamed, in lockstep with its
+module (that one mocks something the repo owns).
 
-`--rename Old.tsx=whatever.tsx` overrides the target and is the one thing that
-gets past the skip list, for when a human has decided otherwise. It overrides a
-target for a file the detector already reported; it is not a way to add files.
+`--rename Old.tsx=whatever.tsx` overrides the target and is the one thing that gets past the
+skip list, for when a human has decided otherwise. It only overrides targets for files the
+detector already reported; a key naming anything else fails.
 
 ## Rename targets come from oxlint
 
 The target is taken verbatim from the diagnostic's `help` field
-(`Rename the file to 'pascal-thing.ts'`), so what you get is exactly what the
-linter asked for. Its word-splitting has some sharp corners:
+(`Rename the file to 'pascal-thing.ts'`), so what you get is exactly what the linter asked for.
+Its word-splitting has some sharp corners:
 
 | Before                 | After                   |
 | ---------------------- | ----------------------- |
@@ -187,27 +199,26 @@ linter asked for. Its word-splitting has some sharp corners:
 | `AppV2.ts`             | `app-v-2.ts`            |
 | `OAuth2Client.ts`      | `o-auth2-client.ts`     |
 
-The last three are ugly and they are what the rule wants. `--dry-run` is where
-you catch them; `--rename S3.ts=s3.ts` is how you fix them.
+The last three are ugly and they are what the rule wants. `--dry-run` is where you catch them;
+`--rename S3.ts=s3.ts` is how you fix them.
 
-## Two-step renames, and why
+## Two-step renames
 
-macOS ships APFS case-insensitive, so `Button.tsx` and `button.tsx` are the same
-path. `git mv Button.tsx button.tsx` there is either refused as "destination
-exists" or, with `-f`, becomes a no-op that still updates the index — producing a
-commit that claims a rename the working tree never performed, and a file that
-only appears once someone checks out on Linux.
+macOS ships APFS case-insensitive, so `Button.tsx` and `button.tsx` are the same path.
+`git mv Button.tsx button.tsx` there is either refused as "destination exists" or, with `-f`,
+becomes a no-op that still updates the index, producing a commit that claims a rename the
+working tree never performed, and a file that only appears once someone checks out on Linux.
 
 Every rename therefore goes through a third name, unconditionally:
 
 ```
-git mv Button.tsx .magic-kebab-tmp-…
-git mv .magic-kebab-tmp-… button.tsx
+git mv Button.tsx .magic-kebab-tmp-...
+git mv .magic-kebab-tmp-... button.tsx
 ```
 
-This is invisible in history. Git records no rename operation in a commit at all;
-it infers renames from content similarity when you ask for a diff. Two `git mv`s
-before one commit produce exactly one rename in that commit.
+This is invisible in history. Git records no rename operation in a commit at all; it infers
+renames from content similarity when you ask for a diff. Two `git mv`s before one commit produce
+exactly one rename in that commit.
 
 ## Programmatic use
 
@@ -227,5 +238,5 @@ const result = runKebabCodemod({
 console.log(summarise(result));
 ```
 
-`isKebabCase`, `kebabifyBasename` and `skipReasonFor` are exported too, for
-anything that needs to ask the same questions without running the whole codemod.
+`isKebabCase`, `kebabifyBasename` and `skipReasonFor` are exported too, for anything that needs
+to ask the same questions without running the whole codemod.

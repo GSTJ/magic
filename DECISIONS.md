@@ -2284,3 +2284,24 @@ it to distribute the policy, so its Renovate and pnpm age floors are both zero.
 Consumers do not inherit that local override. They do exempt first-party
 `magic-*` packages and `GSTJ/magic` action tags, so our own tooling can propagate
 immediately without opening the gate for third-party releases.
+
+## 14. The README standard is a package
+
+Added 2026-08-05. Every README in this repo follows one anatomy: a centered hero
+image, a one-sentence tagline, shieldcn.dev badges, `## How it works`,
+`## Install`, then package detail sections. `magic-readme` ships that anatomy as
+code. `magic-readme init` writes the skeleton, `magic-readme check` validates
+files, and `scripts/validate-readmes.mjs` runs the same `validateReadme` over
+every `packages/*/README.md` plus the root README inside `pnpm run check`.
+
+The validator enforces only what a machine can judge honestly: the hero block
+sits before the first heading with an absolute https image src, a text tagline
+exists, at least one badge is served from shieldcn.dev, an `## Install` heading
+exists, no em or en dashes outside fenced code, and no relative image srcs
+anywhere. Absolute srcs matter because npm renders READMEs away from the repo,
+so a relative path 404s on the package page. The dash rule is the one house
+style law with a subset mechanical enough to automate.
+
+Prose quality stays a human concern. A checker that grades writing rejects good
+writing, so the validator stops structural drift and nothing else. It will not
+notice a hype tagline or a useless mechanism list; review still has to.

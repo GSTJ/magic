@@ -1,23 +1,26 @@
-# magic-oxlint-plugin
+<p align="center">
+  <img alt="Editor window with a lone wrapping if flagged by the magic/prefer-early-return diagnostic" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxlint-plugin.png" />
+</p>
 
-Twelve oxlint rules with no usable built-in equivalent, in two namespaces.
+<p align="center">Twelve oxlint rules with no usable built-in equivalent: eight opt-in policies under magic/*, and the four react-native/* ports the presets turn on.</p>
 
-`magic/*` is eight rules and **all opt-in** — nothing under that namespace is
-enabled by any `magic-oxlint-config` preset. They're policies rather than bug
-detectors, or they're stack-specific, and both kinds of rule should be a
-deliberate choice per repo.
+<p align="center">
+  <a aria-label="npm version" href="https://www.npmjs.com/package/magic-oxlint-plugin"><img alt="npm version" src="https://shieldcn.dev/npm/magic-oxlint-plugin.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-oxlint-plugin"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-oxlint-plugin/downloads.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
+</p>
 
-`react-native/*` is four rules ported from `eslint-plugin-react-native`, and
-those the `react-native` and `expo` presets do turn on. They live here so
-`magic-oxlint-config` can ship them without depending on a package whose
-required `eslint` peer pulled eslint 9 into every consumer. See
-[the section below](#react-native).
+## How it works
 
-## Install
-
-```sh
-pnpm add -D magic-oxlint-plugin
-```
+1. The package loads as an oxlint jsPlugin; the `name` field of the `jsPlugins` entry sets the
+   namespace the rule ids use.
+2. `magic/*` is eight rules, all opt-in. Nothing under that namespace is enabled by any
+   `magic-oxlint-config` preset.
+3. `react-native/*` is four rules ported from `eslint-plugin-react-native`, shipped from the
+   separate `magic-oxlint-plugin/react-native` entry point. The `react-native` and `expo` presets
+   enable all four at `error`. They live here so `magic-oxlint-config` can ship them without
+   depending on a package whose required `eslint` peer pulled eslint 9 into every consumer.
 
 ```ts
 // oxlint.config.mts
@@ -32,10 +35,19 @@ export default extendConfig(base, {
 });
 ```
 
-`extendConfig`, not oxlint's `extends` — the latter drops the preset's
-`ignorePatterns`. See the [root README](../../README.md#step-2--oxlintconfigmts).
+`extendConfig` rather than oxlint's `extends`; the latter drops the preset's `ignorePatterns`. See
+the [root README](../../README.md#step-2--oxlintconfigmts).
+
+## Install
+
+```sh
+pnpm add -D magic-oxlint-plugin
+```
 
 ## Rules
+
+All eight `magic/*` rules are opt-in. They're policies rather than bug detectors, or they're
+stack-specific, and both kinds of rule should be a deliberate choice per repo.
 
 ### `magic/prefer-early-return`
 
@@ -59,7 +71,7 @@ const handle = (ok: boolean) => {
 };
 ```
 
-Options: `maximumStatements` (default `0`) — how many statements may sit inside
+Options: `maximumStatements` (default `0`), how many statements may sit inside
 the lone `if` before it's reported. Upstream defaults this to `1`; `0` is what
 the incumbent GSTJ ESLint config passed, so that's the default here. It is the
 only deliberate divergence.
@@ -78,13 +90,13 @@ resolver. Flags an import or re-export that routes through the index file of the
 current file's own directory or an ancestor of it.
 
 ```ts
-// reported — the barrel above you re-exports you, so the graph loops
+// reported: the barrel above you re-exports you, so the graph loops
 import { thing } from "..";
 import { thing } from "../index";
 import { thing } from ".";
 export * from "..";
 
-// fine — sideways and downward imports name a real file
+// fine: sideways and downward imports name a real file
 import { thing } from "./thing";
 import { thing } from "../other/index";
 ```
@@ -95,7 +107,7 @@ The upstream rule can't be loaded as a jsPlugin: it calls
 `eslint-module-utils/resolve` and dies with
 `Resolve error: unable to load resolver "node".`, the same failure
 `@shopify/strict-component-boundaries` hits. The resolver turned out to buy
-nothing — the set of paths upstream reports is exactly the specifiers made of
+nothing: the set of paths upstream reports is exactly the specifiers made of
 `.`/`..` segments with an optional trailing `index`, which is decidable from
 syntax. Re-export forms are covered here and weren't upstream. Dynamic
 `import("..")` isn't covered.
@@ -103,16 +115,16 @@ syntax. Re-export forms are covered here and weren't upstream. Dynamic
 ### `magic/react-require-autocomplete`
 
 Port of `@shopify/react-require-autocomplete`. An autofillable `<input>` with no
-`autoComplete` gets whatever the browser guesses — which is how password
+`autoComplete` gets whatever the browser guesses, which is how password
 managers fill an address into a one-time-code box. `autoComplete="off"` is a
 fine answer; the rule wants the decision made.
 
-`jsx-a11y/autocomplete-valid` is **not** a substitute. It checks that an
-`autoComplete` value is legal, and says nothing when the attribute is missing —
-verified against oxlint 1.75.0.
+`jsx-a11y/autocomplete-valid` is not a substitute. It checks that an
+`autoComplete` value is legal, and says nothing when the attribute is missing
+(verified against oxlint 1.75.0).
 
-Options: `inputComponents` — component names that render an `<input>` and
-forward props.
+Options: `inputComponents` (component names that render an `<input>` and
+forward props).
 
 Two divergences from upstream, both to cut false positives: an element with a
 spread attribute is skipped (`autoComplete` may be in the spread), and a
@@ -124,7 +136,7 @@ Port of `@shopify/react-hooks-strict-return`. A hook returning `[a, b, c, d]`
 makes every call site memorise a positional order nothing checks. Two is the
 limit that keeps `const [value, setValue] = useThing()` readable.
 
-Object returns are never reported, at any size — that's the escape hatch, and
+Object returns are never reported, at any size; that's the escape hatch, and
 it matches upstream.
 
 Options: `maximumReturnValues` (default `2`). Upstream hardcodes 2.
@@ -147,9 +159,9 @@ step that couldn't point at a line or be silenced per-case.
 
 Options:
 
-- `files` — path suffixes that count as entry points. Default:
+- `files`: path suffixes that count as entry points. Default:
   `["/src/index.ts", "/src/index.tsx", "/index.ts", "/index.tsx"]`
-- `allow` — path substrings permitted to keep a barrel, for grandfathered
+- `allow`: path substrings permitted to keep a barrel, for grandfathered
   facades.
 
 ```ts
@@ -183,14 +195,14 @@ root is configured, so an unrelated `something.useQuery()` is left alone.
 
 Options: `roots` (default `["api", "trpc"]`), `hooks` (default `["useQuery"]`).
 
-Not auto-fixable, deliberately. The return shape changes — `data` stops being
+Not auto-fixable, deliberately. The return shape changes: `data` stops being
 possibly-undefined, and surrounding `isLoading` / `isError` / `refetch` usage
 has to be removed by hand. A rename alone produces code that doesn't compile.
 
 ### `magic/no-manual-classname`
 
 Bans composing a `className` by hand. The attribute's value has to be a plain
-string or a call — `cn()` to merge, `cva()` / `tv()` to declare variants.
+string or a call: `cn()` to merge, `cva()` / `tv()` to declare variants.
 
 ```tsx
 // reported
@@ -234,9 +246,9 @@ the rule follows a same-file `const` into the attribute.
 
 Options:
 
-- `attributes` — default `["className", "class"]`. NativeWind's extra class
+- `attributes`: default `["className", "class"]`. NativeWind's extra class
   props (`contentContainerClassName`, `indicatorClassName`) go here.
-- `composers` — default `["cn", "cva", "twMerge", "clsx", "cx"]`, in descending
+- `composers`: default `["cn", "cva", "twMerge", "clsx", "cx"]`, in descending
   order of how often each appears across the GSTJ repos: `cn` 457 call sites,
   `cva` 20, and `twMerge`/`clsx`/`cx` only inside the six `cn` definitions
   those repos have between them. It picks the name the diagnostics tell you to
@@ -257,7 +269,7 @@ What it doesn't catch:
 - A `let`, or a name bound twice in the file. A `className` prop next to a
   hand-built `const className` is that collision, and it's a common one; the
   rule stops rather than guess which binding reaches the JSX.
-- Composition behind a function or module boundary —
+- Composition behind a function or module boundary, like
   `className={buildClasses(side)}`. The helper may use `cn` already.
 - `||` and `??`. In an attribute those read as a default
   (`className={own ?? "p-2"}`), the inverse of what `&&` does.
@@ -285,7 +297,7 @@ Measured before shipping, over the repos themselves: 22 reports in
 
 ## React Native
 
-Four rules ported from `eslint-plugin-react-native@5.0.0` (MIT — see
+Four rules ported from `eslint-plugin-react-native@5.0.0` (MIT, see
 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)). They ship from a separate
 entry point under the `react-native` namespace, and `magic-oxlint-config`'s
 `react-native` and `expo` variants enable all four at `error`, so a repo on
@@ -365,23 +377,23 @@ upstream's and the port keeps it.
 A `StyleSheet.create` entry nothing reads still gets registered at startup, and
 it is the usual residue of a deleted component.
 
-Matching is per-file and shallow, which is what keeps it quiet rather than
-noisy. A use is any `sheet.entry` member expression anywhere in the file;
-`styles.row.color` and `styles["row"]` mark nothing. And the rule reports
-nothing at all unless it detected a React component in the file, so a shared
-`styles.ts` whose sheets are consumed elsewhere stays silent.
+Matching is per-file and shallow, which is what keeps it quiet. A use is any
+`sheet.entry` member expression anywhere in the file; `styles.row.color` and
+`styles["row"]` mark nothing. And the rule reports nothing at all unless it
+detected a React component in the file, so a shared `styles.ts` whose sheets
+are consumed elsewhere stays silent.
 
 ### Divergences from upstream
 
 Three, all recorded in the rule files:
 
-- **A valueless `<View style />` no longer crashes the linter.** Upstream's
+- A valueless `<View style />` no longer crashes the linter. Upstream's
   `no-single-element-style-arrays` reads `node.value.expression` unguarded. Under
   oxlint that TypeError aborts the JS plugin host for the whole file, so every
-  rule in this plugin goes quiet on it, not just that one.
-- **The component detection walks `node.parent` instead of scopes.** Same
+  rule in this plugin goes quiet on it.
+- The component detection walks `node.parent` instead of scopes. Same
   enclosing-function sequence, no dependency on how oxlint names its scopes.
-- **`ClassProperty` is not handled.** Upstream registers that visitor and no
+- `ClassProperty` is not handled. Upstream registers that visitor and no
   parser has emitted the node since ESTree renamed it to `PropertyDefinition`,
   so the branch never runs upstream either.
 
@@ -392,7 +404,7 @@ identical `--fix` output. A fourteenth file holds the crash case, which only one
 of the two survives. `fixtures/adversarial/react-native` keeps the
 behaviour pinned.
 
-### The three rules that did not come along
+### Not ported
 
 `no-raw-text`, `sort-styles` and `split-platform-components` are not ported. The
 preset set all three to `off`, so nothing here loses coverage, but a repo that
@@ -405,24 +417,24 @@ jsPlugins: [
 rules: { "rn-upstream/no-raw-text": "error" },
 ```
 
-The namespace has to differ from `react-native` — the preset already claims that
-one. Doing this puts the eslint peer back in the tree; pin `eslint` to `^10` if
+The namespace has to differ from `react-native` (the preset already claims that
+one). Doing this puts the eslint peer back in the tree; pin `eslint` to `^10` if
 that matters (the root README has the snippet).
 
 ## Rules covered natively instead
 
 These have a real oxlint rule behind them, so there's nothing to port. Wire them
-in config, not here.
+in the consuming repo's config.
 
 | ESLint rule                         | oxlint replacement                                                                         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| `@shopify/no-namespace-imports`     | `import/no-namespace` with `ignore` globs — already on in `magic-oxlint-config`            |
+| `@shopify/no-namespace-imports`     | `import/no-namespace` with `ignore` globs (already on in `magic-oxlint-config`)            |
 | `@shopify/restrict-full-import`     | `no-restricted-imports` with `importNames: ["default"]`, plus `import/no-namespace`        |
-| `@shopify/jsx-no-hardcoded-content` | `react/jsx-no-literals` — see the snippet below                                            |
+| `@shopify/jsx-no-hardcoded-content` | `react/jsx-no-literals` (snippet below)                                                    |
 | `react/jsx-no-leaked-render`        | `safe-jsx/jsx-explicit-boolean` for the `&&` case; the oxlint rule was removed before 1.75 |
 | `prefer-arrow-functions/*`          | `func-style: ["error", "expression"]`                                                      |
 | `unused-imports/no-unused-imports`  | `no-unused-vars` already reports unused imports                                            |
-| `import/order`                      | Not a lint concern here — `oxfmt` sorts imports                                            |
+| `import/order`                      | `oxfmt` sorts imports, so it never reaches lint                                            |
 
 `restrict-full-import` is per-repo config, since which packages are off-limits
 is a project decision:
@@ -453,19 +465,19 @@ When you want it:
 }]
 ```
 
-Two gotchas found while verifying this against 1.75.0. `elementOverrides` needs
-`allowElement: true` to exempt an element — `{ "noStrings": false }` reads like
-it should work and does nothing. And `restrictedAttributes` does **not** narrow
-checking to the attributes you list: it reports every string attribute and just
-uses a different message for the listed ones, so `ignoreProps: true` is the way
-to stay on children only.
+`elementOverrides` needs `allowElement: true` to exempt an element;
+`{ "noStrings": false }` reads like it should work and does nothing. And
+`restrictedAttributes` does not narrow checking to the attributes you list: it
+reports every string attribute and just uses a different message for the listed
+ones, so `ignoreProps: true` is the way to stay on children only. Both verified
+against 1.75.0.
 
 ## Rules considered and dropped
 
-| ESLint rule                            | Why it isn't here                                                                                                                                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@shopify/strict-component-boundaries` | Can't load under oxlint (`unable to load resolver "node"`), and its core heuristic — a PascalCase path segment means "another component" — is dead under the house kebab-case filename convention. See below |
-| `testing-library/*`                    | `eslint-plugin-testing-library` works as a jsPlugin unmodified; add it per repo rather than shipping the dependency to everyone                                                                              |
+| ESLint rule                            | Why it isn't here                                                                                                                                                                                          |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@shopify/strict-component-boundaries` | Can't load under oxlint (`unable to load resolver "node"`), and its core heuristic (a PascalCase path segment means "another component") is dead under the house kebab-case filename convention. See below |
+| `testing-library/*`                    | `eslint-plugin-testing-library` works as a jsPlugin unmodified; add it per repo rather than shipping the dependency to everyone                                                                            |
 
 For component boundaries, `no-restricted-imports` `patterns` does the job and is
 architecture-specific anyway, so it belongs in the consuming repo:
@@ -480,41 +492,40 @@ architecture-specific anyway, so it belongs in the consuming repo:
 Verified on 1.75.0: reports `../components/Card/internal/thing`, leaves
 `../components/Card` alone.
 
-## Why not just load `@shopify/eslint-plugin` as a jsPlugin
+## Porting vs loading `@shopify/eslint-plugin`
 
-It was tested, not assumed. Under oxlint 1.75.0 with
-`@shopify/eslint-plugin@50.0.0` loaded as
+Measured under oxlint 1.75.0, with `@shopify/eslint-plugin@50.0.0` loaded as
 `{ name: "shopify", specifier: "@shopify/eslint-plugin" }`:
 
-| Rule                           | Result under oxlint                          |
-| ------------------------------ | -------------------------------------------- |
-| `prefer-early-return`          | Fires correctly                              |
-| `no-namespace-imports`         | Fires correctly                              |
-| `restrict-full-import`         | Fires correctly                              |
-| `jsx-no-hardcoded-content`     | Fires correctly                              |
-| `react-require-autocomplete`   | Fires correctly                              |
-| `react-hooks-strict-return`    | Fires correctly                              |
-| `no-ancestor-directory-import` | **Fails** — `unable to load resolver "node"` |
-| `strict-component-boundaries`  | **Fails** — `unable to load resolver "node"` |
+| Rule                           | Result under oxlint                     |
+| ------------------------------ | --------------------------------------- |
+| `prefer-early-return`          | Fires correctly                         |
+| `no-namespace-imports`         | Fires correctly                         |
+| `restrict-full-import`         | Fires correctly                         |
+| `jsx-no-hardcoded-content`     | Fires correctly                         |
+| `react-require-autocomplete`   | Fires correctly                         |
+| `react-hooks-strict-return`    | Fires correctly                         |
+| `no-ancestor-directory-import` | Fails: `unable to load resolver "node"` |
+| `strict-component-boundaries`  | Fails: `unable to load resolver "node"` |
 
-So compatibility isn't the blocker; weight is. `@shopify/eslint-plugin` pulls in
-262 transitive packages and ~97 MB — a second copy of the ESLint ecosystem
-(`eslint-plugin-import-x`, `eslint-plugin-jest`, `eslint-plugin-jsx-a11y`,
-`typescript-eslint`, `prettier`) — landing in every consumer of a config whose
-entire point is that oxlint replaced all of it. Porting the four rules worth
-keeping is a few hundred lines with tests.
+Compatibility mostly holds; the blocker is weight. `@shopify/eslint-plugin`
+pulls in 262 transitive packages and ~97 MB, a second copy of the ESLint
+ecosystem (`eslint-plugin-import-x`, `eslint-plugin-jest`,
+`eslint-plugin-jsx-a11y`, `typescript-eslint`, `prettier`), landing in every
+consumer of a config whose entire point is that oxlint replaced all of it.
+Porting the four rules worth keeping is a few hundred lines with tests.
 
 ## Authoring notes
 
-Every rule ships both entry points at once — `createOnce` (oxlint's fast path,
+Every rule ships both entry points at once, `createOnce` (oxlint's fast path,
 where the visitor object is built once for the whole run instead of per file)
-and `create` (ESLint's classic API) — from a single `createChecks` body. See
+and `create` (ESLint's classic API), from a single `createChecks` body. See
 `src/rule-api.ts`. There's no environment detection: oxlint's own types say
 "if `createOnce` method is present, `create` is ignored", and ESLint doesn't
 know `createOnce` exists, so each linter picks its own path.
 
 Because the `createOnce` closure runs once per lint run, anything that varies
-per file has to be read inside `before()` — the filename, and `context.options`,
+per file has to be read inside `before()`: the filename, and `context.options`,
 which oxlint documents as "rule options for this rule on this file" and which
 `overrides` / nested configs can change between files.
 

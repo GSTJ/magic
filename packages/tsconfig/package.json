@@ -1,6 +1,6 @@
 {
   "name": "magic-tsconfig",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Shared TypeScript config bases for GSTJ projects (base, internal-package, nextjs, expo).",
   "keywords": [
     "config",
