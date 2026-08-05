@@ -27,8 +27,8 @@ const defaultRoot = join(import.meta.dirname, "..");
 const RENOVATE_SCHEMA = "https://docs.renovatebot.com/renovate-schema.json";
 const RELEASE_AGE = "14 days";
 
-/** The only rule allowed to opt out of the release-age quarantine. */
-const RELEASE_AGE_EXEMPT = "GSTJ/magic";
+/** First-party package and action rules allowed to skip the quarantine. */
+const RELEASE_AGE_EXEMPTS = ["GSTJ/magic", "magic-"];
 
 /**
  * Denies automerge on majors, but may still be scoped to some subset of them.
@@ -174,10 +174,12 @@ const releaseAgeProblems = (preset) => {
 
   for (const [index, rule] of rulesIn(preset).entries()) {
     const names = rule.matchPackageNames ?? [];
-    const exempt = names.some((name) => name.startsWith(RELEASE_AGE_EXEMPT));
+    const exempt = names.some((name) =>
+      RELEASE_AGE_EXEMPTS.some((prefix) => name.startsWith(prefix)),
+    );
     if ("minimumReleaseAge" in rule && !exempt) {
       problems.push(
-        `packageRules[${index}] overrides minimumReleaseAge; only the ${RELEASE_AGE_EXEMPT} tag rule may, because tags are not npm releases.`,
+        `packageRules[${index}] overrides minimumReleaseAge; only first-party GSTJ/magic actions and magic-* packages may skip it.`,
       );
     }
   }

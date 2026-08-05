@@ -43,10 +43,11 @@
       "automerge": false
     },
     {
-      "description": "The magic-* packages are the shared tooling. They land together so a config bump can't outrun the plugin it needs.",
+      "description": "The magic-* packages are first-party shared tooling. They land together so a config bump can't outrun the plugin it needs, and they may move immediately because GSTJ owns their source and publish path.",
       "matchPackageNames": ["magic-{/,}**"],
       "groupName": "magic tooling",
-      "automerge": true
+      "automerge": true,
+      "minimumReleaseAge": null
     },
     {
       "description": "The PostHog SDKs share @posthog/core and are released in lockstep several times a week. Group them so a repo gets one PR instead of four, and so posthog-js never lands a version ahead of the @posthog/react that peers on it.",

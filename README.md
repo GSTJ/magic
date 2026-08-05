@@ -503,8 +503,7 @@ install. It reads like local-machine noise; it is not. **Commit it.**
 # pnpm-workspace.yaml
 minimumReleaseAge: 20160 # 14 days, matching the shared Renovate preset
 minimumReleaseAgeExclude:
-  - magic-oxlint-config@1.0.0
-  - magic-tsconfig@1.0.0
+  - "magic-*" # first-party packages published from GSTJ/magic
 ```
 
 Delete the entries once the packages age past the window. The shared Renovate
@@ -544,9 +543,10 @@ pnpm install                    # rewrites the lockfile onto 1.2.0
 pnpm install --frozen-lockfile  # confirms; no-op
 ```
 
-Version-pinned entries, not `magic-*`: adopting a same-day release is a decision
-worth being explicit about, and an unpinned exclusion silently stays true for
-every future release too.
+Other entries stay version-pinned: adopting a same-day third-party release is a
+decision worth being explicit about, and an unpinned exclusion silently stays
+true for every future release. `magic-*` is deliberately unpinned because it is
+the first-party exception.
 
 **`pnpm dedupe --check` is not read-only.** On 11.17.0 it runs a full resolution
 and prunes packages out of `node_modules`, after which
@@ -1257,11 +1257,12 @@ That resolves to `default.json` at the root of this repo, which is where the
 preset lives. Renovate deprecated serving a preset from `renovate.json`; this
 repo's own `renovate.json` just extends the preset like everyone else's.
 
-New releases are quarantined for 14 days. A missing registry timestamp fails
+Third-party releases are quarantined for 14 days. A missing registry timestamp fails
 closed, and Renovate keeps pending updates on the Dependency Dashboard instead
 of opening early branches. Eligible updates are merged by Renovate only after
 the repository's checks pass; majors and the hand-held tool groups below still
-wait for review.
+wait for review. `magic-*` packages and `GSTJ/magic` action tags are first-party
+exceptions and may move immediately.
 
 ### What automerges
 

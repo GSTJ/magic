@@ -194,7 +194,7 @@ test("vulnerability PRs keep the same quarantine", () => {
   );
 });
 
-test("only the GSTJ/magic tag rule may drop the release-age quarantine", () => {
+test("only first-party magic rules may drop the release-age quarantine", () => {
   withPreset(
     preset([
       {
@@ -215,6 +215,22 @@ test("only the GSTJ/magic tag rule may drop the release-age quarantine", () => {
         problems[0],
         /packageRules\[1\] overrides minimumReleaseAge/,
       );
+    },
+  );
+});
+
+test("first-party magic packages may move immediately", () => {
+  withPreset(
+    preset([
+      {
+        description: "First-party shared tooling.",
+        matchPackageNames: ["magic-{/,}**"],
+        minimumReleaseAge: null,
+      },
+      MAJOR_GATE,
+    ]),
+    (problems) => {
+      assert.deepEqual(problems, []);
     },
   );
 });
