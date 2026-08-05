@@ -1,10 +1,14 @@
 packages:
   - "packages/*"
+  - "apps/*"
   - "fixtures/*"
 # `posthog-js` pulls in core-js, whose postinstall script only prints a funding
 # banner. Denied, so `pnpm install` stops asking and CI stays quiet.
 allowBuilds:
   core-js: false
+  # apps/demo-video pulls esbuild in through @remotion/cli. Its postinstall
+  # fetches/validates the platform binary; blocked, Remotion's bundler breaks.
+  esbuild: true
 # magic is the first-party exception to the shared 14-day supply-chain
 # quarantine. Its own dependency updates may resolve immediately; consumers
 # still inherit the 14-day floor from default.json and their workspace policy.

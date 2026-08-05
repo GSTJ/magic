@@ -1,47 +1,51 @@
-# magic-theme
+<p align="center">
+  <img alt="Magic Theme coloring an editor window and a terminal window side by side" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme.png" />
+</p>
 
-Magic Theme for editors and terminals. Install projects the VS Code theme JSON
-into each tool.
+<p align="center">One VS Code theme JSON, projected into six editors and terminals.</p>
+
+<p align="center">
+  <a aria-label="npm version" href="https://www.npmjs.com/package/magic-theme"><img alt="npm version" src="https://shieldcn.dev/npm/magic-theme.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="npm downloads" href="https://www.npmjs.com/package/magic-theme"><img alt="npm downloads" src="https://shieldcn.dev/npm/magic-theme/downloads.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="GitHub stars" href="https://github.com/GSTJ/magic/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/GSTJ/magic/stars.svg?variant=branded&size=xs&mode=light" /></a>
+  <a aria-label="license" href="https://github.com/GSTJ/magic/blob/main/LICENSE"><img alt="license" src="https://shieldcn.dev/github/GSTJ/magic/license.svg?variant=branded&size=xs&mode=light" /></a>
+</p>
 
 ## Install
 
 ```sh
-pnpm --filter magic-theme exec magic-theme install
+pnpm add -D magic-theme
+pnpm exec magic-theme install
 ```
 
-Or after publish:
+With no arguments, `install` writes every target it detects on the machine. Pass names to limit it:
 
 ```sh
-npx magic-theme install
+pnpm exec magic-theme install cursor warp
 ```
 
-Default targets: apps we already have (`cursor`, `vscode`, `warp`, `ghostty`,
-`alacritty`, `orca`). Pass names to limit:
+Remove everything it wrote, or print where a target's file lands:
 
 ```sh
-magic-theme install cursor warp
+pnpm exec magic-theme uninstall
+pnpm exec magic-theme path ghostty
 ```
 
-## Layout
+## Palette
 
-| Path                                         | Role                                 |
-| -------------------------------------------- | ------------------------------------ |
-| `vscode/themes/magic-theme-color-theme.json` | colors + syntax                      |
-| `lib/project.mjs`                            | bg / fg / ANSI roles from that theme |
-| `lib/formats.mjs`                            | Warp, Ghostty, Alacritty             |
-| `bin/magic-theme.mjs`                        | write into each app's config dir     |
+<p align="center">
+  <img alt="Magic Theme palette strip: bg, fg, accent, success, error, warning, and the 16 ANSI colors" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme-palette.png" />
+</p>
 
-Edit the VS Code theme, re-run install.
+## What it themes
 
-## Elsewhere
+Six targets: `cursor`, `vscode`, `warp`, `ghostty`, `alacritty`, `orca`.
 
-| App              | After install                              |
-| ---------------- | ------------------------------------------ |
-| Cursor / VS Code | theme **Magic Theme**                      |
-| Warp / Orca      | Themes UI                                  |
-| Ghostty          | `theme = magic-theme`                      |
-| Alacritty        | import the generated toml                  |
-| Windows Terminal | `toWindowsTerminal()` in `lib/formats.mjs` |
+- Cursor and VS Code get the theme as an extension; pick "Magic Theme" in the color theme picker.
+- Warp and Orca get a theme file; pick it in their Themes UI.
+- Ghostty gets a theme file; set `theme = magic-theme` in its config.
+- Alacritty gets a generated toml; add
+  `import = ["~/.config/alacritty/themes/magic-theme.toml"]` to `alacritty.toml`.
 
-Broader multi-app projection from a VS Code theme:
-[monotheme](https://github.com/eduwass/monotheme).
+Edit the VS Code theme JSON, re-run `install`, and every target follows. Broader multi-app
+projection from a VS Code theme: [monotheme](https://github.com/eduwass/monotheme).

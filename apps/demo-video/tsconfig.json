@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "magic-tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // tsc follows the workspace symlink into magic-theme's plain .mjs, and
+    // that package types itself with JSDoc it never typechecks. Its surface is
+    // declared in src/magic-theme.d.ts instead; don't lint its internals here.
+    "checkJs": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "out", "remotion.config.ts"]
+}

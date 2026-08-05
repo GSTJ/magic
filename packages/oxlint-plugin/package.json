@@ -1,6 +1,6 @@
 {
   "name": "magic-oxlint-plugin",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "oxlint JS-plugin rules for GSTJ projects. Opt-in under `magic/*`: prefer-early-return, no-ancestor-directory-import, no-barrel-file, no-manual-classname, no-module-mocks, prefer-suspense-query, react-hooks-strict-return, react-require-autocomplete. Plus `react-native/*` — no-inline-styles, no-color-literals, no-single-element-style-arrays, no-unused-styles — ported from eslint-plugin-react-native and wired by magic-oxlint-config.",
   "keywords": [
     "eslint-plugin",
