@@ -1,8 +1,8 @@
 {
   "name": "magic-theme",
-  "displayName": "Magic Dracula",
+  "displayName": "Magic Theme",
   "version": "0.3.0",
-  "description": "Quiet Dracula chrome for GSTJ. From GSTJ/magic.",
+  "description": "Quiet theme chrome for GSTJ. From GSTJ/magic.",
   "categories": [
     "Themes"
   ],
@@ -17,9 +17,9 @@
   "contributes": {
     "themes": [
       {
-        "label": "Magic Dracula",
+        "label": "Magic Theme",
         "uiTheme": "vs-dark",
-        "path": "./themes/magic-dracula-color-theme.json"
+        "path": "./themes/magic-theme-color-theme.json"
       }
     ]
   },

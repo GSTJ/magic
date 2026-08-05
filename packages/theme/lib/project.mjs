@@ -40,7 +40,7 @@ const slugify = (name) =>
 /** @param {{ name?: string, type?: string, colors: Record<string, string>, tokenColors?: unknown[] }} theme */
 export function project(theme) {
   const c = theme.colors;
-  const name = theme.name ?? "Magic Dracula";
+  const name = theme.name ?? "Magic Theme";
   const ansi = ANSI_KEYS.map((k, i) =>
     pick(c, [k], i < 8 ? "#888888" : "#cccccc"),
   );

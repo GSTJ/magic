@@ -1,6 +1,6 @@
 {
   "$schema": "vscode://schemas/color-theme",
-  "name": "Magic Dracula",
+  "name": "Magic Theme",
   "type": "dark",
   "semanticHighlighting": true,
   "colors": {

@@ -18,7 +18,7 @@ const root = join(import.meta.dirname, "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const theme = JSON.parse(
   readFileSync(
-    join(root, "vscode", "themes", "magic-dracula-color-theme.json"),
+    join(root, "vscode", "themes", "magic-theme-color-theme.json"),
     "utf8",
   ),
 );
