@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Before and after code panes: messy imports on the left, the same file formatted and sorted into import groups on the right, with the react group highlighted" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxfmt-config.png" />
+  <img alt="Before and after code panes: messy imports on the left, the same file formatted and sorted into import groups on the right, with the react group highlighted" src="https://assets.gabrieltaveira.dev/magic/magic-oxfmt-config.png" />
 </p>
 
 <p align="center">Import one file. Format and sort imports in one pass, no separate plugin needed.</p>

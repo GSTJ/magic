@@ -15,8 +15,8 @@ READMEs point straight at the committed file. Nothing is hand-screenshotted.
 
 Each package owns one composition under `src/compositions/`, built from shared primitives
 (windows, code panes, sparkles, backgrounds) and colors projected live from `magic-theme`'s
-published theme JSON. Render locally in the PR that changes a composition; nothing in CI
-regenerates these files, so whatever is committed in `media/` is what ships.
+published theme JSON. Render locally to preview; on merge, CI re-renders
+everything and publishes to the CDN the READMEs point at, so nothing goes stale.
 
 ```sh
 pnpm --filter magic-video dev          # Remotion Studio

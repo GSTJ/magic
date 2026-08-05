@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="A README skeleton with the standard's sections highlighted" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-readme.png" />
+  <img alt="A README skeleton with the standard's sections highlighted" src="https://assets.gabrieltaveira.dev/magic/magic-readme.png" />
 </p>
 
 <p align="center">Scaffold a README from the standard. Check any file back and get a line number for every rule it breaks.</p>
@@ -89,6 +89,6 @@ exists, configuration, gotchas. Relocate it under clear H2 sections after `## In
 Hero images come from one pipeline. `magic-video`, the Remotion package in this repo
 (`packages/video`), renders every package's hero still and demo media into the repo root `media/`
 directory, which is committed. READMEs then point at the raw GitHub URL, in the shape
-`https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-readme.png`, so the same file
+`https://assets.gabrieltaveira.dev/magic/magic-readme.png`, so the same file
 renders on GitHub and on npm. Nothing is hand-screenshotted; the stills share the repo's own theme
 and brand primitives.

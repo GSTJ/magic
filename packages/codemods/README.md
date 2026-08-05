@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Terminal demo: magic-kebab prints a rename plan under --dry-run, then --write applies it while an editor's imports flash to their kebab-case names" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-codemods-demo.gif" />
+  <img alt="Terminal demo: magic-kebab prints a rename plan under --dry-run, then --write applies it while an editor's imports flash to their kebab-case names" src="https://assets.gabrieltaveira.dev/magic/magic-codemods-demo.gif" />
 </p>
 
 <p align="center">Renames files to kebab-case and rewrites every import that pointed at them.</p>

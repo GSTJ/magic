@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="The five presets as layered cards: base, then react, branching into react-native and next, with expo stacked on react-native" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-oxlint-config.png" />
+  <img alt="The five presets as layered cards: base, then react, branching into react-native and next, with expo stacked on react-native" src="https://assets.gabrieltaveira.dev/magic/magic-oxlint-config.png" />
 </p>
 
 <p align="center">Export the variant that matches your stack; every preset underneath it is already tuned.</p>

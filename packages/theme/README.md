@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Magic Theme coloring an editor window and a terminal window side by side" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme.png" />
+  <img alt="Magic Theme coloring an editor window and a terminal window side by side" src="https://assets.gabrieltaveira.dev/magic/magic-theme.png" />
 </p>
 
 <p align="center">Edit one theme JSON. Run install to match it across your editor and every terminal you use.</p>
@@ -31,7 +31,7 @@ pnpm exec magic-theme path ghostty
 ## Palette
 
 <p align="center">
-  <img alt="Magic Theme palette strip: bg, fg, accent, success, error, warning, and the 16 ANSI colors" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-theme-palette.png" />
+  <img alt="Magic Theme palette strip: bg, fg, accent, success, error, warning, and the 16 ANSI colors" src="https://assets.gabrieltaveira.dev/magic/magic-theme-palette.png" />
 </p>
 
 ## Targets

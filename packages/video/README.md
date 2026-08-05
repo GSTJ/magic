@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Brand reel: magic-video's own window frame assembles and types out reel.tsx while magic-theme's palette flows in beside it, then the scene deals out into the closing contact sheet of every rendered still" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-video-demo.gif" />
+  <img alt="Brand reel: magic-video's own window frame assembles and types out reel.tsx while magic-theme's palette flows in beside it, then the scene deals out into the closing contact sheet of every rendered still" src="https://assets.gabrieltaveira.dev/magic/magic-video-demo.gif" />
 </p>
 
 <p align="center">Compose a still from shared primitives and theme colors. Remotion renders it straight into media/.</p>
@@ -18,13 +18,13 @@
    (`social`, `magic`) and this package's own still live in `src/compositions/`.
 2. `root.tsx` imports each package's `demo/media.tsx` and registers every composition; render
    scripts point at its ids.
-3. Remotion renders each one straight into `../../media/` at the repo root, the folder every
-   README's hero image points at.
-4. Render locally in the PR that changes a composition. Nothing in CI regenerates these files;
-   whatever is committed in `media/` is what every README shows.
+3. Remotion renders each one into `media/` at the repo root, gitignored scratch for local
+   preview.
+4. On merge to `main`, CI re-renders everything and publishes to the CDN the READMEs point at,
+   so a palette or primitive change updates every image and video without anyone remembering to.
 
 <p align="center">
-  <img alt="A contact sheet of the stills magic-video renders into media/, one tinted card per package" src="https://raw.githubusercontent.com/GSTJ/magic/main/media/magic-video.png" />
+  <img alt="A contact sheet of the stills magic-video renders into media/, one tinted card per package" src="https://assets.gabrieltaveira.dev/magic/magic-video.png" />
 </p>
 
 ## Install

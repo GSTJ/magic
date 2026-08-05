@@ -12,3 +12,6 @@ fixtures/adversarial/format/work/
 .env
 .env.*
 !.env.example
+
+# Rendered locally for preview; CI renders and publishes the canonical copies to the CDN.
+media/

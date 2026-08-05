@@ -1107,14 +1107,12 @@ Secrets, both required: `CLOUDFLARE_API_TOKEN` (needs Account > R2 > Edit on the
 
 ### Render locally, publish in CI
 
-For now, `media/` is still committed and every README's hero image points at the checked-in file,
-not the CDN. Render locally in the PR that changes a composition; this workflow runs on merge to
-`main` and overwrites the matching R2 objects, so the served copy at `base-url` stays honest with
-what just got committed instead of drifting from it. It writes nothing back to the repository: no
-commit, no branch, no PR, and it does not stand in for rendering before review.
-
-A follow-up PR flips this: `media/` becomes gitignored scratch and the CDN becomes the source of
-truth.
+`media/` is gitignored scratch; the CDN is the source of truth and every README's hero image
+points at `base-url`. Render locally to preview a composition change in the Remotion studio or on
+disk, then merge: this workflow runs on `main` whenever a composition, primitive, or the theme
+palette changes, re-renders everything, and overwrites the matching R2 objects with a sha256
+read-back before declaring success. It writes nothing back to the repository: no commit, no
+branch, no PR.
 
 ---
 
