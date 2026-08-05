@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { constants, copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { validateReadme } from "../lib/validate.mjs";
@@ -22,12 +22,25 @@ Usage:
 const init = (dir) => {
   const target = resolve(dir ?? ".");
   const dest = join(target, "README.md");
-  if (existsSync(dest)) {
-    console.error(`${dest} already exists; move it aside first.`);
-    process.exit(1);
-  }
   mkdirSync(target, { recursive: true });
-  copyFileSync(join(root, "templates", "README.md"), dest);
+  try {
+    copyFileSync(
+      join(root, "templates", "README.md"),
+      dest,
+      constants.COPYFILE_EXCL,
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "EEXIST"
+    ) {
+      console.error(`${dest} already exists; move it aside first.`);
+      process.exit(1);
+    }
+    throw error;
+  }
   console.log(`wrote ${dest}. Fill every <placeholder>, then run:`);
   console.log(`  magic-readme check ${dest}`);
 };

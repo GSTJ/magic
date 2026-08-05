@@ -1,6 +1,6 @@
 {
   "name": "magic-readmes",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Scaffold a README from the shared standard and check any file back against it.",
   "keywords": [
     "cli",
