@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GSTJ shared Renovate preset. Consume with \"extends\": [\"github>GSTJ/magic\"], which Renovate resolves to this file. Presets must live in default.json — serving one from renovate.json is deprecated. minimumReleaseAge matches the 3 days (4320 minutes) magic's own pnpm-workspace.yaml quarantines for: pnpm 11 enforces its own release-age floor on --frozen-lockfile, so a same-day release automerged here produces a lockfile CI cannot install until the package ages out. One number, two tools.",
+  "description": "GSTJ shared Renovate preset. Consume with \"extends\": [\"github>GSTJ/magic\"], which Renovate resolves to this file. Presets must live in default.json — serving one from renovate.json is deprecated. Dependency releases stay quarantined for 14 days in both Renovate and pnpm. Renovate suppresses branches during that window and refuses releases without a registry timestamp; pnpm enforces the same floor on frozen lockfiles. Renovate merges eligible non-major updates itself, after repository checks pass.",
   "extends": [
     "config:recommended",
     ":semanticCommits",
@@ -8,7 +8,18 @@
   ],
   "rebaseWhen": "behind-base-branch",
   "postUpdateOptions": ["pnpmDedupe"],
-  "minimumReleaseAge": "3 days",
+  "minimumReleaseAge": "14 days",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "internalChecksFilter": "strict",
+  "prCreation": "not-pending",
+  "platformAutomerge": false,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "minimumReleaseAge": "14 days",
+    "prCreation": "not-pending"
+  },
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true,

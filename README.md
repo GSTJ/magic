@@ -486,10 +486,10 @@ Leaving one in place breaks the next install.
 **pnpm 11 ignores the `pnpm` field in `package.json`.** Settings move to
 `pnpm-workspace.yaml`, which `pnpm install` auto-creates if it is missing.
 
-**The 24h release quarantine will fail `--frozen-lockfile` on a fresh publish.**
-pnpm 11 defaults `minimumReleaseAge` to 24 hours and enforces it on
-`--frozen-lockfile`, so a repo that adopts magic within a day of a `magic-*`
-release gets:
+**The release quarantine applies to `--frozen-lockfile` too.** pnpm 11 defaults
+`minimumReleaseAge` to 24 hours. GSTJ consumers raise that to 14 days and pnpm
+enforces it on `--frozen-lockfile`, so a repo that adopts a dependency inside
+that window gets:
 
 ```
 [ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 5 lockfile entries failed verification:
@@ -501,16 +501,20 @@ install. It reads like local-machine noise; it is not. **Commit it.**
 
 ```yaml
 # pnpm-workspace.yaml
-minimumReleaseAge: 4320 # 3 days, matching the shared Renovate preset
+minimumReleaseAge: 20160 # 14 days, matching the shared Renovate preset
 minimumReleaseAgeExclude:
   - magic-oxlint-config@1.0.0
   - magic-tsconfig@1.0.0
 ```
 
 Delete the entries once the packages age past the window. The shared Renovate
-preset sets `minimumReleaseAge: "3 days"` for the same reason from the other
-side: without it Renovate automerges a same-day release that pnpm then refuses to
-install, and CI goes red on a PR nobody touched and green again the next day.
+preset sets `minimumReleaseAge: "14 days"` for the same reason from the other
+side. It requires registry timestamps and does not create the branch until the
+window clears. Vulnerability-alert PRs use the same quarantine.
+
+`GSTJ/magic` itself is the explicit first-party exception. Its `renovate.json`
+sets the age to `0 days` and its workspace sets `minimumReleaseAge: 0`, so this
+repo can move immediately. That exception does not flow into consumers.
 
 **Upgrading inside the window needs BOTH versions listed, briefly.** This is the
 step everyone gets wrong, because the obvious edit — bump `package.json` to
@@ -1252,6 +1256,12 @@ tracked file at all says so with a warning and falls back to a date bucket.
 That resolves to `default.json` at the root of this repo, which is where the
 preset lives. Renovate deprecated serving a preset from `renovate.json`; this
 repo's own `renovate.json` just extends the preset like everyone else's.
+
+New releases are quarantined for 14 days. A missing registry timestamp fails
+closed, and Renovate keeps pending updates on the Dependency Dashboard instead
+of opening early branches. Eligible updates are merged by Renovate only after
+the repository's checks pass; majors and the hand-held tool groups below still
+wait for review.
 
 ### What automerges
 

@@ -2255,3 +2255,29 @@ Every site keeps the same order: overview/result, installation, five-minute
 quickstart, task guides, reference, troubleshooting. Generated reference follows
 the task-first material. This is the central product decision: better CSS around
 a declaration dump would still be declaration-dump documentation.
+
+## 13. Dependency updates wait 14 days, except here
+
+Changed 2026-08-04. The old three-day floor covered npm's unpublish window but
+was too short for the next supply-chain compromise to be reported, removed from
+the registry and reflected in advisory data. Every GSTJ consumer now applies the
+same 14-day floor twice: Renovate refuses to create a branch for a younger
+release, and pnpm refuses to install one even through lockfile maintenance.
+Releases without a registry timestamp fail closed.
+
+Renovate handles GitHub vulnerability alerts so Dependabot's separate security
+PR generator can be disabled without losing alerts. Security fixes keep the same
+age floor; a new package version is not trusted merely because its release notes
+say it fixes a vulnerability. OSV checks add a second source for direct
+dependency advisories and malicious-package flags.
+
+Non-major updates still automerge, but Renovate performs the merge after it sees
+the repository checks pass. GitHub's platform automerge is deliberately off in
+the preset: most small OSS repos do not protect their default branch with a
+required-check list, and GitHub can otherwise merge before a check has even
+started. Majors and the existing tool-specific exceptions still wait for a
+human.
+
+`GSTJ/magic` is the sole repo-level exception. We own its release path and use
+it to distribute the policy, so its Renovate and pnpm age floors are both zero.
+Consumers do not inherit that local override.

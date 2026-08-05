@@ -1,5 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "This repo's own Renovate config. The shared preset lives in default.json — that is the file Renovate resolves \"github>GSTJ/magic\" to, and serving a preset from renovate.json is deprecated.",
-  "extends": ["local>GSTJ/magic"]
+  "description": "This repo's own Renovate config. The shared preset lives in default.json — that is the file Renovate resolves \"github>GSTJ/magic\" to, and serving a preset from renovate.json is deprecated. magic is the first-party exception to the shared 14-day quarantine, so its dependency updates can move immediately while still waiting for checks before merge.",
+  "extends": ["local>GSTJ/magic"],
+  "minimumReleaseAge": "0 days",
+  "vulnerabilityAlerts": {
+    "minimumReleaseAge": "0 days",
+    "prCreation": "immediate"
+  }
 }
