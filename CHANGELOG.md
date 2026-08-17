@@ -3,6 +3,19 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v1.19.4
+
+The release publishes `magic-codemods@1.1.6`. The repo release is `v1.19.4`,
+and `v1` moves onto it.
+
+### Security
+
+`magic-kebab` now refuses tracked source paths with symbolic-link components or
+multiple hard links. Its import rewriter previously followed a link and could
+change a file outside the repository during `--write`. Source reads and writes
+also use `O_NOFOLLOW` file descriptors and compare the opened inode with the
+tracked path before editing.
+
 ## 2026-08-17 - Isolate Maestro temporary output
 
 The repo release is `v1.19.3`, and `v1` moves onto it. Package versions stay

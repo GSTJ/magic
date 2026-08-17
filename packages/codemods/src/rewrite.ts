@@ -12,6 +12,7 @@ import {
   SyntaxKind,
 } from "ts-morph";
 
+import { readTrackedSourceFile, writeTrackedSourceFile } from "./git.ts";
 import { isLintable, stemOf } from "./kebab.ts";
 import { isAliasShaped } from "./resolve.ts";
 
@@ -266,7 +267,13 @@ export const rewriteImports = (
     .filter(
       (path) => isLintable(basename(path)) && existsSync(join(root, path)),
     )
-    .map((path) => project.addSourceFileAtPath(join(root, path)));
+    .map((path) =>
+      project.createSourceFile(
+        join(root, path),
+        readTrackedSourceFile(root, path),
+        { overwrite: true },
+      ),
+    );
 
   /**
    * Decide what one specifier becomes: an edit, a note for a human, or nothing.
@@ -396,7 +403,11 @@ export const rewriteImports = (
       for (const entry of fileEdits) {
         entry.site.literal.setLiteralValue(entry.outcome.to);
       }
-      sourceFile.saveSync();
+      writeTrackedSourceFile(
+        root,
+        relative(root, sourceFile.getFilePath()),
+        sourceFile.getFullText(),
+      );
     }
   }
 
