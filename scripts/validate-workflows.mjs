@@ -82,6 +82,46 @@ export const problemsWithUses = (value, { isReusable, raw = "" }) => {
   return problems;
 };
 
+/** Keep the Maestro report workspace independent of caller-controlled labels. */
+export const problemsWithMaestroWorkspace = (text) => {
+  const marker = "    - name: 🗂 Resolve the flow list";
+  const start = text.indexOf(marker);
+  if (start === -1) return ["run-maestro has no flow-resolution step."];
+
+  const next = text.indexOf("\n    - name:", start + marker.length);
+  const step = text.slice(start, next === -1 ? undefined : next);
+  const problems = [];
+
+  if (/\bIN_NAME\b/.test(step)) {
+    problems.push(
+      "run-maestro flow resolution exposes the caller-controlled name input to filesystem setup.",
+    );
+  }
+  if (
+    !/^\s*work="\$\(mktemp -d "\$\{RUNNER_TEMP:-\/tmp\}\/magic-maestro\.XXXXXX"\)"\s*$/m.test(
+      step,
+    )
+  ) {
+    problems.push(
+      "run-maestro flow resolution must create its workspace with mktemp under RUNNER_TEMP.",
+    );
+  }
+  const recursivelyRemoves = step.split("\n").some((line) => {
+    const match = /^\s*rm\s+(?<args>.+)$/.exec(line);
+    return (
+      match &&
+      /(?:^|\s)(?:-[a-z]*r[a-z]*|--recursive)(?=\s|$)/i.test(match.groups.args)
+    );
+  });
+  if (recursivelyRemoves) {
+    problems.push(
+      "run-maestro flow resolution must not recursively remove paths.",
+    );
+  }
+
+  return problems;
+};
+
 const githubDir = join(repoRoot, ".github");
 const yamlFiles = walk(githubDir).filter(
   (file) => file.endsWith(".yml") || file.endsWith(".yaml"),
@@ -130,6 +170,15 @@ const actionDirs = readdirSync(actionsDir, { withFileTypes: true })
 for (const dir of actionDirs) {
   if (!exists(join(dir, "action.yml")))
     failures.push(`${show(dir)}: no action.yml`);
+}
+
+const maestroAction = join(actionsDir, "run-maestro", "action.yml");
+if (exists(maestroAction)) {
+  failures.push(
+    ...problemsWithMaestroWorkspace(readFileSync(maestroAction, "utf8")).map(
+      (problem) => `${show(maestroAction)}: ${problem}`,
+    ),
+  );
 }
 
 // Docs are consumption instructions. A snippet on @main is a repo on @main.

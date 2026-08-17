@@ -243,13 +243,10 @@ runs:
         IN_SHARD_INDEX: ${{ inputs.shard-index }}
         IN_SHARD_TOTAL: ${{ inputs.shard-total }}
         IN_QUARANTINE_FILE: ${{ inputs.quarantine-file }}
-        IN_NAME: ${{ inputs.name }}
       run: |
         set -euo pipefail
 
-        work="${RUNNER_TEMP:-/tmp}/magic-maestro/${IN_NAME}"
-        rm -rf "$work"
-        mkdir -p "$work"
+        work="$(mktemp -d "${RUNNER_TEMP:-/tmp}/magic-maestro.XXXXXX")"
         candidates="$work/candidates.txt"
         selected="$work/flows.txt"
         : > "$candidates"

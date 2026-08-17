@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { problemsWithUses } from "./validate-workflows.mjs";
+import {
+  problemsWithMaestroWorkspace,
+  problemsWithUses,
+} from "./validate-workflows.mjs";
 
 const sha = "aa331e83282c2794edd474646c671f036dfabee0";
 
@@ -55,5 +58,40 @@ test("local actions stay local to repository-owned workflows", () => {
       raw: "uses: ./.github/actions/setup",
     })[0],
     /would resolve inside the caller's repo/,
+  );
+});
+
+test("Maestro workspaces stay independent of caller-controlled names", () => {
+  const unsafe = `    - name: 🗂 Resolve the flow list
+      env:
+        IN_NAME: \${{ inputs.name }}
+      run: |
+        work="\${RUNNER_TEMP:-/tmp}/magic-maestro/\${IN_NAME}"
+        rm -rf "$work"
+        mkdir -p "$work"
+
+    - name: Run`;
+
+  assert.deepEqual(problemsWithMaestroWorkspace(unsafe), [
+    "run-maestro flow resolution exposes the caller-controlled name input to filesystem setup.",
+    "run-maestro flow resolution must create its workspace with mktemp under RUNNER_TEMP.",
+    "run-maestro flow resolution must not recursively remove paths.",
+  ]);
+
+  const safe = `    - name: 🗂 Resolve the flow list
+      run: |
+        work="$(mktemp -d "\${RUNNER_TEMP:-/tmp}/magic-maestro.XXXXXX")"
+
+    - name: Run`;
+
+  assert.deepEqual(problemsWithMaestroWorkspace(safe), []);
+  assert.deepEqual(
+    problemsWithMaestroWorkspace(
+      safe.replace(
+        "\n\n    - name: Run",
+        '\n        rm --force --recursive "$work"\n\n    - name: Run',
+      ),
+    ),
+    ["run-maestro flow resolution must not recursively remove paths."],
   );
 });
