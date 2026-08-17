@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 
@@ -67,6 +77,108 @@ describe("magic-kebab preconditions", () => {
     const result = magicKebab(root, "--detect", "vibes");
     assert.equal(result.status, 1);
     assert.match(result.stderr, /--detect must be/u);
+  });
+});
+
+describe("magic-kebab tracked source symlinks", () => {
+  it("refuses the run without rewriting the symlink target", () => {
+    const root = makeTempRepo();
+    const external = mkdtempSync(join(tmpdir(), "magic-kebab-external-"));
+    const sentinel = join(external, "sentinel.ts");
+    const original =
+      'import { button } from "./Button";\nexport const sentinel = button;\n';
+
+    try {
+      write(root, "src/Button.ts", "export const button = 1;\n");
+      writeFileSync(sentinel, original);
+      symlinkSync(sentinel, join(root, "src/consumer.ts"));
+      commitAll(root, "initial");
+
+      const result = magicKebab(root, "--write", "--detect", "builtin");
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /unsafe tracked source path/u);
+      assert.match(result.stderr, /src\/consumer\.ts/u);
+      assert.match(result.stderr, /symbolic link/u);
+      assert.equal(readFileSync(sentinel, "utf8"), original);
+      assert.equal(
+        git(root, "status", "--porcelain", "--untracked-files=all").stdout,
+        "",
+      );
+    } finally {
+      cleanup(root);
+      cleanup(external);
+    }
+  });
+
+  it("refuses a symlinked parent with --allow-dirty", () => {
+    const root = makeTempRepo();
+    const external = mkdtempSync(join(tmpdir(), "magic-kebab-external-"));
+    const original =
+      'import { button } from "./Button";\nexport const sentinel = button;\n';
+
+    try {
+      write(root, "src/Button.ts", "export const button = 1;\n");
+      write(root, "src/consumer.ts", original);
+      commitAll(root, "initial");
+
+      renameSync(join(root, "src"), join(root, "parked-src"));
+      writeFileSync(join(external, "Button.ts"), "export const button = 1;\n");
+      writeFileSync(join(external, "consumer.ts"), original);
+      symlinkSync(external, join(root, "src"), "dir");
+
+      const result = magicKebab(
+        root,
+        "--write",
+        "--allow-dirty",
+        "--detect",
+        "builtin",
+      );
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /unsafe tracked source path/u);
+      assert.match(result.stderr, /symbolic link at src/u);
+      assert.equal(
+        readFileSync(join(external, "consumer.ts"), "utf8"),
+        original,
+      );
+      const externalFiles = readdirSync(external);
+      assert.ok(externalFiles.includes("Button.ts"));
+      assert.ok(!externalFiles.includes("button.ts"));
+    } finally {
+      cleanup(root);
+      cleanup(external);
+    }
+  });
+
+  it("refuses a hard-linked source without rewriting its other name", () => {
+    const root = makeTempRepo();
+    const external = mkdtempSync(join(tmpdir(), "magic-kebab-external-"));
+    const sentinel = join(external, "sentinel.ts");
+    const original =
+      'import { button } from "./Button";\nexport const sentinel = button;\n';
+
+    try {
+      write(root, "src/Button.ts", "export const button = 1;\n");
+      writeFileSync(sentinel, original);
+      linkSync(sentinel, join(root, "src/consumer.ts"));
+      commitAll(root, "initial");
+
+      const result = magicKebab(root, "--write", "--detect", "builtin");
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /unsafe tracked source path/u);
+      assert.match(result.stderr, /src\/consumer\.ts/u);
+      assert.match(result.stderr, /2 hard links/u);
+      assert.equal(readFileSync(sentinel, "utf8"), original);
+      assert.equal(
+        git(root, "status", "--porcelain", "--untracked-files=all").stdout,
+        "",
+      );
+    } finally {
+      cleanup(root);
+      cleanup(external);
+    }
   });
 });
 

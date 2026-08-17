@@ -1,11 +1,15 @@
 import type { DetectMode } from "./detect.ts";
 
+import { basename } from "node:path";
+
 import {
   assertCleanTree,
+  assertSafeTrackedSourcePaths,
   gitMoveViaTemp,
   repoRoot,
   trackedFiles,
 } from "./git.ts";
+import { isLintable } from "./kebab.ts";
 import { buildPlan, type RenamePlan } from "./plan.ts";
 import { findStaleReferences } from "./references.ts";
 import { createResolver } from "./resolve.ts";
@@ -46,13 +50,18 @@ export const runKebabCodemod = (options: KebabOptions): KebabResult => {
   const root = repoRoot(options.cwd);
   if (!options.allowDirty) assertCleanTree(root);
 
+  const tracked = trackedFiles(root);
+  assertSafeTrackedSourcePaths(
+    root,
+    tracked.filter((path) => isLintable(basename(path))),
+  );
+
   const plan = buildPlan(
     root,
     options.paths,
     options.detect,
     options.overrides,
   );
-  const tracked = trackedFiles(root);
   const resolver = createResolver(root, options.tsconfigs);
 
   const { edits, manual } = rewriteImports(
