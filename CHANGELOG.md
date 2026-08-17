@@ -3,6 +3,19 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## 2026-08-17 - Isolate Maestro temporary output
+
+The repo release is `v1.19.3`, and `v1` moves onto it. Package versions stay
+unchanged.
+
+### Security
+
+The Maestro action now creates its report directory with `mktemp` under the
+runner's temporary directory. The caller-controlled `name` input stays in logs,
+summaries, and artifacts. It no longer participates in filesystem paths.
+Workflow validation rejects recursive cleanup in this step and guards the
+temporary-directory boundary.
+
 ## 2026-08-05 - Harden README and theme writes
 
 The release publishes `magic-readmes@1.0.3` and `magic-theme@0.4.4`. The repo
