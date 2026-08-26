@@ -271,6 +271,7 @@
     "no-ternary": "off",
     "no-underscore-dangle": "off",
     "no-void": "off",
+    "one-var": "off",
     "prefer-named-capture-group": "off",
     "require-unicode-regexp": "off",
     "sort-imports": "off",

@@ -219,6 +219,11 @@ const baseConfig: MagicOxlintConfig = {
     "no-ternary": "off",
     "no-underscore-dangle": "off",
     "no-void": "off",
+    // oxlint 1.78 implemented this rule, and the blanket `style` category
+    // immediately started asking consumers to combine adjacent declarations.
+    // One declaration per statement is the established style across the
+    // ecosystem and produces smaller diffs when bindings change independently.
+    "one-var": "off",
     "prefer-named-capture-group": "off",
     "require-unicode-regexp": "off",
     "sort-imports": "off",

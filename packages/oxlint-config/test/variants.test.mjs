@@ -116,15 +116,26 @@ describe("variant composition", () => {
     assert.ok(expo.default.ignorePatterns.includes("**/.expo/**"));
   });
 
-  it("base bans direct process.env access", () => {
+  it("allows separate declarations while keeping safety rules enabled", () => {
     const result = lintWith(
       join(packageRoot, "base.json"),
-      "export const key = process.env.SECRET;\n",
+      [
+        "const first = process.env.FIRST;",
+        "const second = process.env.SECOND;",
+        "export const values = [first, second];",
+        "",
+      ].join("\n"),
     );
 
+    assert.equal(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.code === "eslint(one-var)",
+      ),
+      false,
+    );
     assert.ok(
       result.diagnostics.some(
-        (d) => d.code === "eslint(no-restricted-properties)",
+        (diagnostic) => diagnostic.code === "eslint(no-restricted-properties)",
       ),
       "expected no-restricted-properties to fire on process.env",
     );

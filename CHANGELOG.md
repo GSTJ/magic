@@ -3,6 +3,21 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v1.19.5
+
+The release publishes `magic-oxlint-config@2.0.5`. The repo release is
+`v1.19.5`, and `v1` moves onto it.
+
+### oxlint 1.78 compatibility
+
+oxlint 1.78 implemented `one-var`, and the preset's blanket `style` category
+enabled it automatically. Consumer repos using one declaration per statement
+started receiving errors that asked them to combine adjacent declarations.
+
+The base preset now disables `one-var`, preserving the established declaration
+style across all five variants. The regression suite runs against oxlint 1.78
+and also confirms that the preset's safety rules remain active.
+
 ## v1.19.4
 
 The release publishes `magic-codemods@1.1.6`. The repo release is `v1.19.4`,
