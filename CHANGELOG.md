@@ -8,6 +8,18 @@ together and most of what a consumer needs to know spans more than one of them.
 The release publishes `magic-oxlint-config@2.0.6`. The repo release is
 `v1.19.6`, and `v1` moves onto it.
 
+### Reusable workflows use their running commit
+
+Reusable workflows now resolve sibling composite actions through GitHub's `$/`
+syntax. A caller pinned to a Magic tag or SHA gets the workflow and its actions
+from the same commit. Validation rejects stale self-references, `@ref` suffixes,
+and path traversal. The syntax is available on GitHub.com; self-hosted runners
+need version 2.336.0 or newer.
+
+`pnpm/action-setup` moves to v5. Turborepo caches now persist the workspace's
+`.turbo` directory with GitHub's pinned first-party cache action, using
+platform, repository, job, and commit-scoped keys.
+
 ### Renovate updates stay visible during quarantine
 
 Renovate now opens dependency and vulnerability-alert PRs immediately. The
