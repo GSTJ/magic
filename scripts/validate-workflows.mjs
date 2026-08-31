@@ -36,8 +36,8 @@ const VERSION_COMMENT = /\s+#\s+v\d+(?:\.\d+){0,2}\s*$/;
 const DOC_REF = /GSTJ\/magic\/[\w./-]+@([\w.-]+)/g;
 const TURBO_CACHE_ACTION =
   "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0";
-const TURBO_CACHE_EXPECTED = [
-  'echo "turbo-cache-path=$(under .turbo)"',
+const TURBO_CACHE_PATH_OUTPUT = 'echo "turbo-cache-path=$(under .turbo)"';
+const TURBO_CACHE_STEP_EXPECTED = [
   `uses: ${TURBO_CACHE_ACTION}`,
   `path: \${{ steps.resolve.outputs.turbo-cache-path }}`,
   `key: turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-\${{ github.sha }}`,
@@ -63,6 +63,52 @@ const exists = (path) => {
 };
 
 const show = (file) => relative(repoRoot, file);
+
+const namedStep = (text, name) => {
+  const lines = text.split("\n");
+  const starts = lines.flatMap((line, index) => {
+    const match = /^(?<indent>\s*)-\s+name:\s*(?<name>.+?)\s*$/.exec(line);
+    return match?.groups.name.endsWith(name)
+      ? [{ index, indent: match.groups.indent.length }]
+      : [];
+  });
+  const [start] = starts;
+  if (!start) return { count: starts.length, indent: 0, lines: [] };
+
+  const relativeEnd = lines
+    .slice(start.index + 1)
+    .findIndex(
+      (line) =>
+        /^\s*-\s+/.test(line) && /^\s*/.exec(line)[0].length === start.indent,
+    );
+  const end = relativeEnd === -1 ? lines.length : start.index + relativeEnd + 1;
+  return {
+    count: starts.length,
+    indent: start.indent,
+    lines: lines.slice(start.index, end),
+  };
+};
+
+const mappingUnderStep = (step, name) => {
+  const indent = " ".repeat(step.indent + 2);
+  const starts = step.lines.flatMap((line, index) =>
+    line === `${indent}${name}:` ? [index] : [],
+  );
+  const [start] = starts;
+  if (start === undefined) return { count: starts.length, lines: [] };
+
+  const relativeEnd = step.lines
+    .slice(start + 1)
+    .findIndex(
+      (line) =>
+        line.trim() !== "" && /^\s*/.exec(line)[0].length <= step.indent + 2,
+    );
+  const end = relativeEnd === -1 ? step.lines.length : start + relativeEnd + 1;
+  return {
+    count: starts.length,
+    lines: step.lines.slice(start + 1, end),
+  };
+};
 
 /** Everything wrong with one `uses:` value, as sentences. */
 export const problemsWithUses = (value, { isReusable, raw = "" }) => {
@@ -180,20 +226,42 @@ export const problemsWithTurboCache = (text) => {
     );
   }
 
-  for (const expected of TURBO_CACHE_EXPECTED) {
-    if (!text.includes(expected)) {
+  if (!text.includes(TURBO_CACHE_PATH_OUTPUT)) {
+    problems.push(
+      `setup is missing the Turbo cache contract: ${TURBO_CACHE_PATH_OUTPUT}`,
+    );
+  }
+
+  const step = namedStep(text, "Turborepo cache");
+  if (step.count !== 1) {
+    problems.push("setup must contain exactly one named Turborepo cache step.");
+  }
+
+  const childIndent = " ".repeat(step.indent + 2);
+  const inputIndent = " ".repeat(step.indent + 4);
+  const [expectedUses, ...expectedInputs] = TURBO_CACHE_STEP_EXPECTED;
+  if (!step.lines.includes(`${childIndent}${expectedUses}`)) {
+    problems.push(`setup is missing the Turbo cache contract: ${expectedUses}`);
+  }
+
+  const inputs = mappingUnderStep(step, "with");
+  if (inputs.count !== 1) {
+    problems.push(
+      "the Turborepo cache step must contain exactly one with block.",
+    );
+  }
+
+  for (const expected of expectedInputs) {
+    if (!inputs.lines.includes(`${inputIndent}${expected}`)) {
       problems.push(`setup is missing the Turbo cache contract: ${expected}`);
     }
   }
 
-  const lines = text.split("\n");
-  const restoreLine = lines.findIndex(
-    (line) => line.trim() === "restore-keys: |",
-  );
+  const restoreLine = inputs.lines.indexOf(`${inputIndent}restore-keys: |`);
   const restoreKeys = [];
   if (restoreLine !== -1) {
-    const parentIndent = /^\s*/.exec(lines[restoreLine])[0].length;
-    for (const line of lines.slice(restoreLine + 1)) {
+    const parentIndent = /^\s*/.exec(inputs.lines[restoreLine])[0].length;
+    for (const line of inputs.lines.slice(restoreLine + 1)) {
       if (line.trim() === "") break;
       const childIndent = /^\s*/.exec(line)[0].length;
       if (childIndent <= parentIndent) break;
