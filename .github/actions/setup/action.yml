@@ -108,7 +108,7 @@ runs:
   using: composite
   steps:
     - name: 🏗 Setup pnpm
-      uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
       with:
         version: ${{ inputs.pnpm-version }}
 
@@ -225,7 +225,7 @@ runs:
 
     - name: 🏗 Turborepo cache
       if: steps.resolve.outputs.turbo-cache == 'true'
-      uses: dtinth/setup-github-actions-caching-for-turbo@99c5b097e0f1ccbcd3434fbcf990c3541e7b2606 # v1
+      uses: rharkor/caching-for-turbo@2238fae6eb9a9936f92356f54cb3660200d105e7 # v2.5.1
 
     - name: 🔎 Report pnpm store
       id: pnpm-store
