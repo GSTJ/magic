@@ -103,11 +103,9 @@ on:
         default: ""
       turbo-cache:
         description: >
-          Enable the GitHub Actions cache backend for turbo. On by default
-          everywhere, self-hosted included: turbo reads its own local cache
-          first and only reaches the backend on a miss, so a warm machine never
-          pays for it, and a workspace that some other workflow cleaned still
-          gets its outputs back.
+          Persist .turbo in the GitHub Actions cache. On by default everywhere,
+          including self-hosted runners, so a cleaned workspace can recover
+          cached outputs instead of rebuilding them.
         type: boolean
         required: false
         default: true

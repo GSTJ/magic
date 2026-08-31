@@ -985,9 +985,10 @@ is a default you can override:
   what makes installing from it nearly free. Restoring a copy over it buys a
   download and a repack.
 - **`turbo-cache: true`, unconditionally.** This one is kept on deliberately:
-  turbo reads its own local cache first and only reaches the Actions backend on
-  a miss, so a warm machine never pays for it, and a workspace some other
-  workflow cleaned still gets its outputs back rather than rebuilding them.
+  the setup action restores the workspace's `.turbo` directory from the Actions
+  cache before the job runs and saves it when the job finishes. A persistent
+  machine keeps its local objects, while a workspace some other workflow cleaned
+  can recover them instead of rebuilding everything.
 
 `~/.maestro`-style user-directory caches are the fourth of these and live in
 [`e2e-ios.yml`](#ios-e2e): `cache-maestro: auto`, off on a self-hosted Mac,

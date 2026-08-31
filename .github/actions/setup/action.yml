@@ -88,8 +88,8 @@ inputs:
     default: auto
   turbo-cache:
     description: >
-      GitHub Actions cache backend for turbo. auto enables it when the working
-      directory has a turbo.json.
+      Persist the working directory's .turbo cache in GitHub Actions. auto
+      enables it when the working directory has a turbo.json.
     required: false
     default: auto
 
@@ -210,6 +210,7 @@ runs:
           echo "cache=$cache"
           echo "cache-dependency-path=$cache_dependency_path"
           echo "turbo-cache=$turbo_cache"
+          echo "turbo-cache-path=$(under .turbo)"
           echo "package-import-method=$import_method"
         } >> "$GITHUB_OUTPUT"
 
@@ -225,7 +226,13 @@ runs:
 
     - name: 🏗 Turborepo cache
       if: steps.resolve.outputs.turbo-cache == 'true'
-      uses: rharkor/caching-for-turbo@2238fae6eb9a9936f92356f54cb3660200d105e7 # v2.5.1
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.resolve.outputs.turbo-cache-path }}
+        key: turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.repository_id }}-${{ github.job }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.repository_id }}-${{ github.job }}-
+          turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.repository_id }}-
 
     - name: 🔎 Report pnpm store
       id: pnpm-store
