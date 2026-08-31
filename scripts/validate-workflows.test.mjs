@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   problemsWithMaestroWorkspace,
+  problemsWithTurboCache,
   problemsWithUses,
 } from "./validate-workflows.mjs";
 
@@ -143,4 +144,70 @@ test("Maestro workspaces stay independent of caller-controlled names", () => {
     ),
     ["run-maestro flow resolution must not recursively remove paths."],
   );
+});
+
+const safeTurboCache = `
+echo "turbo-cache-path=$(under .turbo)"
+- name: Turborepo cache
+  uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+  with:
+    path: \${{ steps.resolve.outputs.turbo-cache-path }}
+    key: turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-\${{ github.sha }}
+    restore-keys: |
+      turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-
+      turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-
+`;
+
+test("Turbo cache persists its local directory with the pinned first-party action", () => {
+  assert.deepEqual(problemsWithTurboCache(safeTurboCache), []);
+});
+
+test("Turbo cache rejects proxy cache-server actions", () => {
+  const unsafe = safeTurboCache.replace(
+    "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0",
+    "rharkor/caching-for-turbo@2238fae6eb9a9936f92356f54cb3660200d105e7 # v2.5.1",
+  );
+
+  assert.match(problemsWithTurboCache(unsafe).join("\n"), /cache-server/);
+});
+
+test("Turbo cache keys retain platform, job, commit and restore scopes", () => {
+  for (const missing of [
+    `path: \${{ steps.resolve.outputs.turbo-cache-path }}`,
+    `\${{ runner.arch }}-`,
+    `\${{ github.job }}-`,
+    `\${{ github.sha }}`,
+  ]) {
+    assert.notDeepEqual(
+      problemsWithTurboCache(safeTurboCache.replace(missing, "")),
+      [],
+    );
+  }
+});
+
+test("Turbo cache requires the complete ordered restore-key block", () => {
+  const jobKey = `turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-`;
+  const repoKey = `turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-`;
+  const restoreBlock = `    restore-keys: |
+      ${jobKey}
+      ${repoKey}
+`;
+
+  for (const unsafe of [
+    safeTurboCache.replace(restoreBlock, ""),
+    safeTurboCache.replace(`      ${jobKey}\n`, ""),
+    safeTurboCache.replace(`      ${repoKey}\n`, ""),
+    safeTurboCache.replace(
+      restoreBlock,
+      `    restore-keys: |
+      ${repoKey}
+      ${jobKey}
+`,
+    ),
+  ]) {
+    assert.match(
+      problemsWithTurboCache(unsafe).join("\n"),
+      /ordered Turbo restore-key block/,
+    );
+  }
 });

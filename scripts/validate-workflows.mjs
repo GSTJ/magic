@@ -34,6 +34,18 @@ const SHA = /^[0-9a-f]{40}$/;
 const USES = /^\s*(?:-\s+)?uses:\s*(?<ref>\S+)/;
 const VERSION_COMMENT = /\s+#\s+v\d+(?:\.\d+){0,2}\s*$/;
 const DOC_REF = /GSTJ\/magic\/[\w./-]+@([\w.-]+)/g;
+const TURBO_CACHE_ACTION =
+  "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0";
+const TURBO_CACHE_EXPECTED = [
+  'echo "turbo-cache-path=$(under .turbo)"',
+  `uses: ${TURBO_CACHE_ACTION}`,
+  `path: \${{ steps.resolve.outputs.turbo-cache-path }}`,
+  `key: turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-\${{ github.sha }}`,
+];
+const TURBO_CACHE_RESTORE_KEYS = [
+  `turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-`,
+  `turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-`,
+];
 
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -154,6 +166,54 @@ export const problemsWithMaestroWorkspace = (text) => {
   return problems;
 };
 
+/** Keep Turbo's content-addressed local cache on the audited Actions backend. */
+export const problemsWithTurboCache = (text) => {
+  const problems = [];
+
+  if (
+    /(?:rharkor\/caching-for-turbo|dtinth\/setup-github-actions-caching-for-turbo)/.test(
+      text,
+    )
+  ) {
+    problems.push(
+      "setup must not proxy Turbo through an unaudited cache-server action.",
+    );
+  }
+
+  for (const expected of TURBO_CACHE_EXPECTED) {
+    if (!text.includes(expected)) {
+      problems.push(`setup is missing the Turbo cache contract: ${expected}`);
+    }
+  }
+
+  const lines = text.split("\n");
+  const restoreLine = lines.findIndex(
+    (line) => line.trim() === "restore-keys: |",
+  );
+  const restoreKeys = [];
+  if (restoreLine !== -1) {
+    const parentIndent = /^\s*/.exec(lines[restoreLine])[0].length;
+    for (const line of lines.slice(restoreLine + 1)) {
+      if (line.trim() === "") break;
+      const childIndent = /^\s*/.exec(line)[0].length;
+      if (childIndent <= parentIndent) break;
+      restoreKeys.push(line.trim());
+    }
+  }
+  if (
+    restoreKeys.length !== TURBO_CACHE_RESTORE_KEYS.length ||
+    restoreKeys.some((key, index) => key !== TURBO_CACHE_RESTORE_KEYS[index])
+  ) {
+    problems.push(
+      `setup must keep the ordered Turbo restore-key block: ${TURBO_CACHE_RESTORE_KEYS.join(
+        ", ",
+      )}`,
+    );
+  }
+
+  return problems;
+};
+
 const githubDir = join(repoRoot, ".github");
 const yamlFiles = walk(githubDir).filter(
   (file) => file.endsWith(".yml") || file.endsWith(".yaml"),
@@ -209,6 +269,15 @@ if (exists(maestroAction)) {
   failures.push(
     ...problemsWithMaestroWorkspace(readFileSync(maestroAction, "utf8")).map(
       (problem) => `${show(maestroAction)}: ${problem}`,
+    ),
+  );
+}
+
+const setupAction = join(actionsDir, "setup", "action.yml");
+if (exists(setupAction)) {
+  failures.push(
+    ...problemsWithTurboCache(readFileSync(setupAction, "utf8")).map(
+      (problem) => `${show(setupAction)}: ${problem}`,
     ),
   );
 }
