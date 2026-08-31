@@ -10,9 +10,8 @@ name: ✅ Self CI
 #   check     the working tree, through the composite action as it is in this
 #             commit. This is the gate. It is the only place a change to
 #             .github/actions/setup runs before it is tagged.
-#   reusable  ci.yml exactly as a consumer calls it. That file references the
-#             composite at an immutable released commit, so this job checks the
-#             pair a consumer actually gets.
+#   reusable  ci.yml exactly as a consumer calls it. Its `$/` reference loads
+#             the composite from the same commit as the reusable workflow.
 
 on:
   push:

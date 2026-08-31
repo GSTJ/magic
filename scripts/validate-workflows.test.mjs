@@ -8,16 +8,7 @@ import {
 
 const sha = "aa331e83282c2794edd474646c671f036dfabee0";
 
-test("remote actions require immutable refs", () => {
-  assert.deepEqual(
-    problemsWithUses("GSTJ/magic/.github/actions/setup@v1", {
-      isReusable: true,
-      raw: "uses: GSTJ/magic/.github/actions/setup@v1",
-    }),
-    [
-      'self-reference "GSTJ/magic/.github/actions/setup@v1" uses a mutable tag; pin its full commit SHA.',
-    ],
-  );
+test("remote third-party actions require immutable refs", () => {
   assert.deepEqual(
     problemsWithUses("actions/checkout@main", {
       isReusable: false,
@@ -30,7 +21,7 @@ test("remote actions require immutable refs", () => {
 });
 
 test("immutable refs carry a readable release comment", () => {
-  const value = `GSTJ/magic/.github/actions/setup@${sha}`;
+  const value = `actions/checkout@${sha}`;
   assert.deepEqual(
     problemsWithUses(value, { isReusable: true, raw: `uses: ${value}` }),
     [`action "${value}" needs a readable version comment such as "# v1.2.3".`],
@@ -44,7 +35,65 @@ test("immutable refs carry a readable release comment", () => {
   );
 });
 
-test("local actions stay local to repository-owned workflows", () => {
+test("self-references use the running workflow commit", () => {
+  assert.deepEqual(
+    problemsWithUses("$/.github/actions/setup", {
+      isReusable: true,
+      raw: "uses: $/.github/actions/setup",
+    }),
+    [],
+  );
+  assert.deepEqual(
+    problemsWithUses("$/.github/workflows/ci.yml", {
+      isReusable: false,
+      raw: "uses: $/.github/workflows/ci.yml",
+    }),
+    [],
+  );
+  assert.deepEqual(
+    problemsWithUses("$/.github/actions/setup@v1", {
+      isReusable: true,
+      raw: "uses: $/.github/actions/setup@v1",
+    }),
+    ['self-reference "$/.github/actions/setup@v1" must not include a ref.'],
+  );
+  assert.deepEqual(
+    problemsWithUses("$/.github/actions/../workflows/ci.yml", {
+      isReusable: true,
+      raw: "uses: $/.github/actions/../workflows/ci.yml",
+    }),
+    [
+      'self-reference "$/.github/actions/../workflows/ci.yml" must not traverse directories.',
+    ],
+  );
+
+  for (const value of ["$/", "$/README.md", "$/.github/actions/"]) {
+    assert.deepEqual(
+      problemsWithUses(value, {
+        isReusable: true,
+        raw: `uses: ${value}`,
+      }),
+      [
+        `self-reference "${value}" must name an action or workflow under $/.github/.`,
+      ],
+    );
+  }
+
+  for (const ref of ["v1", sha]) {
+    const value = `GSTJ/magic/.github/actions/setup@${ref}`;
+    assert.deepEqual(
+      problemsWithUses(value, {
+        isReusable: true,
+        raw: `uses: ${value}`,
+      }),
+      [
+        `legacy self-reference "${value}" can drift from the running workflow. Use $/.github/actions/setup.`,
+      ],
+    );
+  }
+});
+
+test("workspace actions stay local to repository-owned workflows", () => {
   assert.deepEqual(
     problemsWithUses("./.github/actions/setup", {
       isReusable: false,
@@ -57,7 +106,7 @@ test("local actions stay local to repository-owned workflows", () => {
       isReusable: true,
       raw: "uses: ./.github/actions/setup",
     })[0],
-    /would resolve inside the caller's repo/,
+    /Use \$\/\.\.\. instead/,
   );
 });
 

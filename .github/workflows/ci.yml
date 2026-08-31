@@ -263,11 +263,10 @@ jobs:
           # the node_modules and ios/ that `git clean -ffdx` deletes.
           clean: ${{ inputs.checkout-clean == 'true' || (inputs.checkout-clean == 'auto' && runner.environment == 'github-hosted') }}
 
-      # Referenced by owner/repo, because `./` resolves against the caller's
-      # checkout inside a reusable workflow. The immutable release commit also
-      # keeps SHA-enforced callers from inheriting a mutable transitive action.
+      # `$/` resolves against this workflow's repository and running commit,
+      # even when the caller's checkout belongs to another repository.
       - name: 🏗 Setup Node + pnpm
-        uses: GSTJ/magic/.github/actions/setup@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
+        uses: $/.github/actions/setup
         with:
           node-version: ${{ inputs.node-version }}
           node-version-file: ${{ inputs.node-version-file }}
