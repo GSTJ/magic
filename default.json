@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GSTJ shared Renovate preset. Consume with \"extends\": [\"github>GSTJ/magic\"], which Renovate resolves to this file. Presets must live in default.json — serving one from renovate.json is deprecated. Dependency releases stay quarantined for 14 days in both Renovate and pnpm. Renovate suppresses branches during that window and refuses releases without a registry timestamp; pnpm enforces the same floor on frozen lockfiles. Renovate merges eligible non-major updates itself, after repository checks pass.",
+  "description": "GSTJ shared Renovate preset. Consume with \"extends\": [\"github>GSTJ/magic\"], which Renovate resolves to this file. Presets must live in default.json; serving one from renovate.json is deprecated. Dependency releases stay quarantined for 14 days in both Renovate and pnpm. Renovate opens PRs immediately so pending upgrades stay visible, refuses releases without a registry timestamp, and merges eligible non-major updates after repository checks pass.",
   "extends": [
     "config:recommended",
     ":semanticCommits",
@@ -11,14 +11,14 @@
   "minimumReleaseAge": "14 days",
   "minimumReleaseAgeBehaviour": "timestamp-required",
   "internalChecksFilter": "strict",
-  "prCreation": "not-pending",
+  "prCreation": "immediate",
   "platformAutomerge": false,
   "osvVulnerabilityAlerts": false,
   "vulnerabilityAlerts": {
     "enabled": true,
     "labels": ["security"],
     "minimumReleaseAge": "14 days",
-    "prCreation": "not-pending"
+    "prCreation": "immediate"
   },
   "lockFileMaintenance": {
     "enabled": true,
@@ -37,17 +37,32 @@
       "automerge": true
     },
     {
-      "description": "oxlint and oxfmt move fast and rules appear/disappear between minors. Group them and never automerge — a new rule can fail every repo at once.",
-      "matchPackageNames": ["oxlint", "oxfmt", "oxlint-tsgolint"],
-      "groupName": "oxc toolchain",
-      "automerge": false
-    },
-    {
-      "description": "The magic-* packages are first-party shared tooling. They land together so a config bump can't outrun the plugin it needs, and they may move immediately because GSTJ owns their source and publish path.",
+      "description": "The magic-* packages are first-party shared tooling. They normally land together and may move immediately because GSTJ owns their source and publish path. The lint and format toolchain rules below override this rule so each config moves with the binary it targets.",
       "matchPackageNames": ["magic-{/,}**"],
       "groupName": "magic tooling",
       "automerge": true,
       "minimumReleaseAge": null
+    },
+    {
+      "description": "oxlint, its type-aware runner, and the matching Magic config and plugin are one toolchain. Keep them together, wait through the release quarantine, and require review because a rule change can fail every repo at once.",
+      "matchPackageNames": [
+        "oxlint",
+        "oxlint-tsgolint",
+        "magic-oxlint-config",
+        "magic-oxlint-plugin"
+      ],
+      "groupName": "oxlint toolchain",
+      "automerge": false,
+      "minimumReleaseAge": "14 days",
+      "separateMajorMinor": false
+    },
+    {
+      "description": "oxfmt and the matching Magic config are one toolchain. Keep them together, wait through the release quarantine, and require review because formatting changes can rewrite a whole repository.",
+      "matchPackageNames": ["oxfmt", "magic-oxfmt-config"],
+      "groupName": "oxfmt toolchain",
+      "automerge": false,
+      "minimumReleaseAge": "14 days",
+      "separateMajorMinor": false
     },
     {
       "description": "The PostHog SDKs share @posthog/core and are released in lockstep several times a week. Group them so a repo gets one PR instead of four, and so posthog-js never lands a version ahead of the @posthog/react that peers on it.",
@@ -61,10 +76,11 @@
       "automerge": true
     },
     {
-      "description": "Fumadocs Core, UI, MDX and integrations are one coupled docs framework. Group upgrades and require review because even patch releases can change generated content, peer pins, or exported layout types.",
-      "matchPackageNames": ["fumadocs-{/,}**", "@fumadocs/{/,}**"],
+      "description": "Fumadocs Core, UI, MDX, integrations, and zbsearch are one coupled docs stack. Group upgrades and require review because even patch releases can change generated content, peer pins, search APIs, or exported layout types.",
+      "matchPackageNames": ["fumadocs-{/,}**", "@fumadocs/{/,}**", "zbsearch"],
       "groupName": "fumadocs",
-      "automerge": false
+      "automerge": false,
+      "separateMajorMinor": false
     },
     {
       "description": "GitHub Actions pinned by tag; group so a PR isn't opened per action.",

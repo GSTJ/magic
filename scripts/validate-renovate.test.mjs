@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 
 import { renovateProblems } from "./validate-renovate.mjs";
 
@@ -14,21 +15,67 @@ const MAJOR_GATE = {
   automerge: false,
 };
 
-const preset = (rules) => ({
+const COUPLED_RULES = [
+  {
+    description: "First-party shared tooling.",
+    matchPackageNames: ["magic-{/,}**"],
+    groupName: "magic tooling",
+    automerge: true,
+    minimumReleaseAge: null,
+  },
+  {
+    description: "Coupled oxlint tooling.",
+    matchPackageNames: [
+      "oxlint",
+      "oxlint-tsgolint",
+      "magic-oxlint-config",
+      "magic-oxlint-plugin",
+    ],
+    groupName: "oxlint toolchain",
+    automerge: false,
+    minimumReleaseAge: "14 days",
+    separateMajorMinor: false,
+  },
+  {
+    description: "Coupled oxfmt tooling.",
+    matchPackageNames: ["oxfmt", "magic-oxfmt-config"],
+    groupName: "oxfmt toolchain",
+    automerge: false,
+    minimumReleaseAge: "14 days",
+    separateMajorMinor: false,
+  },
+  {
+    description: "Coupled docs tooling.",
+    matchPackageNames: ["fumadocs-{/,}**", "@fumadocs/{/,}**", "zbsearch"],
+    groupName: "fumadocs",
+    automerge: false,
+    separateMajorMinor: false,
+  },
+];
+
+const copyRules = (rules) => rules.map((rule) => structuredClone(rule));
+
+const preset = (rules, coupledRules = COUPLED_RULES) => ({
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   minimumReleaseAge: "14 days",
   minimumReleaseAgeBehaviour: "timestamp-required",
   internalChecksFilter: "strict",
-  prCreation: "not-pending",
+  prCreation: "immediate",
   platformAutomerge: false,
   osvVulnerabilityAlerts: false,
   vulnerabilityAlerts: {
     enabled: true,
     minimumReleaseAge: "14 days",
-    prCreation: "not-pending",
+    prCreation: "immediate",
   },
-  packageRules: rules,
+  packageRules: [...copyRules(coupledRules), ...rules],
 });
+
+const mutateCoupledPreset = (mutation) => {
+  const rules = copyRules(COUPLED_RULES);
+  mutation(rules);
+  return preset([MAJOR_GATE], rules);
+};
 
 const withPreset = (value, assertions) => {
   const directory = mkdtempSync(join(tmpdir(), "magic-renovate-"));
@@ -45,6 +92,231 @@ const withPreset = (value, assertions) => {
 
 test("the checked-in preset passes", () => {
   assert.deepEqual(renovateProblems(repoRoot), []);
+});
+
+test("pending updates open PRs at the root and for vulnerability alerts", () => {
+  const checkedIn = JSON.parse(
+    readFileSync(join(repoRoot, "default.json"), "utf8"),
+  );
+
+  assert.equal(checkedIn.prCreation, "immediate");
+  assert.equal(checkedIn.vulnerabilityAlerts.prCreation, "immediate");
+});
+
+test("the checked-in coupled dependency groups stay exact", () => {
+  const checkedIn = JSON.parse(
+    readFileSync(join(repoRoot, "default.json"), "utf8"),
+  );
+  const oneGroup = (name) => {
+    const matches = checkedIn.packageRules.filter(
+      (rule) => rule.groupName === name,
+    );
+    assert.equal(matches.length, 1, `${name} must have exactly one rule`);
+    return matches[0];
+  };
+
+  const fumadocs = oneGroup("fumadocs");
+  assert.deepEqual(fumadocs.matchPackageNames, [
+    "fumadocs-{/,}**",
+    "@fumadocs/{/,}**",
+    "zbsearch",
+  ]);
+  assert.equal(fumadocs.automerge, false);
+  assert.equal(fumadocs.separateMajorMinor, false);
+
+  const oxlint = oneGroup("oxlint toolchain");
+  assert.deepEqual(oxlint.matchPackageNames, [
+    "oxlint",
+    "oxlint-tsgolint",
+    "magic-oxlint-config",
+    "magic-oxlint-plugin",
+  ]);
+  assert.equal(oxlint.automerge, false);
+  assert.equal(oxlint.minimumReleaseAge, "14 days");
+  assert.equal(oxlint.separateMajorMinor, false);
+
+  const oxfmt = oneGroup("oxfmt toolchain");
+  assert.deepEqual(oxfmt.matchPackageNames, ["oxfmt", "magic-oxfmt-config"]);
+  assert.equal(oxfmt.automerge, false);
+  assert.equal(oxfmt.minimumReleaseAge, "14 days");
+  assert.equal(oxfmt.separateMajorMinor, false);
+
+  const magicRules = checkedIn.packageRules.filter((rule) =>
+    isDeepStrictEqual(rule.matchPackageNames, ["magic-{/,}**"]),
+  );
+  assert.equal(magicRules.length, 1);
+  const [magic] = magicRules;
+  assert.equal(magic.groupName, "magic tooling");
+  assert.equal(magic.automerge, true);
+  assert.equal(magic.minimumReleaseAge, null);
+
+  const magicIndex = checkedIn.packageRules.indexOf(magic);
+  assert.ok(
+    magicIndex <
+      checkedIn.packageRules.findIndex(
+        (rule) => rule.groupName === "oxlint toolchain",
+      ),
+  );
+  assert.ok(
+    magicIndex <
+      checkedIn.packageRules.findIndex(
+        (rule) => rule.groupName === "oxfmt toolchain",
+      ),
+  );
+});
+
+test("every coupled group is required exactly once", () => {
+  for (const groupName of ["fumadocs", "oxlint toolchain", "oxfmt toolchain"]) {
+    withPreset(
+      mutateCoupledPreset((rules) => {
+        rules.splice(
+          rules.findIndex((rule) => rule.groupName === groupName),
+          1,
+        );
+      }),
+      (problems) => {
+        assert.ok(
+          problems.some(
+            (problem) =>
+              problem.includes(groupName) && problem.includes("found 0"),
+          ),
+        );
+      },
+    );
+
+    withPreset(
+      mutateCoupledPreset((rules) => {
+        rules.push(
+          structuredClone(rules.find((rule) => rule.groupName === groupName)),
+        );
+      }),
+      (problems) => {
+        assert.ok(
+          problems.some(
+            (problem) =>
+              problem.includes(groupName) && problem.includes("found 2"),
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("every coupled group keeps its exact package set", () => {
+  const mutations = [
+    ["fumadocs", "zbsearch"],
+    ["oxlint toolchain", "magic-oxlint-plugin"],
+    ["oxfmt toolchain", "magic-oxfmt-config"],
+  ];
+
+  for (const [groupName, removedPackage] of mutations) {
+    withPreset(
+      mutateCoupledPreset((rules) => {
+        const rule = rules.find((item) => item.groupName === groupName);
+        rule.matchPackageNames = rule.matchPackageNames.filter(
+          (name) => name !== removedPackage,
+        );
+      }),
+      (problems) => {
+        assert.ok(
+          problems.some(
+            (problem) =>
+              problem.includes(groupName) && problem.includes("match exactly"),
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("every coupled group keeps its review controls", () => {
+  const mutations = [
+    ["fumadocs", "automerge", true],
+    ["fumadocs", "separateMajorMinor", true],
+    ["oxlint toolchain", "automerge", true],
+    ["oxlint toolchain", "minimumReleaseAge", null],
+    ["oxlint toolchain", "separateMajorMinor", true],
+    ["oxfmt toolchain", "automerge", true],
+    ["oxfmt toolchain", "minimumReleaseAge", null],
+    ["oxfmt toolchain", "separateMajorMinor", true],
+  ];
+
+  for (const [groupName, key, value] of mutations) {
+    withPreset(
+      mutateCoupledPreset((rules) => {
+        const rule = rules.find((item) => item.groupName === groupName);
+        rule[key] = value;
+      }),
+      (problems) => {
+        assert.ok(
+          problems.some(
+            (problem) => problem.includes(groupName) && problem.includes(key),
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("the broad magic rule is required and keeps its exact controls", () => {
+  withPreset(
+    mutateCoupledPreset((rules) => {
+      rules.shift();
+    }),
+    (problems) => {
+      assert.ok(
+        problems.some((problem) =>
+          problem.includes("exactly one broad magic tooling rule; found 0"),
+        ),
+      );
+    },
+  );
+
+  for (const [key, value] of [
+    ["groupName", "other tooling"],
+    ["automerge", false],
+    ["minimumReleaseAge", "14 days"],
+  ]) {
+    withPreset(
+      mutateCoupledPreset((rules) => {
+        rules[0][key] = value;
+      }),
+      (problems) => {
+        assert.ok(
+          problems.some(
+            (problem) =>
+              problem.includes("broad magic tooling rule") &&
+              problem.includes(key),
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("the reviewed toolchain rules must follow the broad magic exception", () => {
+  withPreset(
+    mutateCoupledPreset((rules) => {
+      const [magic] = rules.splice(0, 1);
+      rules.splice(3, 0, magic);
+    }),
+    (problems) => {
+      assert.ok(
+        problems.some(
+          (problem) =>
+            problem.includes("must come before") &&
+            problem.includes("oxlint toolchain"),
+        ),
+      );
+      assert.ok(
+        problems.some(
+          (problem) =>
+            problem.includes("must come before") &&
+            problem.includes("oxfmt toolchain"),
+        ),
+      );
+    },
+  );
 });
 
 test("magic itself is the explicit immediate-update exception", () => {
@@ -79,8 +351,8 @@ test("the gate must be the last rule, not merely present", () => {
     preset([
       MAJOR_GATE,
       {
-        description: "magic tooling, unrestricted.",
-        matchPackageNames: ["magic-{/,}**"],
+        description: "A later package rule.",
+        matchPackageNames: ["lodash"],
         automerge: true,
       },
     ]),
@@ -149,7 +421,7 @@ test("a rule without a description fails", () => {
     preset([{ matchPackageNames: ["lodash"], automerge: true }, MAJOR_GATE]),
     (problems) => {
       assert.equal(problems.length, 1);
-      assert.match(problems[0], /packageRules\[0\] has no description/);
+      assert.match(problems[0], /has no description/);
     },
   );
 });
@@ -177,6 +449,33 @@ test("weakening a strict release-age control fails", () => {
   );
 });
 
+test("hiding pending updates at the root fails", () => {
+  withPreset(
+    { ...preset([MAJOR_GATE]), prCreation: "not-pending" },
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /prCreation/);
+    },
+  );
+});
+
+test("hiding pending vulnerability updates fails", () => {
+  withPreset(
+    {
+      ...preset([MAJOR_GATE]),
+      vulnerabilityAlerts: {
+        enabled: true,
+        minimumReleaseAge: "14 days",
+        prCreation: "not-pending",
+      },
+    },
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /vulnerabilityAlerts/);
+    },
+  );
+});
+
 test("the experimental OSV source stays disabled", () => {
   withPreset(
     { ...preset([MAJOR_GATE]), osvVulnerabilityAlerts: true },
@@ -194,7 +493,7 @@ test("GitHub vulnerability alerts stay enabled", () => {
       vulnerabilityAlerts: {
         enabled: false,
         minimumReleaseAge: "14 days",
-        prCreation: "not-pending",
+        prCreation: "immediate",
       },
     },
     (problems) => {
@@ -238,10 +537,89 @@ test("only first-party magic rules may drop the release-age quarantine", () => {
     ]),
     (problems) => {
       assert.equal(problems.length, 1);
-      assert.match(
-        problems[0],
-        /packageRules\[1\] overrides minimumReleaseAge/,
-      );
+      assert.match(problems[0], /must set minimumReleaseAge/);
+    },
+  );
+});
+
+test("a mixed first-party and third-party rule cannot skip quarantine", () => {
+  withPreset(
+    preset([
+      {
+        description: "Mixed tooling.",
+        matchPackageNames: ["magic-oxlint-config", "oxlint"],
+        minimumReleaseAge: null,
+      },
+      MAJOR_GATE,
+    ]),
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /only allowed when every package matcher/);
+    },
+  );
+});
+
+test("a rule without package matchers cannot skip quarantine", () => {
+  withPreset(
+    preset([
+      {
+        description: "A global exception.",
+        minimumReleaseAge: null,
+      },
+      MAJOR_GATE,
+    ]),
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /only allowed when every package matcher/);
+    },
+  );
+});
+
+test("a third-party rule may restate the full quarantine", () => {
+  withPreset(
+    preset([
+      {
+        description: "Coupled third-party tooling.",
+        matchPackageNames: ["oxlint", "typescript"],
+        minimumReleaseAge: "14 days",
+      },
+      MAJOR_GATE,
+    ]),
+    (problems) => {
+      assert.deepEqual(problems, []);
+    },
+  );
+});
+
+test("a first-party-only rule may keep the full quarantine", () => {
+  withPreset(
+    preset([
+      {
+        description: "First-party shared tooling.",
+        matchPackageNames: ["magic-oxlint-config", "magic-oxlint-plugin"],
+        minimumReleaseAge: "14 days",
+      },
+      MAJOR_GATE,
+    ]),
+    (problems) => {
+      assert.deepEqual(problems, []);
+    },
+  );
+});
+
+test("a lookalike GSTJ repository cannot skip quarantine", () => {
+  withPreset(
+    preset([
+      {
+        description: "A lookalike repository.",
+        matchPackageNames: ["GSTJ/magical"],
+        minimumReleaseAge: null,
+      },
+      MAJOR_GATE,
+    ]),
+    (problems) => {
+      assert.equal(problems.length, 1);
+      assert.match(problems[0], /only allowed when every package matcher/);
     },
   );
 });
@@ -251,7 +629,7 @@ test("first-party magic packages may move immediately", () => {
     preset([
       {
         description: "First-party shared tooling.",
-        matchPackageNames: ["magic-{/,}**"],
+        matchPackageNames: ["magic-observability"],
         minimumReleaseAge: null,
       },
       MAJOR_GATE,

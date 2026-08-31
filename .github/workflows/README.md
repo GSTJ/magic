@@ -679,8 +679,9 @@ minimumReleaseAgeExclude:
 
 Delete the entries once the packages age past the window. The shared Renovate
 preset sets `minimumReleaseAge: "14 days"` for the same reason from the other
-side. It requires registry timestamps and does not create the branch until the
-window clears. Vulnerability-alert PRs use the same quarantine.
+side. It requires registry timestamps and opens the PR immediately with the age
+check pending until the window clears. Vulnerability-alert PRs use the same
+quarantine and immediate visibility.
 
 `GSTJ/magic` itself is the explicit first-party exception. Its `renovate.json`
 sets the age to `0 days` and its workspace sets `minimumReleaseAge: 0`, so this
@@ -1487,12 +1488,12 @@ That resolves to `default.json` at the root of this repo, which is where the
 preset lives. Renovate deprecated serving a preset from `renovate.json`; this
 repo's own `renovate.json` just extends the preset like everyone else's.
 
-Third-party releases are quarantined for 14 days. A missing registry timestamp fails
-closed, and Renovate keeps pending updates on the Dependency Dashboard instead
-of opening early branches. Eligible updates are merged by Renovate only after
-the repository's checks pass; majors and the hand-held tool groups below still
-wait for review. `magic-*` packages and `GSTJ/magic` action tags are first-party
-exceptions and may move immediately.
+Third-party releases are quarantined for 14 days. A missing registry timestamp
+fails closed. Renovate opens the PR immediately and leaves its age check pending
+until the window clears. Eligible updates are merged only after the repository's
+checks pass; majors and the reviewed tool groups below still wait for a human.
+`magic-*` packages and `GSTJ/magic` action tags are first-party exceptions and
+may move immediately.
 
 GitHub vulnerability alerts stay enabled and use the same 14-day quarantine.
 Renovate's experimental OSV source is disabled because its false positives can
@@ -1500,14 +1501,15 @@ loop against versions that are already patched.
 
 ### What automerges
 
-| Update                               | Automerges |
-| ------------------------------------ | ---------- |
-| minor, patch, pin, digest            | yes        |
-| dev dependency, non-major            | yes        |
-| grouped GitHub Actions, non-major    | yes        |
-| **any major, anywhere**              | **no**     |
-| `oxlint`, `oxfmt`, `oxlint-tsgolint` | no         |
-| `fumadocs*`                          | no         |
+| Update                                    | Automerges |
+| ----------------------------------------- | ---------- |
+| minor, patch, pin, digest                 | yes        |
+| dev dependency, non-major                 | yes        |
+| grouped GitHub Actions, non-major         | yes        |
+| **any major, anywhere**                   | **no**     |
+| `oxlint` + tsgolint + Magic config/plugin | no         |
+| `oxfmt` + Magic config                    | no         |
+| Fumadocs + `zbsearch`                     | no         |
 
 Majors are denied by the final rule in `packageRules`, and it has to stay final.
 Renovate evaluates every rule and the last one that sets a key wins, so a rule

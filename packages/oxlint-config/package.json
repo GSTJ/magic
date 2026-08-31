@@ -1,6 +1,6 @@
 {
   "name": "magic-oxlint-config",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "type": "module",
   "description": "Shared oxlint configs. Variants: base, react, react-native, next, expo.",
   "keywords": [
@@ -83,7 +83,7 @@
     "magic-oxlint-plugin": "workspace:^"
   },
   "peerDependencies": {
-    "oxlint": ">=1.75.0"
+    "oxlint": ">=1.78.0"
   },
   "peerDependenciesMeta": {
     "oxlint": {
