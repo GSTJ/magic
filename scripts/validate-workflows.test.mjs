@@ -211,3 +211,19 @@ test("Turbo cache requires the complete ordered restore-key block", () => {
     );
   }
 });
+
+test("Turbo cache contract cannot be moved into a decoy step", () => {
+  const cacheWith = `  with:
+    path: \${{ steps.resolve.outputs.turbo-cache-path }}
+    key: turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-\${{ github.sha }}
+    restore-keys: |
+      turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-\${{ github.job }}-
+      turbo-\${{ runner.os }}-\${{ runner.arch }}-\${{ github.repository_id }}-
+`;
+  const unsafe = `- name: Setup Node
+  uses: actions/setup-node@0123456789012345678901234567890123456789 # v6
+${cacheWith}
+${safeTurboCache.replace(cacheWith, "")}`;
+
+  assert.notDeepEqual(problemsWithTurboCache(unsafe), []);
+});

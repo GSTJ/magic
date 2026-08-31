@@ -986,7 +986,7 @@ is a default you can override:
   download and a repack.
 - **`turbo-cache: true`, unconditionally.** This one is kept on deliberately:
   the setup action restores the workspace's `.turbo` directory from the Actions
-  cache before the job runs and saves it when the job finishes. A persistent
+  cache before the job runs and saves it after a successful job. A persistent
   machine keeps its local objects, while a workspace some other workflow cleaned
   can recover them instead of rebuilding everything.
 
