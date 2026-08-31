@@ -27,8 +27,51 @@ const defaultRoot = join(import.meta.dirname, "..");
 const RENOVATE_SCHEMA = "https://docs.renovatebot.com/renovate-schema.json";
 const RELEASE_AGE = "14 days";
 
-/** First-party package and action rules allowed to skip the quarantine. */
-const RELEASE_AGE_EXEMPTS = ["GSTJ/magic", "magic-"];
+const COUPLED_GROUPS = [
+  {
+    groupName: "fumadocs",
+    matchPackageNames: ["fumadocs-{/,}**", "@fumadocs/{/,}**", "zbsearch"],
+    required: { automerge: false, separateMajorMinor: false },
+  },
+  {
+    groupName: "oxlint toolchain",
+    matchPackageNames: [
+      "oxlint",
+      "oxlint-tsgolint",
+      "magic-oxlint-config",
+      "magic-oxlint-plugin",
+    ],
+    required: {
+      automerge: false,
+      minimumReleaseAge: RELEASE_AGE,
+      separateMajorMinor: false,
+    },
+  },
+  {
+    groupName: "oxfmt toolchain",
+    matchPackageNames: ["oxfmt", "magic-oxfmt-config"],
+    required: {
+      automerge: false,
+      minimumReleaseAge: RELEASE_AGE,
+      separateMajorMinor: false,
+    },
+  },
+];
+
+const MAGIC_TOOLING_MATCHERS = ["magic-{/,}**"];
+
+const isFirstPartyMatcher = (name) =>
+  typeof name === "string" &&
+  (name.startsWith("magic-") ||
+    name === "GSTJ/magic" ||
+    name.startsWith("GSTJ/magic/") ||
+    name.startsWith("GSTJ/magic{"));
+
+const sameMatchers = (actual, expected) =>
+  Array.isArray(actual) &&
+  actual.length === expected.length &&
+  actual.every((name) => typeof name === "string") &&
+  isDeepStrictEqual([...actual].sort(), [...expected].sort());
 
 /**
  * Denies automerge on majors, but may still be scoped to some subset of them.
@@ -56,6 +99,110 @@ const isMajorGate = (rule) =>
 
 const rulesIn = (preset) =>
   Array.isArray(preset?.packageRules) ? preset.packageRules : [];
+
+const releaseAgeRuleProblem = (rule, index) => {
+  if (!("minimumReleaseAge" in rule)) return null;
+
+  const names = Array.isArray(rule.matchPackageNames)
+    ? rule.matchPackageNames
+    : [];
+  const firstPartyOnly =
+    names.length > 0 && names.every((name) => isFirstPartyMatcher(name));
+
+  return rule.minimumReleaseAge === RELEASE_AGE ||
+    (rule.minimumReleaseAge === null && firstPartyOnly)
+    ? null
+    : `packageRules[${index}] must set minimumReleaseAge to "${RELEASE_AGE}"; null is only allowed when every package matcher is first-party GSTJ/magic tooling.`;
+};
+
+const groupContract = (rules, specification) => {
+  const matches = rules.filter(
+    (rule) => rule.groupName === specification.groupName,
+  );
+  if (matches.length !== 1) {
+    return {
+      problems: [
+        `default.json must declare exactly one "${specification.groupName}" package rule; found ${matches.length}.`,
+      ],
+      rule: null,
+    };
+  }
+
+  const [rule] = matches;
+  const problems = [];
+  if (!sameMatchers(rule.matchPackageNames, specification.matchPackageNames)) {
+    problems.push(
+      `the "${specification.groupName}" rule must match exactly ${JSON.stringify(specification.matchPackageNames)}.`,
+    );
+  }
+  for (const [key, expected] of Object.entries(specification.required)) {
+    if (rule[key] !== expected) {
+      problems.push(
+        `the "${specification.groupName}" rule must keep ${key} at ${JSON.stringify(expected)}.`,
+      );
+    }
+  }
+
+  return { problems, rule };
+};
+
+const magicToolingProblems = (rules, toolchainRules) => {
+  const candidates = rules.filter((rule) =>
+    sameMatchers(rule.matchPackageNames, MAGIC_TOOLING_MATCHERS),
+  );
+  if (candidates.length !== 1) {
+    return [
+      `default.json must declare exactly one broad magic tooling rule; found ${candidates.length}.`,
+    ];
+  }
+
+  const [magic] = candidates;
+  const problems = [];
+  const required = {
+    groupName: "magic tooling",
+    automerge: true,
+    minimumReleaseAge: null,
+  };
+  for (const [key, expected] of Object.entries(required)) {
+    if (magic[key] !== expected) {
+      problems.push(
+        `the broad magic tooling rule must keep ${key} at ${JSON.stringify(expected)}.`,
+      );
+    }
+  }
+
+  const magicIndex = rules.indexOf(magic);
+  for (const toolchain of toolchainRules.filter(Boolean)) {
+    if (magicIndex >= rules.indexOf(toolchain)) {
+      problems.push(
+        `the broad magic tooling rule must come before "${toolchain.groupName}" so the reviewed toolchain policy wins.`,
+      );
+    }
+  }
+
+  return problems;
+};
+
+const coupledGroupProblems = (preset) => {
+  const rules = rulesIn(preset);
+  const contracts = COUPLED_GROUPS.map((specification) =>
+    groupContract(rules, specification),
+  );
+
+  return [
+    ...contracts.flatMap(({ problems }) => problems),
+    ...magicToolingProblems(
+      rules,
+      contracts
+        .filter(
+          ({ rule }) =>
+            rule?.groupName === "oxlint toolchain" ||
+            rule?.groupName === "oxfmt toolchain",
+        )
+        .map(({ rule }) => rule),
+    ),
+  ];
+};
 
 const readPreset = (repoRoot) => {
   const presetPath = join(repoRoot, "default.json");
@@ -149,7 +296,7 @@ const releaseAgeProblems = (preset) => {
   const requiredPolicy = [
     ["minimumReleaseAgeBehaviour", "timestamp-required"],
     ["internalChecksFilter", "strict"],
-    ["prCreation", "not-pending"],
+    ["prCreation", "immediate"],
     ["platformAutomerge", false],
     ["osvVulnerabilityAlerts", false],
   ];
@@ -165,24 +312,18 @@ const releaseAgeProblems = (preset) => {
   if (
     alerts?.enabled !== true ||
     alerts?.minimumReleaseAge !== RELEASE_AGE ||
-    alerts?.prCreation !== "not-pending"
+    alerts?.prCreation !== "immediate"
   ) {
     problems.push(
-      `default.json vulnerabilityAlerts must stay enabled, keep minimumReleaseAge at "${RELEASE_AGE}", and use prCreation "not-pending".`,
+      `default.json vulnerabilityAlerts must stay enabled, keep minimumReleaseAge at "${RELEASE_AGE}", and use prCreation "immediate".`,
     );
   }
 
-  for (const [index, rule] of rulesIn(preset).entries()) {
-    const names = rule.matchPackageNames ?? [];
-    const exempt = names.some((name) =>
-      RELEASE_AGE_EXEMPTS.some((prefix) => name.startsWith(prefix)),
-    );
-    if ("minimumReleaseAge" in rule && !exempt) {
-      problems.push(
-        `packageRules[${index}] overrides minimumReleaseAge; only first-party GSTJ/magic actions and magic-* packages may skip it.`,
-      );
-    }
-  }
+  problems.push(
+    ...rulesIn(preset)
+      .map((rule, index) => releaseAgeRuleProblem(rule, index))
+      .filter(Boolean),
+  );
 
   return problems;
 };
@@ -195,6 +336,7 @@ export const renovateProblems = (repoRoot = defaultRoot) => {
     ...problems,
     ...shapeProblems(preset),
     ...majorGateProblems(preset),
+    ...coupledGroupProblems(preset),
     ...releaseAgeProblems(preset),
   ];
 };

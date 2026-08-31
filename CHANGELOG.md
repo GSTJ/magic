@@ -3,6 +3,28 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v1.19.6
+
+The release publishes `magic-oxlint-config@2.0.6`. The repo release is
+`v1.19.6`, and `v1` moves onto it.
+
+### Renovate updates stay visible during quarantine
+
+Renovate now opens dependency and vulnerability-alert PRs immediately. The
+14-day release-age check still blocks them until the quarantine clears. The
+Dependency Dashboard and PR list now show the same pending work.
+
+Fumadocs and zbsearch now move in one reviewed group. The OXC group is split
+into matching oxlint and oxfmt toolchains, with each Magic config moving beside
+the binary it targets. These groups keep the 14-day quarantine and never
+automerge. Related major and minor upgrades now share one PR.
+
+### oxlint 1.78 peer floor
+
+`magic-oxlint-config@2.0.5` added `one-var: off`, but oxlint versions before
+1.78 reject that rule name even when it is disabled. Version 2.0.6 raises the
+oxlint peer floor to 1.78, matching the first compatible binary.
+
 ## v1.19.5
 
 The release publishes `magic-oxlint-config@2.0.5`. The repo release is
