@@ -95,12 +95,11 @@ jobs:
       - name: 🏗 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      # Referenced by owner/repo at a release commit, because `./` inside a
-      # reusable workflow resolves against the caller's checkout. Same note as
-      # ci.yml. The action installs with --frozen-lockfile, so there is no
-      # separate install step.
+      # `$/` loads the action from this reusable workflow's running commit. The
+      # action installs with --frozen-lockfile, so there is no separate install
+      # step.
       - name: 🏗 Setup Node + pnpm
-        uses: GSTJ/magic/.github/actions/setup@aa331e83282c2794edd474646c671f036dfabee0 # v1.12.1
+        uses: $/.github/actions/setup
 
       # Fail here rather than minutes of rendering later, inside a wrangler
       # stack trace.

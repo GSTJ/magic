@@ -9,13 +9,11 @@ name: 🏷 Release (this repo)
 #   3. cuts `vX.Y.Z` from the conventional commits since the last tag and moves
 #      the `vX` tag onto it.
 #
-# Step 3 is the one consumers feel: moving `v1` advances the reusable workflow.
-# Its references to this repo's composite actions stay pinned to an immutable
-# released commit. A later workflow commit advances the SHA.
+# Moving `v1` advances the reusable workflow, and its `$/` references load this
+# repo's composite actions from the same commit.
 #
-# It deliberately does not go through the reusable ci.yml. Running the check
-# chain from the working tree here is the only place a change to the composite
-# is exercised before its immutable pin advances.
+# It deliberately does not go through the reusable ci.yml. The release checks
+# exercise the composite directly from the working tree.
 
 on:
   push:

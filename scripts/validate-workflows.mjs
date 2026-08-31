@@ -1,16 +1,16 @@
 /**
  * Guard the two ways the CI half of this repo breaks consumers silently.
  *
- * 1. Refs. Every remote action under `.github/`, including this repo's own
- *    actions inside reusable workflows, uses an immutable commit SHA. Docs keep
- *    the moving major tag because that is the release channel consumers opted
- *    into.
+ * 1. Refs. Every third-party action under `.github/` uses an immutable commit
+ *    SHA. Repo-owned actions use `$/`, which resolves them from the same
+ *    repository and commit as the running workflow. Docs keep the moving major
+ *    tag because that is the release channel consumers opted into.
  *
  * 2. Local action paths inside reusable workflows. `uses: ./.github/actions/x`
- *    in a `workflow_call` file resolves against the *caller's* checkout, not
- *    this repo's, so it silently looks for the action in the consumer's repo.
- *    Reusable workflows have to spell out
- *    `GSTJ/magic/.github/actions/x@<full-sha>`.
+ *    in a `workflow_call` file resolves against the *caller's* checkout and
+ *    silently looks for the action in the consumer's repo. Reusable workflows
+ *    use `uses: $/.github/actions/x`, which stays with this repository even
+ *    when the workflow is called from somewhere else.
  *
  * Plus the install flag, because `pnpm install` without `--frozen-lockfile` in a
  * publishing path is how a lockfile drifts in CI and nowhere else.
@@ -27,6 +27,7 @@ const repoRoot = join(import.meta.dirname, "..");
 const MAJOR_TAG = "v1";
 
 const SELF = "GSTJ/magic/";
+const SELF_PREFIX = "$/";
 const BRANCHY = new Set(["main", "master", "develop", "HEAD"]);
 const TAG = /^v\d+(?:\.\d+){0,2}$/;
 const SHA = /^[0-9a-f]{40}$/;
@@ -53,10 +54,43 @@ const show = (file) => relative(repoRoot, file);
 
 /** Everything wrong with one `uses:` value, as sentences. */
 export const problemsWithUses = (value, { isReusable, raw = "" }) => {
+  if (value.startsWith(SELF)) {
+    const [path] = value.slice(SELF.length).split("@");
+    return [
+      `legacy self-reference "${value}" can drift from the running workflow. Use ${SELF_PREFIX}${path}.`,
+    ];
+  }
+
+  if (value.startsWith(SELF_PREFIX)) {
+    if (value.includes("@")) {
+      return [`self-reference "${value}" must not include a ref.`];
+    }
+
+    const path = value.slice(SELF_PREFIX.length);
+    const segments = path.split("/");
+    if (segments.includes("..")) {
+      return [`self-reference "${value}" must not traverse directories.`];
+    }
+
+    const [root, kind, ...rest] = segments;
+    if (
+      root !== ".github" ||
+      !["actions", "workflows"].includes(kind) ||
+      rest.length === 0 ||
+      rest.some((segment) => segment === "" || segment === ".")
+    ) {
+      return [
+        `self-reference "${value}" must name an action or workflow under $/.github/.`,
+      ];
+    }
+
+    return [];
+  }
+
   if (value.startsWith("./")) {
     if (isReusable) {
       return [
-        `reusable workflows cannot use a local path: "${value}" would resolve inside the caller's repo. Use ${SELF}...@<full-sha>.`,
+        `reusable workflows cannot use a workspace path: "${value}" would resolve inside the caller's repo. Use ${SELF_PREFIX}... instead.`,
       ];
     }
     return [];
@@ -68,9 +102,7 @@ export const problemsWithUses = (value, { isReusable, raw = "" }) => {
   const ref = value.split("@").at(-1);
   if (!SHA.test(ref)) {
     const kind = BRANCHY.has(ref) ? "branch" : "mutable tag";
-    const owner = value.startsWith(SELF)
-      ? "self-reference"
-      : "third-party action";
+    const owner = "third-party action";
     problems.push(
       `${owner} "${value}" uses a ${kind}; pin its full commit SHA.`,
     );
@@ -214,5 +246,5 @@ if (failures.length > 0) {
 
 process.stdout.write(
   `validate-workflows: OK — ${yamlFiles.length} workflow/action files and ${docs.length} READMEs, ` +
-    `remote actions pinned by SHA and consumer docs on ${MAJOR_TAG}.\n`,
+    `third-party actions pinned by SHA, self-references on the running commit, and consumer docs on ${MAJOR_TAG}.\n`,
 );
