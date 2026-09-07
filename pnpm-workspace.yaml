@@ -22,6 +22,10 @@ allowBuilds:
 # quarantine. Its own dependency updates may resolve immediately; consumers
 # still inherit the 14-day floor from default.json and their workspace policy.
 minimumReleaseAge: 0
+# AJV allows the patched 3.x line, but Dependabot cannot update this transitive
+# lockfile entry on its own. Keep the local toolchain off the vulnerable builds.
+overrides:
+  fast-uri: 3.1.7
 # `eslint-plugin-safe-jsx@1.3.0` — the version this lockfile is on — declares a
 # **required** `eslint` peer that nothing ever calls, because oxlint loads the
 # plugin through its own jsPlugin host. `autoInstallPeers` honours the peer
