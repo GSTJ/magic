@@ -1,4 +1,4 @@
-import base from "magic-oxfmt-config";
+import { base } from "magic-oxfmt-config";
 
 /**
  * This is exactly the file every consumer repo writes — see the root README.

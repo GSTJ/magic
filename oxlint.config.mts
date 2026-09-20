@@ -1,5 +1,5 @@
 import { extendConfig } from "magic-oxlint-config";
-import base from "magic-oxlint-config/base";
+import { base } from "magic-oxlint-config/base";
 
 /**
  * This repo eats its own cooking: it lints itself with the config it publishes,
