@@ -74,6 +74,39 @@ export const bumpFor = (messages) => {
   return bump;
 };
 
+const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:\s*([\s\S]*)/m;
+
+/**
+ * The human-readable description of one commit's breaking change, or null
+ * when it is not one. Prefers the `BREAKING CHANGE:` footer text — which
+ * runs to the end of the message, so a footer after it gets swallowed too;
+ * nothing here writes more than one — and falls back to the subject line for
+ * a commit that is only `!`-marked.
+ */
+export const breakingChangeFor = (message) => {
+  const [subject] = message.split("\n");
+  const footerMatch = BREAKING_FOOTER.exec(message);
+  if (footerMatch) return footerMatch[1].trim();
+
+  const match = CONVENTIONAL.exec(subject.trim());
+  if (match?.groups.breaking === "!") return subject.trim();
+
+  return null;
+};
+
+/** The release notes: commits, with a BREAKING CHANGES section up top when any apply. */
+export const notesFor = (messages) => {
+  const commits = messages
+    .map((message) => `- ${message.split("\n")[0]}`)
+    .join("\n");
+
+  const breaking = messages.map(breakingChangeFor).filter(Boolean);
+  if (breaking.length === 0) return commits;
+
+  const breakingSection = breaking.map((text) => `- ${text}`).join("\n");
+  return `## BREAKING CHANGES\n\n${breakingSection}\n\n${commits}`;
+};
+
 export const nextVersion = (base, bump) => {
   const parsed = parseVersion(base);
   if (!parsed) throw new Error(`not a version: ${base}`);
@@ -144,7 +177,7 @@ const plan = () => {
     tag: `v${version}`,
     major: `v${parseVersion(version)[0]}`,
     commits: messages.length,
-    notes: messages.map((message) => `- ${message.split("\n")[0]}`).join("\n"),
+    notes: notesFor(messages),
     packages,
   };
 };
