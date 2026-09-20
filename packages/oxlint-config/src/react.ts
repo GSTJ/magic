@@ -96,10 +96,29 @@ const reactConfig: MagicOxlintConfig = extendConfig(base, {
     "react/checked-requires-onchange-or-readonly": "error",
     "react/button-has-type": "error",
 
-    // The one `nursery` rule worth switching on: it runs the React Compiler in
-    // lint-only mode and is the direct replacement for the
-    // `react-compiler/react-compiler` rule the ESLint config carried.
-    "react/react-compiler": "error",
+    // oxlint 1.79 dropped the nursery `react/react-compiler` rule — the
+    // direct replacement for the ESLint config's `react-compiler/react-compiler`
+    // rule — and split it into 24 category-specific rules instead, run once
+    // against the React Compiler and routed by diagnostic kind. See
+    // https://oxc.rs/blog/2026-08-18-react-compiler-support. Below is oxc's own
+    // "recommended" subset (their `correctness`/`restriction` picks); the rest
+    // (`capitalized-calls`, `exhaustive-effect-dependencies`, `hooks`,
+    // `memo-dependencies`, `no-deriving-state-in-effects`, `invariant`,
+    // `rule-suppression`, `syntax`, `todo`) are opt-in extras upstream itself
+    // leaves off, so this preset leaves them off too.
+    "react/error-boundaries": "error",
+    "react/globals": "error",
+    "react/immutability": "error",
+    "react/incompatible-library": "error",
+    "react/preserve-manual-memoization": "error",
+    "react/purity": "error",
+    "react/refs": "error",
+    "react/set-state-in-effect": "error",
+    "react/set-state-in-render": "error",
+    "react/static-components": "error",
+    "react/unsupported-syntax": "error",
+    "react/use-memo": "error",
+    "react/void-use-memo": "error",
 
     // Style
     "react/jsx-boolean-value": ["error", "never"],
