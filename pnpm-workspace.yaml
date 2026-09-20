@@ -26,6 +26,10 @@ minimumReleaseAge: 0
 # lockfile entry on its own. Keep the local toolchain off the vulnerable builds.
 overrides:
   fast-uri: 3.1.7
+  # js-yaml@4.3.1 comes in transitively through @remotion/cli -> @svgr/core ->
+  # cosmiconfig, three levels down from a dep Dependabot won't reach. 4.3.2
+  # patches the maxTotalMergeKeys CPU-exhaustion bug (GHSA-2883-xcg3-v3hh).
+  js-yaml: 4.3.2
 # `eslint-plugin-safe-jsx@1.3.0` — the version this lockfile is on — declares a
 # **required** `eslint` peer that nothing ever calls, because oxlint loads the
 # plugin through its own jsPlugin host. `autoInstallPeers` honours the peer
