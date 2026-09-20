@@ -7,9 +7,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  breakingChangeFor,
   bumpFor,
   highestVersion,
   nextVersion,
+  notesFor,
   parseVersion,
 } from "./release-plan.mjs";
 
@@ -50,6 +52,63 @@ test("a breaking marker wins over everything, in any position", () => {
   );
   // A footer-shaped line that is not at the start of a line is not a footer.
   assert.equal(bumpFor(["fix: mentions BREAKING CHANGE: in prose"]), "patch");
+});
+
+test("breakingChangeFor prefers the footer text, in any wording or wrap", () => {
+  assert.equal(
+    breakingChangeFor("chore: y\n\nBREAKING CHANGE: renamed"),
+    "renamed",
+  );
+  assert.equal(
+    breakingChangeFor("fix: y\n\nBREAKING-CHANGE: renamed the other way"),
+    "renamed the other way",
+  );
+  // A footer wraps across lines like any commit body; it all belongs to the
+  // description, up to the end of the message.
+  assert.equal(
+    breakingChangeFor("fix: y\n\nBREAKING CHANGE: line one\nline two"),
+    "line one\nline two",
+  );
+});
+
+test("breakingChangeFor falls back to the subject for a bare `!`", () => {
+  assert.equal(breakingChangeFor("feat!: drop node 20"), "feat!: drop node 20");
+  assert.equal(
+    breakingChangeFor("feat(setup)!: drop node 20\n\nsome body"),
+    "feat(setup)!: drop node 20",
+  );
+});
+
+test("breakingChangeFor is null for anything that isn't breaking", () => {
+  assert.equal(breakingChangeFor("fix(ci): pin the runner"), null);
+  assert.equal(breakingChangeFor("not conventional at all"), null);
+  // Same guard bumpFor relies on: mid-line text is not a footer.
+  assert.equal(
+    breakingChangeFor("fix: mentions BREAKING CHANGE: in prose"),
+    null,
+  );
+});
+
+test("notesFor puts a BREAKING CHANGES section on top, only when one applies", () => {
+  assert.equal(
+    notesFor(["fix(ci): pin the runner", "docs: readme"]),
+    "- fix(ci): pin the runner\n- docs: readme",
+  );
+
+  assert.equal(
+    notesFor([
+      "fix: x",
+      "fix(oxlint-config)!: drop the dead rule\n\nBREAKING CHANGE: oxlint must be >=1.79.0",
+    ]),
+    [
+      "## BREAKING CHANGES",
+      "",
+      "- oxlint must be >=1.79.0",
+      "",
+      "- fix: x",
+      "- fix(oxlint-config)!: drop the dead rule",
+    ].join("\n"),
+  );
 });
 
 test("nextVersion zeroes the lower places", () => {
