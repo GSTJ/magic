@@ -3,6 +3,66 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v2.0.0
+
+The release publishes `magic-oxlint-config@3.0.0`. The repo release is
+`v2.0.0`, a major bump because the package's own contract broke — `v2` moves
+onto it, `v1` stays on `v1.19.9`.
+
+### oxlint 1.79 removed `react/react-compiler`
+
+oxlint 1.79 split the nursery `react/react-compiler` rule into 24
+category-specific rules and dropped the old name outright, so oxlint now
+hard-errors parsing a config that still sets it. `gabriel-taveira-portfolio`
+and `magic-modal` both hit this on their own oxlint bumps and worked around it
+locally by deleting the rule key after `extendConfig()`.
+
+The `react`, `next`, `react-native`, and `expo` variants now set oxc's own
+"recommended" replacement rules instead: `error-boundaries`, `globals`,
+`immutability`, `incompatible-library`, `preserve-manual-memoization`,
+`purity`, `refs`, `set-state-in-effect`, `set-state-in-render`,
+`static-components`, `unsupported-syntax`, `use-memo`, and `void-use-memo`.
+Same coverage the old rule gave, under the names oxlint ships today.
+
+Consumers: bump `magic-oxlint-config` to `^3.0.0` and `oxlint` to `>=1.79.0`,
+then delete any local `delete config.rules["react/react-compiler"]` workaround
+picked up to keep linting in the meantime.
+
+## v1.19.9
+
+The repo release is `v1.19.9`, and `v1` moves onto it. Package versions stay
+unchanged.
+
+### Security
+
+`js-yaml` comes in transitively through `@remotion/cli` -> `@svgr/core` ->
+`cosmiconfig`, three levels down from a dependency Dependabot cannot reach on
+its own. A pnpm override forces 4.3.2, which patches the `maxTotalMergeKeys`
+CPU-exhaustion bug (GHSA-2883-xcg3-v3hh).
+
+## v1.19.8
+
+The repo release is `v1.19.8`, and `v1` moves onto it. Package versions stay
+unchanged.
+
+### Security
+
+Next.js bumps to 16.3.3, patching two critical RCEs: an unauthenticated one in
+the Image Optimization API when AVIF files are used, and an unauthenticated
+one on Windows-hosted servers. `sharp` moves to 0.35.4 alongside it, picking up
+a patched `libheif` and clearing a separate advisory.
+
+## v1.19.7
+
+The repo release is `v1.19.7`, and `v1` moves onto it. Package versions stay
+unchanged.
+
+### Security
+
+AJV allows the patched 3.x line of `fast-uri`, but Dependabot cannot update
+this transitive lockfile entry on its own. A pnpm override forces 3.1.7,
+keeping the local toolchain off the vulnerable builds.
+
 ## v1.19.6
 
 The release publishes `magic-oxlint-config@2.0.6`. The repo release is
