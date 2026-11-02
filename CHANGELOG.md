@@ -3,6 +3,13 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v2.0.5
+
+Patched the docs site's Next.js dependency and the workspace's fast-uri,
+DOMPurify, Zod, and minimatch resolutions. This addresses the reported code
+execution, cross-site scripting, URI handling, and resource exhaustion
+advisories. Package versions stay unchanged.
+
 ## v2.0.0
 
 The release publishes `magic-oxlint-config@3.0.0`. The repo release is
