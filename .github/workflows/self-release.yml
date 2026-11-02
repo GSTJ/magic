@@ -135,11 +135,11 @@ jobs:
             exit 1
           fi
 
-          git tag -a "$TAG" -m "$TAG"
+          git tag -a "$TAG" -m "$TAG" -m "$NOTES"
           git push origin "refs/tags/$TAG"
 
           # The moving major. Force, because moving it is the whole point.
-          git tag -f -a "$MAJOR" -m "$MAJOR -> $TAG"
+          git tag -f -a "$MAJOR" -m "$MAJOR -> $TAG" -m "$NOTES"
           git push -f origin "refs/tags/$MAJOR"
 
           gh release create "$TAG" --title "$TAG" --notes "$NOTES"
