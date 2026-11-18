@@ -3,6 +3,12 @@
 Versions are per package. This file records rounds, because the packages ship
 together and most of what a consumer needs to know spans more than one of them.
 
+## v2.0.6
+
+Updated the docs site to Next.js 16.4.5 to address the November security
+advisories, including cross-root-param cache disclosure (GHSA-mfr8-8qww-v76h).
+Package versions stay unchanged.
+
 ## v2.0.5
 
 Patched the docs site's Next.js dependency and the workspace's fast-uri,
